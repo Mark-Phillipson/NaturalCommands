@@ -26,6 +26,18 @@ dotnet build NaturalCommands.csproj
 dotnet build NaturalCommands.csproj  -c Release
 ```
 
+## Listen mode (resident hotkey)
+
+Run the app in resident mode to open the voice dictation UI from anywhere via a global hotkey.
+
+- Start resident mode:
+	- `dotnet run --framework net10.0-windows -- listen`
+	- or run the built exe: `NaturalCommands.exe listen`
+- Hotkey: **Win+Ctrl+H**
+- Fallback: use the system tray menu item **Open Voice Dictation (Win+Ctrl+H)**
+
+When voice typing stops, the **Send Command** button is focused and the form’s **Enter** key submits (AcceptButton), so you can press Enter to send the captured text.
+
 ## Contributing
 
 Contributions are welcome — please open issues and pull requests on GitHub.

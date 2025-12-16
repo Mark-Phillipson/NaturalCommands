@@ -5,6 +5,8 @@ dotnet clean NaturalCommands.csproj
 
 dotnet build NaturalCommands.csproj  
 dotnet build NaturalCommands.csproj  -c Release
+dotnet run --framework net10.0-windows -- listen
+```
 
 ## Output Files
 
@@ -25,6 +27,19 @@ dotnet run --framework net10.0-windows -- natural "put this window on the right 
 dotnet run --framework net10.0-windows -- natural " close this window"
 dotnet run --framework net10.0-windows -- natural "natural dictate"  # Opens the voice dictation form for speaking or typing natural language commands
 ```
+
+## Listen mode (resident hotkey)
+
+Start the app in resident mode to show a tray icon and register a global hotkey:
+
+```pwsh
+dotnet run --framework net10.0-windows -- listen
+```
+
+- Hotkey: **Win+Ctrl+H** (opens the existing voice dictation form)
+- If the hotkey is already used by another app, you can still open dictation from the tray menu.
+
+While dictation is active, the form shows a “Listening… — press Enter to send” hint. When dictation stops, **Send Command** is focused and pressing **Enter** submits.
 
 ## Window Management Actions
 You can use natural language to control window position and size:

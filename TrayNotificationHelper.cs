@@ -8,22 +8,65 @@ namespace NaturalCommands
     {
         private static NotifyIcon? _notifyIcon;
         private static Icon? _appIcon;
+        private static ContextMenuStrip? _contextMenu;
+
+        private static void EnsureNotifyIcon()
+        {
+            if (_notifyIcon != null) return;
+
+            _notifyIcon = new NotifyIcon();
+            _appIcon = SystemIcons.Information;
+            _notifyIcon.Icon = _appIcon;
+            _notifyIcon.Visible = true;
+            _notifyIcon.Text = "NaturalCommands.NET";
+        }
+
+        public static void InitializeResidentTray(string tooltip, ContextMenuStrip menu, Icon? icon = null)
+        {
+            EnsureNotifyIcon();
+            try
+            {
+                _contextMenu = menu;
+                _notifyIcon!.ContextMenuStrip = _contextMenu;
+            }
+            catch { }
+
+            try
+            {
+                if (icon != null)
+                {
+                    _appIcon = icon;
+                    _notifyIcon!.Icon = _appIcon;
+                }
+            }
+            catch { }
+
+            SetTooltip(tooltip);
+        }
+
+        public static void SetTooltip(string tooltip)
+        {
+            EnsureNotifyIcon();
+            try
+            {
+                // NotifyIcon.Text is limited (~63 chars); keep it short.
+                if (tooltip.Length > 60) tooltip = tooltip.Substring(0, 60);
+                var ni = _notifyIcon;
+                if (ni == null) return;
+                ni.Text = tooltip;
+            }
+            catch { }
+        }
 
         public static void ShowNotification(string title, string message, int timeout = 5000)
         {
-            if (_notifyIcon == null)
-            {
-                _notifyIcon = new NotifyIcon();
-                // Use a default system icon if no app icon is available
-                _appIcon = SystemIcons.Information;
-                _notifyIcon.Icon = _appIcon;
-                _notifyIcon.Visible = true;
-                _notifyIcon.Text = "NaturalCommands.NET";
-            }
-            _notifyIcon.BalloonTipTitle = title;
-            _notifyIcon.BalloonTipText = message;
-            _notifyIcon.BalloonTipIcon = ToolTipIcon.Info;
-            _notifyIcon.ShowBalloonTip(timeout);
+            EnsureNotifyIcon();
+            var ni = _notifyIcon;
+            if (ni == null) return;
+            ni.BalloonTipTitle = title;
+            ni.BalloonTipText = message;
+            ni.BalloonTipIcon = ToolTipIcon.Info;
+            ni.ShowBalloonTip(timeout);
         }
 
         public static void Dispose()
@@ -34,6 +77,9 @@ namespace NaturalCommands
                 _notifyIcon.Dispose();
                 _notifyIcon = null;
             }
+
+			try { _contextMenu?.Dispose(); } catch { }
+			_contextMenu = null;
         }
     }
 }

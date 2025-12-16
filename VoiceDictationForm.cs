@@ -7,8 +7,10 @@ using System.Threading.Tasks;
 using System.Text.Json;
 using System.Collections.Generic;
 using System.Linq;
+using System.Media;
 using WindowsInput;
 using WindowsInput.Native;
+using NaturalCommands.Helpers;
 
 namespace DictationBoxMSP
 {
@@ -28,6 +30,9 @@ namespace DictationBoxMSP
         private System.Windows.Forms.Timer marqueeTimer = null!;
         private System.Windows.Forms.Timer autoSubmitTimer = null!;
         private System.Windows.Forms.Timer startDictationTimer = null!;
+        private System.Windows.Forms.Timer dictationStopDebounceTimer = null!;
+        private readonly DebounceGate dictationStopDebounce = new DebounceGate(850);
+        private readonly TemporaryMarqueeOverride temporaryMarqueeOverride = new TemporaryMarqueeOverride();
         private int timeoutMs = 0;
         private bool isBackgroundTransparent = false;
         // removed unused saved colors to avoid compiler warnings
@@ -79,6 +84,9 @@ namespace DictationBoxMSP
             this.btnOpenInVsc = new Button() { Text = "Open in &VS Code", Height = 121 };
             this.autoSubmitTimer = new System.Windows.Forms.Timer();
             this.startDictationTimer = new System.Windows.Forms.Timer();
+            this.dictationStopDebounceTimer = new System.Windows.Forms.Timer();
+            this.dictationStopDebounceTimer.Interval = 90;
+            this.dictationStopDebounceTimer.Tick += DictationStopDebounceTimer_Tick;
 
             // Bottom area: use a table so marquee cannot overlap buttons.
             bottomPanel = new Panel() { Dock = DockStyle.Bottom, Height = 140 };
@@ -184,11 +192,12 @@ namespace DictationBoxMSP
                 {
                     try
                     {
+                        var nowMs = Environment.TickCount64;
                         foreach (var lbl in marqueeLabels.ToList())
                         {
                             if (lbl.Left + lbl.Width <= -10)
                             {
-                                var text = marqueeItems.Count > 0 ? marqueeItems[rnd.Next(marqueeItems.Count)] : "Say 'voice typing' to begin";
+                                var text = temporaryMarqueeOverride.GetMessage(nowMs) ?? (marqueeItems.Count > 0 ? marqueeItems[rnd.Next(marqueeItems.Count)] : "Say 'voice typing' to begin");
                                 lbl.Text = text;
                                 // place this label to the right of the right-most label (or panel if none)
                                 int rightmost = marqueePanel.Width;
@@ -213,6 +222,7 @@ namespace DictationBoxMSP
                 {
                     try
                     {
+                        ShowTemporaryMarquee("Listening… — press Enter to send", 30 * 60 * 1000);
                         for (int i = 0; i < marqueeLabels.Count; i++)
                         {
                             var lbl = marqueeLabels[i];
@@ -271,6 +281,8 @@ namespace DictationBoxMSP
             this.FormClosing += VoiceDictationForm_FormClosing;
             this.KeyPreview = true;
             this.KeyDown += VoiceDictationForm_KeyDown;
+
+            txtInput.TextChanged += TxtInput_TextChanged;
         }
 
         private void ApplySharedStyles()
@@ -403,6 +415,87 @@ namespace DictationBoxMSP
             this.Close();
         }
 
+        public void ShowTemporaryMarquee(string message, int durationMs)
+        {
+            try
+            {
+                temporaryMarqueeOverride.Set(message, durationMs, Environment.TickCount64);
+            }
+            catch { }
+
+            try
+            {
+                foreach (var lbl in marqueeLabels)
+                    lbl.Text = message;
+            }
+            catch { }
+        }
+
+        private void TxtInput_TextChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (lblTransient != null)
+                    lblTransient.Visible = false;
+            }
+            catch { }
+
+            try
+            {
+                dictationStopDebounce.MarkChange(Environment.TickCount64);
+                if (!dictationStopDebounceTimer.Enabled)
+                    dictationStopDebounceTimer.Start();
+            }
+            catch { }
+        }
+
+        private void DictationStopDebounceTimer_Tick(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (!dictationStopDebounce.TryConsume(Environment.TickCount64))
+                    return;
+
+                dictationStopDebounceTimer.Stop();
+                OnDictationStopped();
+            }
+            catch { }
+        }
+
+        private async void OnDictationStopped()
+        {
+            try { this.AcceptButton = btnSendCommand; } catch { }
+
+            try
+            {
+                if (this.Visible && this.ContainsFocus)
+                    btnSendCommand.Focus();
+            }
+            catch { }
+
+            try
+            {
+                if (lblTransient != null)
+                {
+                    lblTransient.Text = "Listening finished — press Enter to send";
+                    lblTransient.BackColor = Color.LimeGreen;
+                    lblTransient.ForeColor = Color.Black;
+                    lblTransient.Visible = true;
+                    lblTransient.BringToFront();
+                }
+            }
+            catch { }
+
+            try { SystemSounds.Asterisk.Play(); } catch { }
+
+            try
+            {
+                await Task.Delay(2000);
+                if (lblTransient != null) lblTransient.Visible = false;
+            }
+            catch { }
+        }
+
         private async void BtnCopyText_Click(object? sender, EventArgs e)
         {
             try
@@ -508,6 +601,7 @@ namespace DictationBoxMSP
         private void VoiceDictationForm_FormClosing(object? sender, FormClosingEventArgs e)
         {
             try { autoSubmitTimer.Stop(); } catch { }
+            try { dictationStopDebounceTimer.Stop(); } catch { }
         }
 
         private void VoiceDictationForm_KeyDown(object? sender, KeyEventArgs e)

@@ -69,6 +69,13 @@ namespace ExecuteCommands_NET
 			string textRaw = args.Length > 2 ? string.Join(" ", args.Skip(2)) : "";
 			string mode = modeRaw.TrimStart('/').Trim().ToLower();
 			string text = textRaw.TrimStart('/').Trim();
+
+			if (mode == "listen")
+			{
+				RunListenMode();
+				return;
+			}
+
 			// Apply word replacements before processing
 			text = NaturalCommands.Helpers.WordReplacementHelper.ApplyWordReplacements(text);
 
@@ -151,6 +158,20 @@ namespace ExecuteCommands_NET
 			}
 			Console.WriteLine(result);
 
+		}
+
+		private static void RunListenMode()
+		{
+			try
+			{
+				Application.EnableVisualStyles();
+				Application.SetCompatibleTextRenderingDefault(false);
+				Application.Run(new NaturalCommands.ListenModeApplicationContext());
+			}
+			catch (Exception ex)
+			{
+				try { NaturalCommands.TrayNotificationHelper.ShowNotification("Listen mode failed", ex.Message, 3500); } catch { }
+			}
 		}
 
 		[System.Runtime.InteropServices.DllImport("user32.dll")]
