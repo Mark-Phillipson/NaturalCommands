@@ -30,6 +30,12 @@ dotnet build NaturalCommands.csproj  -c Release
 
 Contributions are welcome — please open issues and pull requests on GitHub.
 
+## Steam detection (experimental) 🎮
+
+- The app can now detect installed Steam games by scanning your Steam libraries (appmanifest_*.acf) and will allow launching games by voice using commands like `play <game name>`.
+- Launches use the Steam URI (`steam://rungameid/<appid>`) so Steam handles the actual game start.
+- Currently Steam is the only supported source; detection is experimental — open an issue if you encounter games that are not detected or mismatched.
+
 ## License
 
 This project is licensed under the MIT License — see the `LICENSE` file for details.
