@@ -1,0 +1,82 @@
+# Visual Studio / .NET Core common ignores
+
+# Build folders
+bin/
+obj/
+out/
+artifacts/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# Visual Studio Code
+.vscode/
+
+# NuGet
+*.nupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+project.assets.json
+
+# Dotnet publish
+publish/
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# Playwright browsers and artifacts
+.playwright/
+
+# Temporary / cache files
+*.log
+*.vsix
+*.swp
+*.bak
+*.tmp
+
+# OS generated files
+Thumbs.db
+.DS_Store
+desktop.ini
+ehthumbs.db
+
+# JetBrains Rider
+*.sln.iml
+
+# Resharper
+_ReSharper*/
+*.DotSettings.user
+
+# Mono auto-generated files
+*.pidb
+
+# Database files
+*.mdf
+*.ldf
+
+# Azure Functions build artifacts
+.python_packages/
+bin/**/runtimes/**/native
+
+# Ignore user-specific and credential files
+secrets.json
+*.publishsettings
+
+# Ignore local environment config files
+appsettings.*.json
+
+# Git LFS placeholder (if used)
+*.gitattributes
+
+# End of file
