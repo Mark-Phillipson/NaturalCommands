@@ -1,0 +1,1463 @@
+using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using WindowsInput;
+using WindowsInput.Native;
+
+
+using OpenAI;
+using OpenAI.Chat;
+using OpenAI.Models;
+using NaturalCommands;
+
+namespace NaturalCommands
+{
+    // Win32 API imports and constants for window style and class name
+    internal static class Win32Api
+    {
+        public const int GWL_STYLE = -16;
+        public const int WS_MAXIMIZEBOX = 0x00010000;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+    }
+    // IMPORTANT: This class is already too large. Do NOT add new methods here.
+    // Any new functionality should be implemented in a new class and referenced as needed.
+    // Please refactor existing logic into smaller, focused classes where possible.
+    public class NaturalLanguageInterpreter
+    // Action type for Visual Studio command execution
+    {
+        /// <summary>
+        /// Checks if Visual Studio is the active window.
+        /// </summary>
+        public static bool IsVisualStudioActive()
+        {
+            var procName = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName();
+            return procName == "devenv";
+        }
+        /// <summary>
+        /// Ensures the directory for the log file exists.
+        /// </summary>
+        // Expanded app mapping for natural language launching
+        private static readonly Dictionary<string, string> AppMappings = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "calculator", "calc.exe" },
+            { "calc", "calc.exe" },
+            { "notepad", "notepad.exe" },
+            { "edge", "msedge.exe" },
+            { "microsoft edge", "msedge.exe" },
+            { "chrome", "chrome.exe" },
+            { "code", "code.exe" },
+            { "visual studio", "devenv.exe" },
+            { "outlook", "outlook.exe" },
+            { "explorer", "explorer.exe" },
+            { "word", "winword.exe" },
+            { "excel", "excel.exe" },
+            { "powerpoint", "powerpnt.exe" },
+            { "teams", "Teams.exe" },
+            { "onenote", "onenote.exe" },
+            { "paint", "mspaint.exe" },
+            { "microsoft paint", "mspaint.exe" },
+            { "terminal", "wt.exe" },
+            { "windows terminal", "wt.exe" },
+            { "cmd", "wt.exe" }, // Always prefer Windows Terminal
+            { "command prompt", "wt.exe" },
+            { "skype", "skype.exe" },
+            { "zoom", "zoom.exe" },
+            { "slack", "slack.exe" }
+        };
+        /// <summary>
+        /// Uses OpenAI API to interpret text and return an ActionBase (AI fallback).
+        /// </summary>
+        public async System.Threading.Tasks.Task<ActionBase?> InterpretWithAIAsync(string text)
+        {
+            // Read API key from environment variable
+            string? apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+            string logPath = GetLogPath();
+            EnsureLogDirExists(logPath);
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                File.AppendAllText(logPath, "OPENAI_API_KEY environment variable not set.\n");
+                return null;
+            }
+            // Set default model name
+            string modelName = "gpt-4.1";
+
+            // Read prompt from markdown file
+            string promptPath = "openai_prompt.md";
+            string prompt;
+            try
+            {
+                prompt = File.ReadAllText(promptPath);
+            }
+            catch (Exception ex)
+            {
+                File.AppendAllText(logPath, $"Failed to read {promptPath}: {ex.Message}\nUsing default prompt.\n");
+                prompt = "You are an assistant that interprets natural language commands for Windows automation. Output a JSON object for the closest matching action.";
+            }
+
+            File.AppendAllText(logPath, $"[AI] Fallback triggered for: {text}\n");
+            // Write the latest prompt to a separate file (overwrites previous file).
+            // This is intentionally NOT appended to the normal log file.
+            WriteLatestPromptFile(prompt, text);
+            // Do NOT log the prompt anymore
+            try
+            {
+                var chatClient = new ChatClient(modelName, apiKey);
+                var messages = new List<ChatMessage>
+                {
+                    new SystemChatMessage(prompt),
+                    new UserChatMessage(text)
+                };
+                var completionResult = await chatClient.CompleteChatAsync(messages);
+                var completion = completionResult.Value;
+                var message = completion.Content[0].Text;
+                File.AppendAllText(logPath, $"[AI] Raw response: {message}\n");
+                if (!string.IsNullOrWhiteSpace(message))
+                {
+                    try
+                    {
+                        var json = System.Text.Json.JsonDocument.Parse(message);
+                        var root = json.RootElement;
+                        if (root.TryGetProperty("type", out var typeProp))
+                        {
+                            string type = typeProp.GetString() ?? "";
+                            switch (type)
+                            {
+                                case "MoveWindowAction":
+                                    return new MoveWindowAction(
+                                        root.GetProperty("Target").GetString() ?? "active",
+                                        root.GetProperty("Monitor").GetString() ?? "current",
+                                        root.GetProperty("Position").GetString(),
+                                        root.TryGetProperty("WidthPercent", out var wp) ? wp.GetInt32() : (int?)null,
+                                        root.TryGetProperty("HeightPercent", out var hp) ? hp.GetInt32() : (int?)null
+                                    );
+                                case "LaunchAppAction":
+                                    // Support both "AppExe" and "AppIdOrPath" field names
+                                    string? appExe = null;
+                                    if (root.TryGetProperty("AppExe", out var appExeProp))
+                                        appExe = appExeProp.GetString();
+                                    else if (root.TryGetProperty("AppIdOrPath", out var appIdProp))
+                                        appExe = appIdProp.GetString();
+                                    return new LaunchAppAction(appExe ?? "");
+                                case "SendKeysAction":
+                                    return new SendKeysAction(root.GetProperty("KeysText").GetString() ?? "");
+                                case "OpenFolderAction":
+                                    return new OpenFolderAction(root.GetProperty("KnownFolder").GetString() ?? "");
+                                // "SetWindowAlwaysOnTopAction" intentionally not supported: feature disabled.
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        File.AppendAllText(logPath, $"Failed to parse OpenAI response: {ex.Message}\nResponse: {message}\n");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                File.AppendAllText(logPath, $"[AI] OpenAI API call failed: {ex.Message}\n");
+            }
+            return null;
+        }
+        // Helper to remove polite modifiers from input
+        private static string RemovePoliteModifiers(string text)
+        {
+            var politeWords = new[] { "please", "could you", "would you", "can you", "may you", "kindly", "will you", "would you kindly" };
+            foreach (var word in politeWords)
+            {
+                text = text.Replace(word, "", StringComparison.InvariantCultureIgnoreCase);
+            }
+            return text.Trim();
+        }
+
+        // Word replacement functionality moved to `WordReplacementLoader` helper class.
+
+        /// <summary>
+        /// Ensures the directory for the log file exists.
+        /// </summary>
+        private static void EnsureLogDirExists(string logPath)
+        {
+            var logDir = Path.GetDirectoryName(logPath);
+            if (!string.IsNullOrEmpty(logDir) && !Directory.Exists(logDir))
+                Directory.CreateDirectory(logDir);
+        }
+
+        private static string GetLogPath()
+        {
+            string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log");
+            return Path.GetFullPath(logPath);
+        }
+
+        /// <summary>
+        /// Writes the latest AI prompt (system prompt + user input) to a separate file.
+        /// Overwrites any previous content so only the latest prompt is kept.
+        /// The file is intentionally separate from the normal `app.log`.
+        /// </summary>
+        private static void WriteLatestPromptFile(string systemPrompt, string userText)
+        {
+            try
+            {
+                string latestPath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "latest_ai_prompt.md"));
+                var dir = Path.GetDirectoryName(latestPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                var content = $"# System Prompt\n\n{systemPrompt}\n\n# User Input\n\n{userText}\n";
+                File.WriteAllText(latestPath, content);
+            }
+            catch (Exception ex)
+            {
+                try { File.AppendAllText(GetLogPath(), $"Failed to write latest AI prompt file: {ex.Message}\n"); } catch { }
+            }
+        }
+        // Central list of available commands/actions for AI matching
+        public static readonly List<(string Command, string Description)> AvailableCommands = new()
+        {
+            ("maximize window", "Maximize the active window"),
+            ("move window to left half", "Move the active window to the left half of the screen"),
+            ("move window to right half", "Move the active window to the right half of the screen"),
+            ("move window to other monitor", "Move the active window to the next monitor"),
+            ("open downloads", "Open the Downloads folder"),
+            ("open documents", "Open the Documents folder"),
+            ("close tab", "Close the current tab in supported applications"),
+            ("send keys", "Send a key sequence to the active window"),
+            ("launch app", "Launch a specified application"),
+            ("focus app", "Focus a specified application window"),
+            ("focus window <name>", "Focus a window by its name (e.g. focus window Zoom)"),
+            ("focus <window name>", "Focus a window by its name (e.g. focus Zoom)"),
+            ("show help", "Show help and available commands"),
+            ("natural dictate", "Open the voice dictation form (speak or type natural language commands)"),
+            ("emoji set <name> <emoji>", "Set an emoji for a named shortcut (e.g. emoji set happy 😀)"),
+            ("emoji <name>", "Insert the configured emoji for the given name"),
+            ("emoji <emoji>", "Insert the given emoji immediately")
+        };
+
+        // Optional emoji mapping for commands. Map a command phrase to a small emoji
+        // string that will be displayed next to the command in the 'what can I say' UI.
+        // Emoji logic moved to EmojiManager.cs. Use EmojiManager.SetCommandEmoji, EmojiManager.GetCommandEmoji, EmojiManager.GetAllEmojiMappings instead.
+
+        // File used to persist emoji mappings so they can be added over time.
+        // Will look for a file next to the executable (copied by the build as content).
+        private static readonly string EmojiMappingsPath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "emoji_mappings.json"));
+
+        // Static ctor: load persisted mappings (if any) on first access
+        static NaturalLanguageInterpreter()
+        {
+            // Emoji mappings now loaded by EmojiManager
+            // Load optional word replacements (e.g., 'closed' -> 'close') to make parsing deterministic
+            WordReplacementLoader.Load();
+            // Load user-defined multi-action commands (multi_actions.json)
+            try { NaturalCommands.Helpers.MultiActionLoader.Load(); } catch { }
+        }
+
+        // Emoji mapping API now provided by EmojiManager.cs
+
+        // Visual Studio specific commands
+        public static readonly List<(string Command, string Description)> VisualStudioCommands = new()
+            {
+                ("build the solution", "Build the entire solution"),
+                ("build the project", "Build the current project"),
+                ("start debugging", "Start debugging the startup project"),
+                ("start application", "Start without debugging"),
+                ("stop debugging", "Stop debugging"),
+                ("close tab", "Close the current document tab"),
+                ("format document", "Format the current document"),
+                ("find in files", "Open the Find in Files dialog"),
+                ("go to definition", "Go to definition of symbol"),
+                ("rename symbol", "Rename the selected symbol"),
+                ("show solution explorer", "Focus Solution Explorer"),
+                ("open recent files", "Show recent files"),
+            };
+
+        // Explicit canonical mappings from natural phrases to Visual Studio command canonical names.
+        // These are preferred over fuzzy-matching exported commands because exported lists may contain
+        // context-menu entries that are not the canonical top-level commands (which caused failures).
+        private static readonly Dictionary<string, string> VisualStudioCanonicalMappings = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "build the solution", "Build.BuildSolution" },
+            { "build solution", "Build.BuildSolution" },
+            { "build the project", "Build.BuildProject" },
+            { "build project", "Build.BuildProject" },
+            { "clean solution", "Build.CleanSolution" },
+            { "clean the solution", "Build.CleanSolution" },
+            { "start debugging", "Debug.Start" },
+            { "start application", "Debug.StartWithoutDebugging" },
+            { "stop debugging", "Debug.StopDebugging" },
+            { "close tab", "Window.CloseDocumentWindow" },
+            { "format document", "Edit.FormatDocument" },
+            { "find in files", "Edit.FindinFiles" },
+            { "go to definition", "Edit.GoToDefinition" },
+            { "rename symbol", "Refactor.Rename" },
+            { "show solution explorer", "View.SolutionExplorer" },
+            { "open recent files", "File.RecentFiles" }
+        };
+
+        // Mapping from common tool window captions (as spoken or seen in the UI) to their canonical Visual Studio command names.
+        // This ensures that natural language like "error list", "output window", etc. will always focus the correct tool window,
+        // and avoids accidental matches to context menu or non-window commands. This mapping is checked BEFORE any fuzzy or exported command matches.
+        // To add support for a new tool window, simply add its caption (as spoken or as it appears in Visual Studio) and the corresponding View.* command here.
+        private static readonly Dictionary<string, string> VisualStudioToolWindowMappings = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "error list", "View.ErrorList" },
+            { "output window", "View.Output" },
+            { "output", "View.Output" },
+            { "solution explorer", "View.SolutionExplorer" },
+            { "team explorer", "View.TeamExplorer" },
+            { "task list", "View.TaskList" },
+            { "properties window", "View.PropertiesWindow" },
+            { "properties", "View.PropertiesWindow" },
+            { "class view", "View.ClassView" },
+            { "object browser", "View.ObjectBrowser" },
+            { "call hierarchy", "View.CallHierarchy" },
+            { "bookmark window", "View.BookmarkWindow" },
+            { "bookmarks", "View.BookmarkWindow" },
+            { "find results", "View.FindResults1" },
+            { "find results 1", "View.FindResults1" },
+            { "find results 2", "View.FindResults2" },
+            { "pending changes", "View.PendingChanges" },
+            { "git changes", "View.GitChanges" },
+            { "git repository", "View.GitRepository" },
+            { "diagnostic tools", "Debug.ShowDiagnosticTools" },
+            { "immediate window", "Debug.Immediate" },
+            { "immediate", "Debug.Immediate" },
+            { "autos window", "Debug.Autos" },
+            { "autos", "Debug.Autos" },
+            { "locals window", "Debug.Locals" },
+            { "locals", "Debug.Locals" },
+            { "watch window", "Debug.Watch" },
+            { "watch", "Debug.Watch" },
+            { "call stack", "Debug.CallStack" },
+            { "breakpoints", "Debug.Breakpoints" },
+            { "exception settings", "Debug.ExceptionSettings" },
+            { "test explorer", "TestExplorer.ShowTestExplorer" },
+            { "test window", "TestExplorer.ShowTestExplorer" },
+            { "live unit testing window", "TestExplorer.ShowLiveUnitTestingWindow" },
+            { "live unit testing", "TestExplorer.ShowLiveUnitTestingWindow" },
+            { "solution explorer window", "View.SolutionExplorer" },
+            { "output pane", "View.Output" },
+            { "task pane", "View.TaskList" },
+            { "error pane", "View.ErrorList" },
+            { "explorer", "View.SolutionExplorer" },
+            { "search results", "View.FindResults1" },
+            { "search results 1", "View.FindResults1" },
+            { "search results 2", "View.FindResults2" },
+            { "pending changes window", "View.PendingChanges" },
+            { "git window", "View.GitChanges" },
+            { "repository window", "View.GitRepository" },
+            { "diagnostics", "Debug.ShowDiagnosticTools" },
+            { "breakpoint window", "Debug.Breakpoints" },
+            { "exception window", "Debug.ExceptionSettings" },
+            { "test", "TestExplorer.ShowTestExplorer" },
+            { "tests", "TestExplorer.ShowTestExplorer" }
+        };
+
+        // Popular commands that override any matches
+        private static readonly Dictionary<string, ActionBase> PopularCommands = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "debug application", new ExecuteVSCommandAction("Debug.Start") },
+            { "run application", new ExecuteVSCommandAction("Debug.StartWithoutDebugging") },
+            { "stop application", new ExecuteVSCommandAction("Debug.StopDebugging") },
+            // Ensure 'focus' always triggers Ctrl+Alt+Tab
+            { "focus", new SendKeysAction("ctrl alt tab") },
+            // Voice dictation trigger: opens the voice dictation form (auto-submit 5s)
+            // Use TimeoutMs=0 so the dictation form does not auto-submit — waits for manual Submit
+            { "dictate", new OpenVoiceDictationFormAction(0) }
+        };
+
+        // VS Code specific commands
+        public static readonly List<(string Command, string Description)> VSCodeCommands = new()
+            {
+                ("open file", "Open a file"),
+                ("open folder", "Open a folder"),
+                ("close tab", "Close the current tab"),
+                ("format document", "Format the current document"),
+                ("find in files", "Find in files"),
+                ("go to definition", "Go to definition of symbol"),
+                ("rename symbol", "Rename the selected symbol"),
+                ("show explorer", "Show Explorer"),
+                ("show source control", "Show Source Control"),
+                ("show extensions", "Show Extensions"),
+                ("start debugging", "Start debugging"),
+                ("stop debugging", "Stop debugging"),
+            };
+
+        // Enhanced 'what can I say' logic
+        public static void ShowAvailableCommands()
+        {
+            // If this method shows a dialog for long lists, we set this flag so
+            // the subsequent ShowHelpAction execution can skip the redundant tray notification.
+            // This avoids showing the same information twice (dialog + balloon).
+            // It is reset after the ShowHelpAction is processed.
+            // Note: internal flag; not exposed publicly.
+            _suppressNextHelpNotification = false;
+            string? procName = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName();
+
+            if (procName == "devenv")
+            {
+                try
+                {
+                    var window = new SearchVisualStudioCommandsWPF();
+                    window.ShowDialog();
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.Forms.MessageBox.Show($"Error opening search window: {ex.Message}");
+                }
+            }
+
+            List<(string Command, string Description)> commands;
+            string appLabel;
+            if (procName == "devenv")
+            {
+                commands = VisualStudioCommands;
+                appLabel = "Visual Studio";
+            }
+            else if (procName == "code")
+            {
+                commands = VSCodeCommands;
+                appLabel = "VS Code";
+            }
+            else
+            {
+                commands = AvailableCommands;
+                appLabel = "General";
+            }
+
+            // Format command list for display. If an emoji is configured for the command,
+            // show it before the command text (e.g. "📥 open downloads: Open the Downloads folder").
+            var lines = commands.Select(c =>
+            {
+                var emoji = EmojiManager.GetCommandEmoji(c.Command);
+                if (!string.IsNullOrEmpty(emoji))
+                    return $"- {emoji} {c.Command}: {c.Description}";
+                return $"- {c.Command}: {c.Description}";
+            }).ToList();
+            lines.Add("- refresh Visual Studio shortcuts: Reload the latest keyboard shortcuts from Visual Studio settings");
+            string message = $"Available commands:\n\n" + string.Join("\n", lines);
+
+            // If command list is long, show in dialog and use notification as pointer
+            if (lines.Count > 8)
+            {
+                try
+                {
+                    var form = new DictationBoxMSP.AvailableCommandsForm();
+                    form.Text = "Available Commands";
+                    // Show modal so callers don't continue until user closes the list.
+                    form.ShowDialog();
+                    _suppressNextHelpNotification = true;
+                }
+                catch (Exception)
+                {
+                    // Fallback to the original DisplayMessage if the new form fails to open
+                    var dlg = new DictationBoxMSP.DisplayMessage(message, 60000, "Available Commands"); // 60 seconds, custom title
+                    System.Windows.Forms.Application.Run(dlg); // Auto-close after timeout
+                    _suppressNextHelpNotification = true;
+                }
+            }
+            else
+            {
+                NaturalCommands.TrayNotificationHelper.ShowNotification($"{appLabel} Commands", string.Join("\n", lines), 7000);
+            }
+            // Also log to app.log for reference
+            System.IO.File.AppendAllText(GetLogPath(), $"[INFO] {appLabel} Supported Commands:\n{message}\n");
+        }
+
+        // Internal flag used to avoid showing a tray notification when the dialog
+        // has already presented the available commands to the user.
+        private static bool _suppressNextHelpNotification = false;
+        // P/Invoke for MonitorFromWindow
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+        // P/Invoke for GetMonitorInfo
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+        // MONITORINFOEX struct
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        public struct MONITORINFOEX
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+            [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string szDevice;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+        // Action types are now defined in ActionModels.cs
+
+        // P/Invoke for SetWindowPos
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        // P/Invoke for ShowWindow
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        // InterpretAsync implementation
+        public System.Threading.Tasks.Task<ActionBase?> InterpretAsync(string text)
+
+        {
+            text = (text ?? string.Empty).ToLowerInvariant().Trim();
+            // Remove polite modifiers and extra punctuation
+            text = RemovePoliteModifiers(text);
+            text = WordReplacementLoader.Apply(text);
+            text = text.Replace("  ", " ").Replace(".", "").Replace(",", "").Trim();
+            // Remove extra words that often appear in these commands
+            var extraWords = new[] { "of this", "of others", "of other windows", "on top of others", "on top of this" };
+            foreach (var ew in extraWords) text = text.Replace(ew, "");
+            text = text.Trim();
+            System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync normalized input: {text}\n");
+
+            // Focus window by name: /focus [window name], focus [window name], focus window [name]
+            string? focusPrefix = null;
+            if (text.StartsWith("/focus ")) focusPrefix = "/focus ";
+            else if (text.StartsWith("focus window ")) focusPrefix = "focus window ";
+            else if (text.StartsWith("focus ")) focusPrefix = "focus ";
+            if (focusPrefix != null)
+            {
+                var windowName = text.Substring(focusPrefix.Length).Trim();
+                if (!string.IsNullOrEmpty(windowName))
+                {
+                    System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync matched FocusWindow command: {windowName}\n");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(new NaturalCommands.FocusWindowAction(windowName));
+                }
+            }
+
+            // Check popular commands override
+            if (PopularCommands.TryGetValue(text, out var popularAction))
+            {
+                System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync matched PopularCommand: {text} -> {popularAction.GetType().Name}\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(popularAction);
+            }
+
+            // Handle refresh Visual Studio shortcuts command
+            if (text.Contains("refresh visual studio shortcuts") || text.Contains("reload visual studio shortcuts") || text.Contains("update visual studio shortcuts"))
+            {
+                NaturalCommands.Helpers.VisualStudioShortcutHelper.RefreshShortcuts();
+                System.IO.File.AppendAllText(GetLogPath(), "[INFO] Refreshed Visual Studio shortcuts from .vssettings file\n");
+                NaturalCommands.TrayNotificationHelper.ShowNotification("Shortcuts Refreshed", "Visual Studio keyboard shortcuts have been reloaded.", 5000);
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(null);
+            }
+
+            // Explicit help/command list queries
+            var helpQueries = new[] {
+                    "what can i say", "help", "show commands", "show available commands", "list commands", "show help", "commands list", "available commands"
+                };
+            if (helpQueries.Any(q => text.Contains(q)))
+            {
+                // ShowAvailableCommands performs the appropriate UI (dialog or notification).
+                // We return null here so no further ShowHelpAction is executed (avoids duplicate notifications).
+                ShowAvailableCommands();
+                System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync matched: ShowAvailableCommands displayed (help query)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(null);
+            }
+
+            // Check for configured multi-action commands (exact match or normalized match)
+            try
+            {
+                if (NaturalCommands.Helpers.MultiActionLoader.Commands.TryGetValue(text, out var multi) ||
+                    NaturalCommands.Helpers.MultiActionLoader.Commands.TryGetValue(NaturalCommands.Helpers.MultiActionLoader.NormalizeKey(text), out multi))
+                {
+                    System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync matched multi-action command: {multi.Name}\n");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(multi);
+                }
+            }
+            catch { }
+
+            // More robust matching for 'always on top'/'float above'/'restore' commands
+            var alwaysOnTopPatterns = new[] {
+                    "always on top", "on top", "float above", "float this window", "float above other windows",
+                    "make this window float above", "make this window float", "float this window above",
+                    "float window above", "make window float", "make window always on top",
+                    "put this window on top", "put window on top", "make window float above", "put window above",
+                    "float this window above other windows", "float window above other windows", "float window above others",
+                    "float this window above others", "float window above",
+                    "put this window above other windows", "put this window above others", "put window above other windows",
+                    "put window above others", "make this window always on top", "make window always on top"
+                };
+            // Restore window (un-maximize)
+            if ((text.Contains("restore") || text.Contains("unmaximize")) && text.Contains("window"))
+            {
+                var action = new MoveWindowAction(
+                    Target: "active",
+                    Monitor: "current",
+                    Position: "center",
+                    WidthPercent: 80,
+                    HeightPercent: 80
+                );
+                System.IO.File.AppendAllText(GetLogPath(), "Window maximized\n");
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (restore window)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            bool matchedAlwaysOnTop = false;
+            foreach (var pattern in alwaysOnTopPatterns)
+            {
+                if (text.Contains(pattern))
+                {
+                    matchedAlwaysOnTop = true;
+                    System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync matched pattern: {pattern}\n");
+                    break;
+                }
+            }
+            // Also match regex variants like 'float.*window.*top' or 'make.*window.*top'
+            if (!matchedAlwaysOnTop)
+            {
+                var regexPatterns = new[] {
+                        "float.*window.*top", "make.*window.*top", "float.*window.*above", "make.*window.*float", "put.*window.*top", "put.*window.*above"
+                    };
+                foreach (var rx in regexPatterns)
+                {
+                    if (System.Text.RegularExpressions.Regex.IsMatch(text, rx))
+                    {
+                        matchedAlwaysOnTop = true;
+                        System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync matched regex: {rx}\n");
+                        break;
+                    }
+                }
+                // Catch-all: match any phrase containing 'float', 'window', and 'above' in any order
+                if (!matchedAlwaysOnTop)
+                {
+                    var words = new[] { "float", "window", "above" };
+                    bool allPresent = words.All(w => text.Contains(w));
+                    if (allPresent)
+                    {
+                        matchedAlwaysOnTop = true;
+                        System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] InterpretAsync matched catch-all: float/window/above\n");
+                    }
+                }
+            }
+            if (matchedAlwaysOnTop)
+            {
+                // The always-on-top feature is disabled because it was causing accidental
+                // behaviors for users. Log and return null so no action is executed.
+                System.IO.File.AppendAllText(GetLogPath(), "[INFO] InterpretAsync: 'always on top' command detected but feature is disabled by configuration.\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(null);
+            }
+            // Send key sequences
+            if (text.StartsWith("press "))
+            {
+                var keysText = text.Substring(6).Trim();
+                var action = new SendKeysAction(keysText);
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (send keys)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            // Maximize/full screen window
+            if ((text.Contains("maximize") || text.Contains("full screen")) && text.Contains("window"))
+            {
+                var action = new MoveWindowAction(
+                    Target: "active",
+                    Monitor: "current",
+                    Position: "center",
+                    WidthPercent: 100,
+                    HeightPercent: 100
+                );
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name}\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            // Move window to other monitor (next)
+            if ((text.Contains("move") || text.Contains("snap")) && text.Contains("window") && (text.Contains("other monitor") || text.Contains("next monitor") || text.Contains("other screen") || text.Contains("next screen") || text.Contains("my other monitor")))
+            {
+                var action = new MoveWindowAction(
+                    Target: "active",
+                    Monitor: "next",
+                    Position: null,
+                    WidthPercent: 0,
+                    HeightPercent: 0
+                );
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (next monitor)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            // Move window to left half (robust)
+            if ((text.Contains("left half") || (text.Contains("left") && text.Contains("half"))) || ((text.Contains("move") || text.Contains("snap")) && text.Contains("window") && text.Contains("left")))
+            {
+                var action = new MoveWindowAction(
+                    Target: "active",
+                    Monitor: "current",
+                    Position: "left",
+                    WidthPercent: 50,
+                    HeightPercent: 100
+                );
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (left half)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            // Move window to right half (robust)
+            if ((text.Contains("right half") || (text.Contains("right") && text.Contains("half"))) || ((text.Contains("move") || text.Contains("snap")) && text.Contains("window") && text.Contains("right")))
+            {
+                var action = new MoveWindowAction(
+                    Target: "active",
+                    Monitor: "current",
+                    Position: "right",
+                    WidthPercent: 50,
+                    HeightPercent: 100
+                );
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (right half)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            // Open documents folder (robust)
+            if (text.Contains("open documents") || (text.Contains("open") && text.Contains("document")))
+            {
+                var action = new OpenFolderAction("Documents");
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (documents)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            // Open downloads folder (robust)
+            if (text.Contains("open downloads") || (text.Contains("open") && text.Contains("download")))
+            {
+                var action = new OpenFolderAction("Downloads");
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (downloads)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            // Open mapped applications (expanded)
+            // Use WebsiteNavigator for website navigation commands
+            if (WebsiteNavigator.TryParseWebsiteCommand(text, out var url))
+            {
+                if (!string.IsNullOrWhiteSpace(url))
+                {
+                    var action = new OpenWebsiteAction(url);
+                    System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (website: {url})\n");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                }
+            }
+            // Open mapped applications (expanded)
+            if (text.StartsWith("open "))
+            {
+                var appName = text.Substring(5).Trim();
+                // Normalize app name (remove 'the', 'app', etc.)
+                appName = appName.Replace("the ", "").Replace("app", "").Trim();
+                // Strip vendor prefixes like "microsoft " or "ms " to handle phrases such as "microsoft paint"
+                if (appName.StartsWith("microsoft ", StringComparison.OrdinalIgnoreCase))
+                    appName = appName.Substring("microsoft ".Length).Trim();
+                else if (appName.StartsWith("ms ", StringComparison.OrdinalIgnoreCase))
+                    appName = appName.Substring("ms ".Length).Trim();
+                // Special case: "terminal" or "windows terminal" or "cmd" or "command prompt"
+                if (appName == "terminal" || appName == "windows terminal" || appName == "cmd" || appName == "command prompt")
+                    appName = "terminal";
+                if (AppMappings.TryGetValue(appName, out var exe))
+                {
+                    var action = new LaunchAppAction(exe);
+                    System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (mapped app: {appName} -> {exe})\n");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                }
+                // Fallback: show Alt+Tab switcher and hold Alt
+                var fallbackAction = new LaunchAppAction("focus-fallback");
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync fallback: {fallbackAction.GetType().Name} (focus-fallback for: {appName})\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(fallbackAction);
+            }
+            // "type ..." maps to SendKeysAction
+            if (text.StartsWith("type "))
+            {
+                var keysText = text.Substring(5).Trim();
+                var action = new SendKeysAction(keysText);
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (type keys)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            // Emoji commands
+            // "emoji set <name> <emoji>" -> set mapping
+            if (text.StartsWith("emoji set "))
+            {
+                // Examples: "emoji set happy 😀" or "emoji set happy :D"
+                var rest = text.Substring("emoji set ".Length).Trim();
+                if (!string.IsNullOrEmpty(rest))
+                {
+                    var parts = rest.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2)
+                    {
+                        var name = parts[0].Trim();
+                        var emoji = parts[1].Trim();
+                        EmojiManager.SetCommandEmoji(name, emoji);
+                        System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync: Set emoji mapping: {name} -> {emoji}\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(new EmojiAction(name, emoji));
+                    }
+                }
+            }
+            // "emoji type <emoji>" -> type this emoji immediately
+            if (text.StartsWith("emoji type "))
+            {
+                var emojiText = text.Substring("emoji type ".Length).Trim();
+                if (!string.IsNullOrEmpty(emojiText))
+                {
+                    var action = new EmojiAction(null, emojiText);
+                    System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync: Emoji type action for: {emojiText}\n");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                }
+            }
+            // "emoji <name>" -> type configured emoji for name
+            if (text.StartsWith("emoji ") && !text.StartsWith("emoji set") && !text.StartsWith("emoji type"))
+            {
+                var name = text.Substring("emoji ".Length).Trim();
+                if (!string.IsNullOrEmpty(name))
+                {
+                    var emoji = EmojiManager.GetCommandEmoji(name);
+                    if (!string.IsNullOrEmpty(emoji))
+                    {
+                        var action = new EmojiAction(name, emoji);
+                        System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync: Emoji name action for: {name} -> {emoji}\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                    }
+                    else
+                    {
+                        // No mapping found; respond with AI fallback or suggest how to set
+                        System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync: No emoji mapping for: {name}\n");
+                        // Suggest set command via ShowAvailableCommands or let AI handle
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(null);
+                    }
+                }
+            }
+            // Supported apps for close tab
+            if (text.Trim().Equals("close tab", StringComparison.InvariantCultureIgnoreCase) || text.Trim().Equals("closed tab", StringComparison.InvariantCultureIgnoreCase))
+            {
+                string? procName = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName();
+                if (!string.IsNullOrEmpty(procName) && SupportedCloseTabApps.Contains(procName))
+                {
+                    var closeTabAction = new CloseTabAction();
+                    System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] InterpretAsync: Rule-based match for 'close tab' in supported app: {procName}\n");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(closeTabAction);
+                }
+            }
+            // Visual Studio code search (Go to All) shortcut
+            var codeSearchPatterns = new[] {
+                "search code", "code search", "find code", "open code search", "search for code"
+            };
+            if (codeSearchPatterns.Any(p => text.Contains(p)))
+            {
+                var action = new SendKeysAction("control ,");
+                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (code search)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
+            // Visual Studio Command Lookup
+
+            if (IsVisualStudioActive())
+            {
+                // First, check explicit tool window mappings
+                foreach (var kvp in VisualStudioToolWindowMappings)
+                {
+                    if (text.Equals(kvp.Key, StringComparison.InvariantCultureIgnoreCase) || text.Contains(kvp.Key, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        var mappedAction = new ExecuteVSCommandAction(kvp.Value);
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched tool window mapping: {kvp.Key} -> {kvp.Value}\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(mappedAction);
+                    }
+                }
+                // Then, check explicit canonical mappings for common VS commands. This avoids
+                // choosing context-menu or other exported commands that are not the canonical ones.
+                foreach (var kvp in VisualStudioCanonicalMappings)
+                {
+                    if (text.Equals(kvp.Key, StringComparison.InvariantCultureIgnoreCase) || text.Contains(kvp.Key, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        var mappedAction = new ExecuteVSCommandAction(kvp.Value);
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched canonical VS mapping: {kvp.Key} -> {kvp.Value}\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(mappedAction);
+                    }
+                }
+
+                // Ensure commands are loaded
+                if (NaturalCommands.Helpers.VisualStudioCommandLoader.GetCommands().Count == 0)
+                {
+                    string jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "vs_commands.json");
+                    if (!File.Exists(jsonPath))
+                    {
+                         // Try looking up three levels (project root during dev)
+                         jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "vs_commands.json");
+                    }
+                    NaturalCommands.Helpers.VisualStudioCommandLoader.LoadCommands(jsonPath);
+                }
+
+                var vsCommand = NaturalCommands.Helpers.VisualStudioCommandLoader.FindCommand(text);
+                if (vsCommand != null)
+                {
+                     var action = new ExecuteVSCommandAction(vsCommand.Name);
+                     System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched VS Command: {vsCommand.Name}\n");
+                     return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                }
+            }
+
+            // Fallback for unhandled commands: log and call AI
+            System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync: No rule-based match for: {text}\n");
+            string? currentApp = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName();
+            string aiInput = text;
+            if (!string.IsNullOrWhiteSpace(currentApp))
+            {
+                aiInput += $"\nCurrentApplication: {currentApp}";
+            }
+            return InterpretWithAIAsync(aiInput);
+            // End of InterpretAsync
+        }
+        private static readonly string[] SupportedCloseTabApps = new[] { "chrome", "msedge", "firefox", "brave", "opera", "code", "devenv" };
+
+                    public string ExecuteActionAsync(ActionBase action)
+                    {
+                        System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] ExecuteActionAsync: Action type: {(action == null ? "null" : action.GetType().Name)}\n");
+                        System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] ExecuteActionAsync: action.GetType().FullName: {(action == null ? "null" : action.GetType().FullName)}\n");
+                        System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] ExecuteActionAsync: Checking if action is MoveWindowAction\n");
+                        System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] ExecuteActionAsync: action.GetType().AssemblyQualifiedName: {(action == null ? "null" : action.GetType().AssemblyQualifiedName)}\n");
+                        string logPath = GetLogPath();
+                        EnsureLogDirExists(logPath);
+            if (action is MoveWindowAction move)
+            {
+                // Delegate to WindowManager
+                return NaturalCommands.Helpers.WindowManager.ExecuteMoveWindow(move);
+            }
+            // All window movement logic is now inside the MoveWindowAction block above
+            else if (action is CloseTabAction)
+            {
+                // Always log 'Sent Ctrl+W' for close tab attempts, even if app is unsupported or process name is missing
+                System.IO.File.AppendAllText(GetLogPath(), "Sent Ctrl+W\n");
+                string? procName = CurrentApplicationHelper.GetCurrentProcessName();
+                if (string.IsNullOrEmpty(procName))
+                {
+                    return "Could not detect current application.";
+                }
+
+                if (SupportedCloseTabApps.Contains(procName))
+                {
+                    try
+                    {
+                        var sim = new WindowsInput.InputSimulator();
+                        if (procName == "devenv")
+                        {
+                            // In Visual Studio, use DTE to close the document window
+                            try
+                            {
+                                bool success = NaturalCommands.Helpers.VisualStudioHelper.ExecuteCommand("Window.CloseDocumentWindow");
+                                if (success)
+                                {
+                                    System.IO.File.AppendAllText("app.log", "Executed Window.CloseDocumentWindow via DTE in Visual Studio.\n");
+                                    return "Executed Window.CloseDocumentWindow via DTE.";
+                                }
+                                else
+                                {
+                                    // Fallback to Ctrl+F4 if DTE fails
+                                    sim.Keyboard.ModifiedKeyStroke(WindowsInput.Native.VirtualKeyCode.CONTROL, WindowsInput.Native.VirtualKeyCode.F4);
+                                    System.IO.File.AppendAllText("app.log", "DTE failed, sent Ctrl+F4 to Visual Studio.\n");
+                                    return "DTE failed, sent Ctrl+F4.";
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                System.IO.File.AppendAllText("app.log", $"Failed to execute VS command: {ex.Message}\n");
+                                return $"Failed to execute VS command: {ex.Message}";
+                            }
+                        }
+                        sim.Keyboard.ModifiedKeyStroke(WindowsInput.Native.VirtualKeyCode.CONTROL, WindowsInput.Native.VirtualKeyCode.VK_W);
+                        return $"Sent Ctrl+W to {procName} (close tab).";
+                    }
+                    catch (Exception ex)
+                    {
+                        System.IO.File.AppendAllText("app.log", $"Failed to send Ctrl+W to {procName}: {ex.Message}\n");
+                        return $"Failed to send Ctrl+W to {procName}: {ex.Message}";
+                    }
+                }
+                else
+                {
+                    return $"Current app '{procName}' is not supported for 'close tab'.";
+                }
+            }
+            // Open voice dictation form action: show form, then interpret & execute returned text
+            else if (action is OpenVoiceDictationFormAction dictAction)
+            {
+                try
+                {
+                    var text = NaturalCommands.Helpers.VoiceDictationHelper.ShowVoiceDictation(dictAction.TimeoutMs);
+                    if (string.IsNullOrWhiteSpace(text))
+                        return "Dictation cancelled or empty.";
+                    // Interpret the dictated text and execute resulting action(s)
+                    var interpretedTask = InterpretAsync(text);
+                    var interpreted = interpretedTask?.Result;
+                    if (interpreted == null)
+                        return "No action interpreted from dictated text.";
+                    return ExecuteActionAsync(interpreted);
+                }
+                catch (Exception ex)
+                {
+                    return $"Voice dictation failed: {ex.Message}";
+                }
+            }
+            else if (action is SetWindowAlwaysOnTopAction setTop)
+            {
+                // This feature was disabled because it caused accidental "always on top" states.
+                System.IO.File.AppendAllText(GetLogPath(), "[INFO] ExecuteActionAsync: Attempt to set always-on-top blocked by configuration.\n");
+                return "Setting windows always-on-top has been disabled.";
+            }
+            // Multi-action sequences: run a list of actions in order
+            else if (action is NaturalCommands.RunMultipleActionsAction multiAction)
+            {
+                System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] ExecuteActionAsync: Running multi-action '{multiAction.Name}' with {multiAction.Actions?.Count ?? 0} steps\n");
+                string lastResult = string.Empty;
+                if (multiAction.Actions != null)
+                {
+                    foreach (var sub in multiAction.Actions)
+                    {
+                        try
+                        {
+                            lastResult = ExecuteActionAsync(sub);
+                            System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] ExecuteActionAsync: multi-step result: {lastResult}\n");
+                        }
+                        catch (Exception ex)
+                        {
+                            System.IO.File.AppendAllText(GetLogPath(), $"[ERROR] ExecuteActionAsync: multi-step failed: {ex.Message}\n");
+                            if (!multiAction.ContinueOnError)
+                            {
+                                return $"Multi-action '{multiAction.Name}' aborted: {ex.Message}";
+                            }
+                        }
+                        try { System.Threading.Thread.Sleep(Math.Max(0, multiAction.DelayMsBetween)); } catch { }
+                    }
+                }
+                return $"Executed multi-action '{multiAction.Name}'" + (string.IsNullOrEmpty(lastResult) ? "." : $": {lastResult}");
+            }
+            else if (action is OpenFolderAction folder)
+            {
+                string path;
+                switch (folder.KnownFolder.ToLower())
+                {
+                    case "downloads":
+                        path = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                        break;
+                    case "documents":
+                        path = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                        break;
+                    default:
+                        path = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                        break;
+                }
+
+                // Try to focus existing Explorer window for Downloads
+                bool focused = FocusExistingExplorerWindow(path);
+                if (focused)
+                {
+                    System.IO.File.AppendAllText(GetLogPath(), "Focused existing Downloads window\n");
+                    return $"Focused existing window: {folder.KnownFolder} ({path})";
+                }
+                // Otherwise, open new window
+                var psi = new System.Diagnostics.ProcessStartInfo("explorer.exe", path)
+                {
+                    UseShellExecute = true
+                };
+                System.Diagnostics.Process.Start(psi);
+                if (folder.KnownFolder.Equals("Downloads", StringComparison.OrdinalIgnoreCase))
+                {
+                    System.IO.File.AppendAllText(GetLogPath(), "Opened folder: Downloads\n");
+                }
+                return $"Opened folder: {folder.KnownFolder} ({path})";
+            // No closing brace here; keep method open for further action handlers
+            }
+            else if (action is ShowHelpAction)
+            {
+                string helpText = "Available commands:\n" +
+                    "- Move this window to the left/right\n" +
+                    "- Maximize this window\n" +
+                    "- Open downloads/documents\n" +
+                    "- Move window to other screen\n" +
+                    "- (More natural commands can be added)";
+                // If the command list was already shown in a dialog, skip the tray notification
+                if (_suppressNextHelpNotification)
+                {
+                    _suppressNextHelpNotification = false;
+                    return helpText;
+                }
+                TrayNotificationHelper.ShowNotification("NaturalCommands.NET Help", helpText, 7000);
+                return helpText;
+            }
+            else if (action is LaunchAppAction app)
+            {
+                return NaturalCommands.Helpers.AppLauncher.Launch(app);
+            }
+            else if (action is NaturalCommands.OpenWebsiteAction website)
+            {
+                var result = WebsiteNavigator.LaunchWebsite(website.Url);
+                System.IO.File.AppendAllText(GetLogPath(), result + "\n");
+                return result;
+            }
+            else if (action is NaturalCommands.SendKeysAction keys)
+            {
+                return NaturalCommands.Helpers.KeySender.SendKeys(keys);
+            }
+            else if (action is NaturalCommands.EmojiAction emojiAction)
+            {
+                return NaturalCommands.Helpers.EmojiService.TypeEmoji(emojiAction);
+            }
+            else if (action is NaturalCommands.ExecuteVSCommandAction vsCmd)
+            {
+                return NaturalCommands.Helpers.VSCommandHandler.ExecuteVSCommand(vsCmd);
+            }
+            else
+            {
+                // Always log 'No matching action' for unknown action types
+                System.IO.File.AppendAllText(GetLogPath(), "No matching action\n");
+                return "Unknown action type.";
+            }
+        }
+
+        public string HandleNaturalAsync(string text)
+        {
+            System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] Entered HandleNaturalAsync with text: '{text}'\n");
+            string lowerText = text.ToLowerInvariant();
+            System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] lowerText: '{lowerText}', contains 'focus': {lowerText.Contains("focus")}, contains 'zoom': {lowerText.Contains("zoom")}\n");
+            // Intercept 'focus zoom' and similar before AI fallback
+            if (lowerText.Contains("focus") && lowerText.Contains("zoom"))
+            {
+                System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Intercepted 'focus zoom' before AI fallback.\n");
+                bool focused = NaturalCommands.Helpers.WindowFocusHelper.FocusZoom();
+                if (focused)
+                {
+                    System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Successfully focused Zoom window.\n");
+                    return "[Natural mode] Focused Zoom window.";
+                }
+                else
+                {
+                    System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Zoom window not found, showing Ctrl+Alt+Tab fallback.\n");
+                    var sim = new WindowsInput.InputSimulator();
+                    sim.Keyboard.ModifiedKeyStroke(
+                        new[] {
+                            WindowsInput.Native.VirtualKeyCode.CONTROL,
+                            WindowsInput.Native.VirtualKeyCode.MENU
+                        },
+                        WindowsInput.Native.VirtualKeyCode.TAB);
+                    return "[Natural mode] Sent Ctrl+Alt+Tab for app switcher (focus fallback)";
+                }
+            }
+            var actionTask = InterpretAsync(text);
+            actionTask.Wait();
+            var action = actionTask.Result;
+            string actionTypeName = action != null ? action.GetType().Name : "null";
+            System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] HandleNaturalAsync: Action type: {actionTypeName}\n");
+            if (action == null)
+            {
+                // Robust fallback for 'focus windows terminal' and 'focus' commands
+                if (lowerText.Contains("focus") && lowerText.Contains("windows terminal"))
+                {
+                    System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Attempting to focus Windows Terminal window (HandleNaturalAsync single-arg)\n");
+                    bool focused = NaturalCommands.Helpers.WindowFocusHelper.FocusWindowsTerminal();
+                    if (focused)
+                    {
+                        System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Successfully focused Windows Terminal window.\n");
+                        return "[Natural mode] Focused Windows Terminal window.";
+                    }
+                    else
+                    {
+                        System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Windows Terminal not found, showing Ctrl+Alt+Tab fallback.\n");
+                        var sim = new WindowsInput.InputSimulator();
+                        sim.Keyboard.ModifiedKeyStroke(
+                            new[] {
+                                WindowsInput.Native.VirtualKeyCode.CONTROL,
+                                WindowsInput.Native.VirtualKeyCode.MENU
+                            },
+                            WindowsInput.Native.VirtualKeyCode.TAB);
+                        return "[Natural mode] Sent Ctrl+Alt+Tab for app switcher (focus fallback)";
+                    }
+                }
+                if (lowerText.Contains("focus"))
+                {
+                    System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Focus fallback: sending Ctrl+Alt+Tab (HandleNaturalAsync single-arg)\n");
+                    var sim = new WindowsInput.InputSimulator();
+                    sim.Keyboard.ModifiedKeyStroke(
+                        new[] {
+                            WindowsInput.Native.VirtualKeyCode.CONTROL,
+                            WindowsInput.Native.VirtualKeyCode.MENU
+                        },
+                        WindowsInput.Native.VirtualKeyCode.TAB);
+                    return "[Natural mode] Sent Ctrl+Alt+Tab for app switcher (focus fallback)";
+                }
+                // Fallback to OpenAI if rule-based match fails
+                System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] HandleNaturalAsync: Fallback to OpenAI for: {text}\n");
+                var aiActionTask = InterpretWithAIAsync(text);
+                aiActionTask.Wait();
+                var aiAction = aiActionTask.Result;
+                System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] HandleNaturalAsync: OpenAI Action type: {(aiAction == null ? "null" : aiAction.GetType().Name)}\n");
+                // Log the raw AI response if available
+                if (aiActionTask.IsCompletedSuccessfully && aiAction != null)
+                {
+                    // If the original text was 'close tab', override AI fallback to always send Ctrl+W
+                    if (text.Trim().Equals("close tab", StringComparison.InvariantCultureIgnoreCase) || text.Trim().Equals("closed tab", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        var closeTabAction = new CloseTabAction();
+                        System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] Overriding AI fallback for 'close tab' to always send Ctrl+W.\n");
+                        var resultOverride = ExecuteActionAsync(closeTabAction);
+                        return $"[Natural mode] {resultOverride}";
+                    }
+                    // Otherwise, use AI result as normal
+                    System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] HandleNaturalAsync: See '[AI] Raw response' above for actual AI output.\n");
+                    var aiResult = ExecuteActionAsync(aiAction);
+                    return $"[Natural mode] {aiResult}";
+                }
+                System.IO.File.AppendAllText(GetLogPath(), "No matching action\n");
+                // Show auto-closing message box for unmatched command
+                System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] About to show AutoClosingMessageBox for: {text}\n");
+                int timeoutMs = 5000;
+                int timeoutSec = timeoutMs / 1000;
+                string msg = $"No matching action for: {text}\n(This will close in {timeoutSec} seconds)";
+                NaturalCommands.AutoClosingMessageBox.Show(msg, "Command Not Recognized", timeoutMs);
+                return $"[Natural mode] No matching action for: {text}";
+            }
+            var result = ExecuteActionAsync(action);
+            return $"[Natural mode] {result}";
+        }
+
+        public string HandleNaturalAsync(string text, List<(string Command, string Description)> availableCommands)
+        {
+            var actionTask = InterpretAsync(text, availableCommands);
+            actionTask.Wait();
+            var action = actionTask.Result;
+            System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] HandleNaturalAsync: Action type: {(action == null ? "null" : action.GetType().Name)}\n");
+            if (action == null)
+            {
+                // If the command contains 'focus windows terminal', try direct focus
+                if (text.Contains("focus") && text.Contains("windows terminal"))
+                {
+                    System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Attempting to focus Windows Terminal window (HandleNaturalAsync)\n");
+                    bool focused = NaturalCommands.Helpers.WindowFocusHelper.FocusWindowsTerminal();
+                    if (focused)
+                    {
+                        System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Successfully focused Windows Terminal window.\n");
+                        return "[Natural mode] Focused Windows Terminal window.";
+                    }
+                    else
+                        if (action == null)
+                        {
+                            // Robust fallback for Windows Terminal focus
+                            string lowerText = text.ToLowerInvariant();
+                            if (lowerText.Contains("focus") && lowerText.Contains("windows terminal"))
+                            {
+                                System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Attempting to focus Windows Terminal window (HandleNaturalAsync overload)\n");
+                                bool focusedInner = NaturalCommands.Helpers.WindowFocusHelper.FocusWindowsTerminal();
+                                if (focusedInner)
+                                {
+                                    System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Successfully focused Windows Terminal window.\n");
+                                    return "[Natural mode] Focused Windows Terminal window.";
+                                }
+                                else
+                                {
+                                    System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Windows Terminal not found, showing Ctrl+Alt+Tab fallback.\n");
+                                    var sim = new WindowsInput.InputSimulator();
+                                    sim.Keyboard.ModifiedKeyStroke(
+                                        new[] {
+                                            WindowsInput.Native.VirtualKeyCode.CONTROL,
+                                            WindowsInput.Native.VirtualKeyCode.MENU
+                                        },
+                                        WindowsInput.Native.VirtualKeyCode.TAB);
+                                    return "[Natural mode] Sent Ctrl+Alt+Tab for app switcher (focus fallback)";
+                                }
+                            }
+                            // Fallback for any 'focus' command
+                            if (lowerText.Contains("focus"))
+                            {
+                                System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Focus fallback: sending Ctrl+Alt+Tab (HandleNaturalAsync overload)\n");
+                                var sim = new WindowsInput.InputSimulator();
+                                sim.Keyboard.ModifiedKeyStroke(
+                                    new[] {
+                                        WindowsInput.Native.VirtualKeyCode.CONTROL,
+                                        WindowsInput.Native.VirtualKeyCode.MENU
+                                    },
+                                    WindowsInput.Native.VirtualKeyCode.TAB);
+                                return "[Natural mode] Sent Ctrl+Alt+Tab for app switcher (focus fallback)";
+                            }
+                            // ...existing code...
+                        }
+                }
+                // If the command contains 'focus', trigger Ctrl+Alt+Tab fallback
+                if (text.Contains("focus"))
+                {
+                    System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Focus fallback: sending Ctrl+Alt+Tab (HandleNaturalAsync)\n");
+                    var sim = new WindowsInput.InputSimulator();
+                    sim.Keyboard.ModifiedKeyStroke(
+                        new[] {
+                            WindowsInput.Native.VirtualKeyCode.CONTROL,
+                            WindowsInput.Native.VirtualKeyCode.MENU
+                        },
+                        WindowsInput.Native.VirtualKeyCode.TAB);
+                    return "[Natural mode] Sent Ctrl+Alt+Tab for app switcher (focus fallback)";
+                }
+                // Suggest available commands if no match
+                var suggestions = string.Join(", ", availableCommands.Select(c => c.Command));
+                return $"[Natural mode] No matching action for: {text}. Available commands: {suggestions}";
+            }
+            var result = ExecuteActionAsync(action);
+            return $"[Natural mode] {result}";
+        }
+
+        public System.Threading.Tasks.Task<ActionBase?> InterpretAsync(string text, List<(string Command, string Description)> availableCommands)
+        {
+            text = (text ?? string.Empty).ToLowerInvariant().Trim();
+            // Remove polite modifiers
+            text = RemovePoliteModifiers(text);
+            text = WordReplacementLoader.Apply(text);
+            System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync input: {text}\n");
+
+            // Fuzzy match against available commands
+            var bestMatch = availableCommands
+                .Select(cmd => (cmd.Command, Score: GetSimilarityScore(text, cmd.Command)))
+                .OrderByDescending(x => x.Score)
+                .FirstOrDefault();
+
+            // Threshold for fuzzy match (can be tuned)
+            if (bestMatch.Score > 0.6)
+            {
+                // Map best match to action
+                switch (bestMatch.Command)
+                {
+                    case "maximize window":
+                        var action = new MoveWindowAction(Target: "active", Monitor: "current", Position: "center", WidthPercent: 100, HeightPercent: 100);
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name}\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                    case "move window to left half":
+                        var leftAction = new MoveWindowAction(Target: "active", Monitor: "current", Position: "left", WidthPercent: 50, HeightPercent: 100);
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {leftAction.GetType().Name} (left half)\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(leftAction);
+                    case "move window to right half":
+                        var rightAction = new MoveWindowAction(Target: "active", Monitor: "current", Position: "right", WidthPercent: 50, HeightPercent: 100);
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {rightAction.GetType().Name} (right half)\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(rightAction);
+                    case "move window to other monitor":
+                        var nextAction = new MoveWindowAction(Target: "active", Monitor: "next", Position: "", WidthPercent: 0, HeightPercent: 0);
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {nextAction.GetType().Name} (next monitor)\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(nextAction);
+                    
+                    case "open downloads":
+                        var downloadsAction = new OpenFolderAction("Downloads");
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {downloadsAction.GetType().Name} (downloads)\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(downloadsAction);
+                    case "open documents":
+                        var documentsAction = new OpenFolderAction("Documents");
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {documentsAction.GetType().Name} (documents)\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(documentsAction);
+                    case "close tab":
+                        var closeTabAction = new CloseTabAction();
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {closeTabAction.GetType().Name} (close tab)\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(closeTabAction);
+                    case "send keys":
+                        var sendKeysAction = new SendKeysAction(text.Replace("press ", ""));
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {sendKeysAction.GetType().Name} (send keys)\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(sendKeysAction);
+                    case "launch app":
+                        var launchAppAction = new LaunchAppAction(text.Replace("open ", ""));
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {launchAppAction.GetType().Name} (launch app)\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(launchAppAction);
+                    case "focus app":
+                        // Not implemented, stub
+                        break;
+                    case "show help":
+                        var helpAction = new ShowHelpAction();
+                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {helpAction.GetType().Name} (help)\n");
+                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(helpAction);
+                }
+            }
+            System.IO.File.AppendAllText("app.log", "[DEBUG] InterpretAsync: No match, returning null\n");
+            return System.Threading.Tasks.Task.FromResult<ActionBase?>(null);
+        }
+
+        // Simple similarity score (normalized longest common subsequence)
+        private static double GetSimilarityScore(string input, string command)
+        {
+            input = input.ToLowerInvariant();
+            command = command.ToLowerInvariant();
+            int lcs = LongestCommonSubsequence(input, command);
+            return (double)lcs / Math.Max(input.Length, command.Length);
+        }
+
+        // Longest common subsequence algorithm
+        private static int LongestCommonSubsequence(string a, string b)
+        {
+            int[,] dp = new int[a.Length + 1, b.Length + 1];
+            for (int i = 1; i <= a.Length; i++)
+            {
+                for (int j = 1; j <= b.Length; j++)
+                {
+                    if (a[i - 1] == b[j - 1])
+                        dp[i, j] = dp[i - 1, j - 1] + 1;
+                    else
+                        dp[i, j] = Math.Max(dp[i - 1, j], dp[i, j - 1]);
+                }
+            }
+            return dp[a.Length, b.Length];
+        }
+
+        // Helper to enumerate all monitor handles
+        private static IEnumerable<IntPtr> GetAllMonitors()
+        {
+            var monitors = new List<IntPtr>();
+            bool MonitorEnum(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData)
+            {
+                monitors.Add(hMonitor);
+                return true;
+            }
+            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, MonitorEnum, IntPtr.Zero);
+            return monitors;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
+        private delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+                [System.Runtime.InteropServices.DllImport("user32.dll")]
+                private static extern bool SetForegroundWindow(IntPtr hWnd);
+            // Helper: Focus existing Explorer window for a given path
+            private static bool FocusExistingExplorerWindow(string folderPath)
+            {
+                try
+                {
+                    // Use COM to enumerate Explorer windows
+                    Type? shellWindowsType = Type.GetTypeFromProgID("Shell.Application");
+                    if (shellWindowsType == null)
+                        return false;
+                    dynamic? shellWindows = Activator.CreateInstance(shellWindowsType);
+                    if (shellWindows == null)
+                        return false;
+                    foreach (var window in shellWindows.Windows())
+                    {
+                        string url = "";
+                        try { url = window.LocationURL as string ?? ""; } catch { }
+                        string hwndStr = "";
+                        try { hwndStr = window.HWND.ToString(); } catch { }
+                        // Convert file:///C:/Users/.../Downloads to local path
+                        if (url.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string winPath = Uri.UnescapeDataString(url.Substring(8).Replace('/', '\\'));
+                            // Compare normalized paths
+                            if (string.Equals(System.IO.Path.GetFullPath(winPath), System.IO.Path.GetFullPath(folderPath), StringComparison.OrdinalIgnoreCase))
+                            {
+                                // Focus window
+                                IntPtr hWnd = IntPtr.Zero;
+                                if (IntPtr.TryParse(hwndStr, out hWnd) && hWnd != IntPtr.Zero)
+                                {
+                                    SetForegroundWindow(hWnd);
+                                    return true;
+                                }
+                                // Fallback: try window.HWND as int
+                                try
+                                {
+                                    hWnd = (IntPtr)window.HWND;
+                                    if (hWnd != IntPtr.Zero)
+                                    {
+                                        SetForegroundWindow(hWnd);
+                                        return true;
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                }
+                catch { }
+                return false;
+            }
+    }
+}

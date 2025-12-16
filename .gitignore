@@ -72,6 +72,8 @@ bin/**/runtimes/**/native
 # Ignore user-specific and credential files
 secrets.json
 *.publishsettings
+.env
+.env.*
 
 # Ignore local environment config files
 appsettings.*.json

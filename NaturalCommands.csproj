@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <Nullable>enable</Nullable>
+        <UseWindowsForms>true</UseWindowsForms>
+        <UseWPF>true</UseWPF>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Remove="Tests\**" />
+        <EmbeddedResource Remove="Tests\**" />
+        <None Remove="Tests\**" />
+        <!-- rest of linked files unchanged -->
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
+        <PackageReference Include="Azure.Identity" Version="1.11.4" />
+        <PackageReference Include="InputSimulatorCore" Version="1.0.5" />
+        <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0" />
+        <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.5" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="7.0.13" />
+        <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="6.35.0" />
+        <PackageReference Include="Microsoft.Windows.Compatibility" Version="9.0.9" />
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+        <PackageReference Include="OpenAI" Version="2.7.0" />
+        <PackageReference Include="SmartComponents.LocalEmbeddings" Version="0.1.0-preview10148" />
+        <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.35.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Update="DisplayMessage.cs">
+            <SubType>Form</SubType>
+        </Compile>
+        <Compile Update="DisplayMessage.Designer.cs">
+            <DependentUpon>DisplayMessage.cs</DependentUpon>
+        </Compile>
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Update="DisplayMessage.resx">
+            <DependentUpon>DisplayMessage.cs</DependentUpon>
+        </EmbeddedResource>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="openai_prompt.md">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="multi_actions.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="vs_commands.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="emoji_mappings.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+</Project>
