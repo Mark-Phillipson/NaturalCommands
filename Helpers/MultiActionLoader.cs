@@ -17,10 +17,10 @@ namespace NaturalCommands.Helpers
             {
                 Commands.Clear();
                 var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.log");
-                try { File.AppendAllText(logPath, $"[DEBUG] MultiActionLoader.ConfigPath: {ConfigPath}\n"); } catch { }
+                try { NaturalCommands.Helpers.Logger.LogDebug($"MultiActionLoader.ConfigPath: {ConfigPath}"); } catch { }
                 if (!File.Exists(ConfigPath))
                 {
-                    try { File.AppendAllText(logPath, $"[WARN] MultiActionLoader: config not found at {ConfigPath}\n"); } catch { }
+                    try { NaturalCommands.Helpers.Logger.LogWarning($"MultiActionLoader: config not found at {ConfigPath}"); } catch { }
                     return;
                 }
                 var json = File.ReadAllText(ConfigPath);
@@ -76,7 +76,7 @@ namespace NaturalCommands.Helpers
                 // write keys that were registered (if any)
                 if (Commands.Count > 0)
                 {
-                    try { File.AppendAllText(logPath2, $"[DEBUG] MultiActionLoader loaded keys: {string.Join(", ", Commands.Keys)}\n"); } catch { }
+                    try { NaturalCommands.Helpers.Logger.LogDebug($"MultiActionLoader loaded keys: {string.Join(", ", Commands.Keys)}"); } catch { }
                 }
             }
             catch { }

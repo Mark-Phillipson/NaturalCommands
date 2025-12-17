@@ -38,23 +38,23 @@ namespace NaturalCommands.Helpers
                     try
                     {
                         ((dynamic)dte).ExecuteCommand(commandName, args);
-                        Console.WriteLine($"[VS] Executed via DTE: {commandName} {args}");
+                        Logger.LogDebug($"[VS] Executed via DTE: {commandName} {args}");
                         return true;
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[VS] DTE ExecuteCommand failed for '{commandName}': {ex.Message}");
+                        Logger.LogError($"[VS] DTE ExecuteCommand failed for '{commandName}': {ex.Message}");
                         // fall through to keyboard fallback
                     }
                 }
                 else
                 {
-                    Console.WriteLine($"[VS] No DTE instance found - will try keyboard fallback for '{commandName}'.");
+                    Logger.LogDebug($"[VS] No DTE instance found - will try keyboard fallback for '{commandName}'.");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[VS] Exception while obtaining DTE: {ex.Message}. Will try keyboard fallback for '{commandName}'.");
+                Logger.LogError($"[VS] Exception while obtaining DTE: {ex.Message}. Will try keyboard fallback for '{commandName}'.");
             }
 
             // Keyboard fallback for common Visual Studio commands
@@ -94,18 +94,18 @@ namespace NaturalCommands.Helpers
                         // Small delay between chords
                         System.Threading.Thread.Sleep(80);
                     }
-                    Console.WriteLine($"[VS] Executed via keyboard fallback: {commandName}");
+                    Logger.LogDebug($"[VS] Executed via keyboard fallback: {commandName}");
                     return true;
                 }
                 else
                 {
-                    Console.WriteLine($"[VS] No keyboard fallback mapping for: {commandName}");
+                    Logger.LogDebug($"[VS] No keyboard fallback mapping for: {commandName}");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[VS] Keyboard fallback failed for '{commandName}': {ex.Message}");
+                Logger.LogError($"[VS] Keyboard fallback failed for '{commandName}': {ex.Message}");
                 return false;
             }
         }
@@ -117,14 +117,14 @@ namespace NaturalCommands.Helpers
                 object? dte = GetActiveObject(null);
                 if (dte == null)
                 {
-                    Console.WriteLine($"[VS] Could not find a running Visual Studio DTE instance.");
+                    Logger.LogError($"[VS] Could not find a running Visual Studio DTE instance.");
                     return;
                 }
 
                 var commandList = new List<object>();
                 dynamic dteDynamic = dte;
 
-                Console.WriteLine("[VS] Enumerating commands...");
+                Logger.LogDebug("[VS] Enumerating commands...");
                 foreach (dynamic cmd in dteDynamic.Commands)
                 {
                     try
@@ -144,11 +144,11 @@ namespace NaturalCommands.Helpers
 
                 string json = JsonSerializer.Serialize(commandList, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(outputPath, json);
-                Console.WriteLine($"[VS] Exported {commandList.Count} commands to {outputPath}");
+                Logger.LogDebug($"[VS] Exported {commandList.Count} commands to {outputPath}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[VS] Error exporting commands: {ex.Message}");
+                Logger.LogError($"[VS] Error exporting commands: {ex.Message}");
             }
         }
 

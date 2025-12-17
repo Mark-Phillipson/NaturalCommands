@@ -27,7 +27,7 @@ namespace NaturalCommands.Helpers
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Failed to load VS commands: {ex.Message}");
+                    Logger.LogError($"Failed to load VS commands: {ex.Message}");
                 }
             }
         }

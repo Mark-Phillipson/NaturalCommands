@@ -196,7 +196,7 @@ namespace DictationBoxMSP
             {
                 var logPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log"));
                 var found = items.Any(i => string.Equals(i.Command?.Trim(), "natural dictate", StringComparison.OrdinalIgnoreCase));
-                System.IO.File.AppendAllText(logPath, $"[DEBUG] AvailableCommandsForm: combined items count={items.Count}, contains 'natural dictate'={found}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"AvailableCommandsForm: combined items count={items.Count}, contains 'natural dictate'={found}");
             }
             catch { }
 
@@ -204,7 +204,7 @@ namespace DictationBoxMSP
             try
             {
                 var logPath2 = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log"));
-                System.IO.File.AppendAllText(logPath2, $"[DEBUG] AvailableCommandsForm.Bounds: Form.ClientSize={this.ClientSize}, txtSearch.Bounds={txtSearch.Bounds}, lblHint.Bounds={lblHint.Bounds}, lstResults.Bounds={lstResults.Bounds}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"AvailableCommandsForm.Bounds: Form.ClientSize={this.ClientSize}, txtSearch.Bounds={txtSearch.Bounds}, lblHint.Bounds={lblHint.Bounds}, lstResults.Bounds={lstResults.Bounds}");
             }
             catch { }
 
@@ -227,7 +227,7 @@ namespace DictationBoxMSP
             try
             {
                 var logPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log"));
-                System.IO.File.AppendAllText(logPath, $"[DEBUG] AvailableCommandsForm: query='{q}', terms=[{string.Join(',', terms)}]\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"AvailableCommandsForm: query='{q}', terms=[{string.Join(',', terms)}]");
             }
             catch { }
 
@@ -275,7 +275,7 @@ namespace DictationBoxMSP
             try
             {
                 var logPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log"));
-                System.IO.File.AppendAllText(logPath, $"[DEBUG] AvailableCommandsForm: filtered count={filtered.Length}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"AvailableCommandsForm: filtered count={filtered.Length}");
             }
             catch { }
 
@@ -286,7 +286,7 @@ namespace DictationBoxMSP
             try
             {
                 var logPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log"));
-                System.IO.File.AppendAllText(logPath, $"[DEBUG] AvailableCommandsForm: adding filtered items: {string.Join(" | ", filtered)}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"AvailableCommandsForm: adding filtered items: {string.Join(" | ", filtered)}");
             }
             catch { }
             // Ensure colors are explicit so items are visible regardless of shared theme
@@ -296,7 +296,7 @@ namespace DictationBoxMSP
             try
             {
                 var logPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log"));
-                System.IO.File.AppendAllText(logPath, $"[DEBUG] AvailableCommandsForm: ListBox.Items.Count={lstResults.Items.Count}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"AvailableCommandsForm: ListBox.Items.Count={lstResults.Items.Count}");
             }
             catch { }
             try
@@ -306,7 +306,7 @@ namespace DictationBoxMSP
                     lstResults.SelectedIndex = 0; // select first to make it visible
                     // Ensure the selected index is scrolled into view
                     lstResults.TopIndex = Math.Max(0, lstResults.SelectedIndex);
-                    System.IO.File.AppendAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log")), $"[DEBUG] AvailableCommandsForm: SelectedIndex={lstResults.SelectedIndex}, TopIndex={lstResults.TopIndex}\n");
+                    NaturalCommands.Helpers.Logger.LogDebug($"AvailableCommandsForm: SelectedIndex={lstResults.SelectedIndex}, TopIndex={lstResults.TopIndex}");
                 }
             }
             catch { }

@@ -42,7 +42,7 @@ namespace NaturalCommands.Helpers
                 {
                     try
                     {
-                        File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.log"), "[WARN] WindowManager: failed to get monitor info, falling back to primary screen\n");
+                        NaturalCommands.Helpers.Logger.LogWarning("WindowManager: failed to get monitor info, falling back to primary screen");
                     }
                     catch { }
                     // fallback to primary screen working area
@@ -84,7 +84,7 @@ namespace NaturalCommands.Helpers
                 {
                     try
                     {
-                        File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.log"), "[WARN] WindowManager: failed to get monitor info for right half, falling back to primary screen\n");
+                        NaturalCommands.Helpers.Logger.LogWarning("WindowManager: failed to get monitor info for right half, falling back to primary screen");
                     }
                     catch { }
                     try
@@ -144,7 +144,7 @@ namespace NaturalCommands.Helpers
                         // no other monitor — fallback to primary
                         try
                         {
-                            File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.log"), "[WARN] WindowManager: no other monitor found, using primary screen\n");
+                            NaturalCommands.Helpers.Logger.LogWarning("WindowManager: no other monitor found, using primary screen");
                         }
                         catch { }
                         Win32ApiHelper.MONITORINFOEX primaryInfo = new Win32ApiHelper.MONITORINFOEX();

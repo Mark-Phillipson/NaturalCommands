@@ -42,7 +42,7 @@ namespace NaturalCommands
 			// Simulate holding down the '?' key
 			SimulateKeyPress(keyToHoldDown, holdDurationMilliseconds: holdDurationMilliseconds);
 
-			Console.WriteLine($"Key held for {holdDurationMilliseconds} seconds. Press any key to exit.");
+			NaturalCommands.Helpers.Logger.LogDebug($"Key held for {holdDurationMilliseconds} milliseconds.");
 		}
 
 		static void SimulateKeyPress(Keys key, int holdDurationMilliseconds)

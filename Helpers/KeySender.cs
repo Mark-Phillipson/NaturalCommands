@@ -7,14 +7,13 @@ namespace NaturalCommands.Helpers
 
         public static string SendKeys(NaturalCommands.SendKeysAction keys)
         {
-            string logPath = "app.log";
             string keysText = keys.KeysText?.Trim().ToLowerInvariant() ?? string.Empty;
-            System.IO.File.AppendAllText(logPath, $"[DEBUG] KeySender.SendKeys called with: '{keysText}'\n");
+            NaturalCommands.Helpers.Logger.LogDebug($"KeySender.SendKeys called with: '{keysText}'");
 
             if (keysText == "ctrl alt tab" || keysText == "control alt tab")
             {
                 // Use keybd_event to send Ctrl+Alt+Tab
-                System.IO.File.AppendAllText(logPath, "[DEBUG] Sending Ctrl+Alt+Tab key sequence.\n");
+                NaturalCommands.Helpers.Logger.LogDebug("Sending Ctrl+Alt+Tab key sequence.");
                 // Ctrl down
                 NaturalCommands.Helpers.WindowFocusHelper.SendKeyDown(0x11); // VK_CONTROL
                 // Alt down
@@ -27,23 +26,23 @@ namespace NaturalCommands.Helpers
                 NaturalCommands.Helpers.WindowFocusHelper.SendKeyUp(0x12);
                 // Ctrl up
                 NaturalCommands.Helpers.WindowFocusHelper.SendKeyUp(0x11);
-                System.IO.File.AppendAllText(logPath, "[DEBUG] Sent Ctrl+Alt+Tab.\n");
+                NaturalCommands.Helpers.Logger.LogDebug("Sent Ctrl+Alt+Tab.");
                 return "[KeySender.SendKeys] Sent Ctrl+Alt+Tab.";
             }
             else if (keysText == "control ," || keysText == "ctrl ,")
             {
                 // Send Ctrl+Comma
-                System.IO.File.AppendAllText(logPath, "[DEBUG] Sending Ctrl+Comma key sequence.\n");
+                NaturalCommands.Helpers.Logger.LogDebug("Sending Ctrl+Comma key sequence.");
                 NaturalCommands.Helpers.WindowFocusHelper.SendKeyDown(0x11); // VK_CONTROL
                 NaturalCommands.Helpers.WindowFocusHelper.SendKeyDown(0xBC); // VK_OEM_COMMA
                 NaturalCommands.Helpers.WindowFocusHelper.SendKeyUp(0xBC);
                 NaturalCommands.Helpers.WindowFocusHelper.SendKeyUp(0x11);
-                System.IO.File.AppendAllText(logPath, "[DEBUG] Sent Ctrl+Comma.\n");
+                NaturalCommands.Helpers.Logger.LogDebug("Sent Ctrl+Comma.");
                 return "[KeySender.SendKeys] Sent Ctrl+Comma.";
             }
             else
             {
-                System.IO.File.AppendAllText(logPath, $"[ERROR] Unsupported key sequence: '{keysText}'\n");
+                NaturalCommands.Helpers.Logger.LogError($"Unsupported key sequence: '{keysText}'");
                 return $"[KeySender.SendKeys] Unsupported key sequence: '{keysText}'";
             }
         }
@@ -88,7 +87,7 @@ namespace NaturalCommands.Helpers
                         case "subtract": case "numpadsubtract": case "minus": mainKey = 0x6D; break; // VK_SUBTRACT
                         default:
                             // unknown token
-                            System.IO.File.AppendAllText("app.log", $"[DEBUG] SendShortcut: unknown token '{p}' in '{shortcut}'\n");
+                            NaturalCommands.Helpers.Logger.LogDebug($"SendShortcut: unknown token '{p}' in '{shortcut}'");
                             break;
                     }
                 }

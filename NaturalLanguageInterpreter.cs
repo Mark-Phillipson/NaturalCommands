@@ -80,11 +80,9 @@ namespace NaturalCommands
         {
             // Read API key from environment variable
             string? apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-            string logPath = GetLogPath();
-            EnsureLogDirExists(logPath);
             if (string.IsNullOrWhiteSpace(apiKey))
             {
-                AppendLog(logPath, "OPENAI_API_KEY environment variable not set.\n");
+                NaturalCommands.Helpers.Logger.LogError("OPENAI_API_KEY environment variable not set.");
                 return null;
             }
             // Set default model name
@@ -99,11 +97,11 @@ namespace NaturalCommands
             }
             catch (Exception ex)
             {
-                AppendLog(logPath, $"Failed to read {promptPath}: {ex.Message}\nUsing default prompt.\n");
+                NaturalCommands.Helpers.Logger.LogError($"Failed to read {promptPath}: {ex.Message} Using default prompt.");
                 prompt = "You are an assistant that interprets natural language commands for Windows automation. Output a JSON object for the closest matching action.";
             }
 
-            AppendLog(logPath, $"[AI] Fallback triggered for: {text}\n");
+            NaturalCommands.Helpers.Logger.LogDebug($"[AI] Fallback triggered for: {text}");
             // Write the latest prompt to a separate file (overwrites previous file).
             // This is intentionally NOT appended to the normal log file.
             WriteLatestPromptFile(prompt, text);
@@ -119,7 +117,7 @@ namespace NaturalCommands
                 var completionResult = await chatClient.CompleteChatAsync(messages);
                 var completion = completionResult.Value;
                 var message = completion.Content[0].Text;
-                AppendLog(logPath, $"[AI] Raw response: {message}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"[AI] Raw response: {message}");
                 if (!string.IsNullOrWhiteSpace(message))
                 {
                     try
@@ -165,7 +163,7 @@ namespace NaturalCommands
                                             }
                                             if (game != null)
                                             {
-                                                File.AppendAllText(logPath, $"[DEBUG] InterpretWithAIAsync: Rewrote AI LaunchAppAction to Steam URI for '{game.Name}' -> steam://rungameid/{game.AppId}\n");
+                                                NaturalCommands.Helpers.Logger.LogDebug($"InterpretWithAIAsync: Rewrote AI LaunchAppAction to Steam URI for '{game.Name}' -> steam://rungameid/{game.AppId}");
                                                 return new LaunchAppAction($"steam://rungameid/{game.AppId}");
                                             }
                                         }
@@ -174,14 +172,14 @@ namespace NaturalCommands
                                             var game = NaturalCommands.Helpers.SteamService.FindGameByName(text.Substring(5).Trim());
                                             if (game != null)
                                             {
-                                                File.AppendAllText(logPath, $"[DEBUG] InterpretWithAIAsync: Resolved play command to Steam URI '{game.Name}' -> steam://rungameid/{game.AppId}\n");
+                                                NaturalCommands.Helpers.Logger.LogDebug($"InterpretWithAIAsync: Resolved play command to Steam URI '{game.Name}' -> steam://rungameid/{game.AppId}");
                                                 return new LaunchAppAction($"steam://rungameid/{game.AppId}");
                                             }
                                         }
                                     }
                                     catch (Exception ex)
                                     {
-                                        try { File.AppendAllText(logPath, $"[ERROR] InterpretWithAIAsync Steam lookup failed: {ex.Message}\n"); } catch { }
+                                        try { NaturalCommands.Helpers.Logger.LogError($"InterpretWithAIAsync Steam lookup failed: {ex.Message}"); } catch { }
                                     }
 
                                     return new LaunchAppAction(appExe ?? "");
@@ -195,13 +193,13 @@ namespace NaturalCommands
                     }
                     catch (Exception ex)
                     {
-                        File.AppendAllText(logPath, $"Failed to parse OpenAI response: {ex.Message}\nResponse: {message}\n");
+                        NaturalCommands.Helpers.Logger.LogError($"Failed to parse OpenAI response: {ex.Message}\nResponse: {message}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                File.AppendAllText(logPath, $"[AI] OpenAI API call failed: {ex.Message}\n");
+                NaturalCommands.Helpers.Logger.LogError($"[AI] OpenAI API call failed: {ex.Message}");
             }
             return null;
         }
@@ -218,39 +216,6 @@ namespace NaturalCommands
 
         // Word replacement functionality moved to `WordReplacementLoader` helper class.
 
-        /// <summary>
-        /// Ensures the directory for the log file exists.
-        /// </summary>
-        private static void EnsureLogDirExists(string logPath)
-        {
-            var logDir = Path.GetDirectoryName(logPath);
-            if (!string.IsNullOrEmpty(logDir) && !Directory.Exists(logDir))
-                Directory.CreateDirectory(logDir);
-        }
-
-        private static string GetLogPath()
-        {
-            string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log");
-            return Path.GetFullPath(logPath);
-        }
-
-        // Safe append helper that tolerates the log file being locked by other processes (used by tests)
-        private static void AppendLog(string message)
-        {
-            AppendLog(GetLogPath(), message);
-        }
-
-        private static void AppendLog(string logPath, string message)
-        {
-            try
-            {
-                EnsureLogDirExists(logPath);
-                using var fs = new System.IO.FileStream(logPath, System.IO.FileMode.Append, System.IO.FileAccess.Write, System.IO.FileShare.ReadWrite);
-                using var sw = new System.IO.StreamWriter(fs);
-                sw.Write(message);
-            }
-            catch { }
-        }
 
         /// <summary>
         /// Writes the latest AI prompt (system prompt + user input) to a separate file.
@@ -271,7 +236,7 @@ namespace NaturalCommands
             }
             catch (Exception ex)
             {
-                try { File.AppendAllText(GetLogPath(), $"Failed to write latest AI prompt file: {ex.Message}\n"); } catch { }
+                try { NaturalCommands.Helpers.Logger.LogError($"Failed to write latest AI prompt file: {ex.Message}"); } catch { }
             }
         }
         // Central list of available commands/actions for AI matching
@@ -303,6 +268,12 @@ namespace NaturalCommands
         // File used to persist emoji mappings so they can be added over time.
         // Will look for a file next to the executable (copied by the build as content).
         private static readonly string EmojiMappingsPath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "emoji_mappings.json"));
+
+        // Back-compat helper used throughout the file: delegate to centralized Logger
+        private static void AppendLog(string message)
+        {
+            try { NaturalCommands.Helpers.Logger.Log(message.TrimEnd()); } catch { }
+        }
 
         // Static ctor: load persisted mappings (if any) on first access
         static NaturalLanguageInterpreter()
@@ -746,7 +717,7 @@ namespace NaturalCommands
                     WidthPercent: 100,
                     HeightPercent: 100
                 );
-                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {action.GetType().Name}");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
             // Move window to other monitor (next)
@@ -759,7 +730,7 @@ namespace NaturalCommands
                     WidthPercent: 0,
                     HeightPercent: 0
                 );
-                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (next monitor)\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {action.GetType().Name} (next monitor)");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
             // Move window to left half (robust)
@@ -772,7 +743,7 @@ namespace NaturalCommands
                     WidthPercent: 50,
                     HeightPercent: 100
                 );
-                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (left half)\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {action.GetType().Name} (left half)");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
             // Move window to right half (robust)
@@ -785,21 +756,21 @@ namespace NaturalCommands
                     WidthPercent: 50,
                     HeightPercent: 100
                 );
-                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (right half)\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {action.GetType().Name} (right half)");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
             // Open documents folder (robust)
             if (text.Contains("open documents") || (text.Contains("open") && text.Contains("document")))
             {
                 var action = new OpenFolderAction("Documents");
-                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (documents)\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {action.GetType().Name} (documents)");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
             // Open downloads folder (robust)
             if (text.Contains("open downloads") || (text.Contains("open") && text.Contains("download")))
             {
                 var action = new OpenFolderAction("Downloads");
-                System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name} (downloads)\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {action.GetType().Name} (downloads)");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
             // Open mapped applications (expanded)
@@ -962,13 +933,13 @@ namespace NaturalCommands
                 if (vsCommand != null)
                 {
                      var action = new ExecuteVSCommandAction(vsCommand.Name);
-                     System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched VS Command: {vsCommand.Name}\n");
+                     NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched VS Command: {vsCommand.Name}");
                      return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
                 }
             }
 
             // Fallback for unhandled commands: log and call AI
-            System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync: No rule-based match for: {text}\n");
+            NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync: No rule-based match for: {text}");
             string? currentApp = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName();
             string aiInput = text;
             if (!string.IsNullOrWhiteSpace(currentApp))
@@ -986,8 +957,7 @@ namespace NaturalCommands
                         AppendLog($"[DEBUG] ExecuteActionAsync: action.GetType().FullName: {(action == null ? "null" : action.GetType().FullName)}\n");
                         AppendLog($"[DEBUG] ExecuteActionAsync: Checking if action is MoveWindowAction\n");
                         AppendLog($"[DEBUG] ExecuteActionAsync: action.GetType().AssemblyQualifiedName: {(action == null ? "null" : action.GetType().AssemblyQualifiedName)}\n");
-                        string logPath = GetLogPath();
-                        EnsureLogDirExists(logPath);
+                        NaturalCommands.Helpers.Logger.EnsureLogDirExists();
             if (action is MoveWindowAction move)
             {
                 // Delegate to WindowManager
@@ -1017,20 +987,20 @@ namespace NaturalCommands
                                 bool success = NaturalCommands.Helpers.VisualStudioHelper.ExecuteCommand("Window.CloseDocumentWindow");
                                 if (success)
                                 {
-                                    System.IO.File.AppendAllText("app.log", "Executed Window.CloseDocumentWindow via DTE in Visual Studio.\n");
+                                    NaturalCommands.Helpers.Logger.LogDebug("Executed Window.CloseDocumentWindow via DTE in Visual Studio.");
                                     return "Executed Window.CloseDocumentWindow via DTE.";
                                 }
                                 else
                                 {
                                     // Fallback to Ctrl+F4 if DTE fails
                                     sim.Keyboard.ModifiedKeyStroke(WindowsInput.Native.VirtualKeyCode.CONTROL, WindowsInput.Native.VirtualKeyCode.F4);
-                                    System.IO.File.AppendAllText("app.log", "DTE failed, sent Ctrl+F4 to Visual Studio.\n");
+                                    NaturalCommands.Helpers.Logger.LogError("DTE failed, sent Ctrl+F4 to Visual Studio.");
                                     return "DTE failed, sent Ctrl+F4.";
                                 }
                             }
                             catch (Exception ex)
                             {
-                                System.IO.File.AppendAllText("app.log", $"Failed to execute VS command: {ex.Message}\n");
+                                NaturalCommands.Helpers.Logger.LogError($"Failed to execute VS command: {ex.Message}");
                                 return $"Failed to execute VS command: {ex.Message}";
                             }
                         }
@@ -1039,7 +1009,7 @@ namespace NaturalCommands
                     }
                     catch (Exception ex)
                     {
-                        System.IO.File.AppendAllText("app.log", $"Failed to send Ctrl+W to {procName}: {ex.Message}\n");
+                        NaturalCommands.Helpers.Logger.LogError($"Failed to send Ctrl+W to {procName}: {ex.Message}");
                         return $"Failed to send Ctrl+W to {procName}: {ex.Message}";
                     }
                 }
@@ -1294,7 +1264,7 @@ namespace NaturalCommands
             var actionTask = InterpretAsync(text, availableCommands);
             actionTask.Wait();
             var action = actionTask.Result;
-            System.IO.File.AppendAllText(GetLogPath(), $"[DEBUG] HandleNaturalAsync: Action type: {(action == null ? "null" : action.GetType().Name)}\n");
+            NaturalCommands.Helpers.Logger.LogDebug($"HandleNaturalAsync: Action type: {(action == null ? "null" : action.GetType().Name)}");
             if (action == null)
             {
                 // If the command contains 'focus windows terminal', try direct focus
@@ -1337,7 +1307,7 @@ namespace NaturalCommands
                             // Fallback for any 'focus' command
                             if (lowerText.Contains("focus"))
                             {
-                                System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Focus fallback: sending Ctrl+Alt+Tab (HandleNaturalAsync overload)\n");
+                                NaturalCommands.Helpers.Logger.LogDebug("Focus fallback: sending Ctrl+Alt+Tab (HandleNaturalAsync overload)");
                                 var sim = new WindowsInput.InputSimulator();
                                 sim.Keyboard.ModifiedKeyStroke(
                                     new[] {
@@ -1353,7 +1323,7 @@ namespace NaturalCommands
                 // If the command contains 'focus', trigger Ctrl+Alt+Tab fallback
                 if (text.Contains("focus"))
                 {
-                    System.IO.File.AppendAllText(GetLogPath(), "[DEBUG] Focus fallback: sending Ctrl+Alt+Tab (HandleNaturalAsync)\n");
+                    NaturalCommands.Helpers.Logger.LogDebug("Focus fallback: sending Ctrl+Alt+Tab (HandleNaturalAsync)");
                     var sim = new WindowsInput.InputSimulator();
                     sim.Keyboard.ModifiedKeyStroke(
                         new[] {
@@ -1377,7 +1347,7 @@ namespace NaturalCommands
             // Remove polite modifiers
             text = RemovePoliteModifiers(text);
             text = WordReplacementLoader.Apply(text);
-            System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync input: {text}\n");
+            NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync input: {text}");
 
             // Quick Steam "play" handling
             if (text.StartsWith("play "))
@@ -1389,13 +1359,13 @@ namespace NaturalCommands
                     if (game != null)
                     {
                         var uri = $"steam://rungameid/{game.AppId}";
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync: Matched Steam game '{game.Name}' -> {uri}\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync: Matched Steam game '{game.Name}' -> {uri}");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(new LaunchAppAction(uri));
                     }
                 }
                 catch (Exception ex)
                 {
-                    try { System.IO.File.AppendAllText("app.log", $"[ERROR] InterpretAsync Steam lookup failed: {ex.Message}\n"); } catch { }
+                    try { NaturalCommands.Helpers.Logger.LogError($"InterpretAsync Steam lookup failed: {ex.Message}"); } catch { }
                 }
             }
 
@@ -1413,51 +1383,51 @@ namespace NaturalCommands
                 {
                     case "maximize window":
                         var action = new MoveWindowAction(Target: "active", Monitor: "current", Position: "center", WidthPercent: 100, HeightPercent: 100);
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {action.GetType().Name}\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {action.GetType().Name}");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
                     case "move window to left half":
                         var leftAction = new MoveWindowAction(Target: "active", Monitor: "current", Position: "left", WidthPercent: 50, HeightPercent: 100);
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {leftAction.GetType().Name} (left half)\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {leftAction.GetType().Name} (left half)");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(leftAction);
                     case "move window to right half":
                         var rightAction = new MoveWindowAction(Target: "active", Monitor: "current", Position: "right", WidthPercent: 50, HeightPercent: 100);
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {rightAction.GetType().Name} (right half)\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {rightAction.GetType().Name} (right half)");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(rightAction);
                     case "move window to other monitor":
                         var nextAction = new MoveWindowAction(Target: "active", Monitor: "next", Position: "", WidthPercent: 0, HeightPercent: 0);
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {nextAction.GetType().Name} (next monitor)\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {nextAction.GetType().Name} (next monitor)");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(nextAction);
                     
                     case "open downloads":
                         var downloadsAction = new OpenFolderAction("Downloads");
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {downloadsAction.GetType().Name} (downloads)\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {downloadsAction.GetType().Name} (downloads)");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(downloadsAction);
                     case "open documents":
                         var documentsAction = new OpenFolderAction("Documents");
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {documentsAction.GetType().Name} (documents)\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {documentsAction.GetType().Name} (documents)");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(documentsAction);
                     case "close tab":
                         var closeTabAction = new CloseTabAction();
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {closeTabAction.GetType().Name} (close tab)\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {closeTabAction.GetType().Name} (close tab)");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(closeTabAction);
                     case "send keys":
                         var sendKeysAction = new SendKeysAction(text.Replace("press ", ""));
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {sendKeysAction.GetType().Name} (send keys)\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {sendKeysAction.GetType().Name} (send keys)");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(sendKeysAction);
                     case "launch app":
                         var launchAppAction = new LaunchAppAction(text.Replace("open ", ""));
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {launchAppAction.GetType().Name} (launch app)\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {launchAppAction.GetType().Name} (launch app)");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(launchAppAction);
                     case "focus app":
                         // Not implemented, stub
                         break;
                     case "show help":
                         var helpAction = new ShowHelpAction();
-                        System.IO.File.AppendAllText("app.log", $"[DEBUG] InterpretAsync matched: {helpAction.GetType().Name} (help)\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {helpAction.GetType().Name} (help)");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(helpAction);
                 }
             }
-            System.IO.File.AppendAllText("app.log", "[DEBUG] InterpretAsync: No match, returning null\n");
+            NaturalCommands.Helpers.Logger.LogDebug("InterpretAsync: No match, returning null");
             return System.Threading.Tasks.Task.FromResult<ActionBase?>(null);
         }
 

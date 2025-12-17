@@ -12,11 +12,11 @@ namespace NaturalCommands.Helpers
             {
                 string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log");
                 logPath = Path.GetFullPath(logPath);
-                try { System.IO.File.AppendAllText(logPath, $"[DEBUG] AppLauncher.Launch: Requested launch '{app?.AppExe}'\n"); } catch { }
+                try { NaturalCommands.Helpers.Logger.LogDebug($"AppLauncher.Launch: Requested launch '{app?.AppExe}'"); } catch { }
 
                 if (app == null || string.IsNullOrWhiteSpace(app.AppExe))
                 {
-                    try { System.IO.File.AppendAllText(logPath, "[ERROR] AppLauncher.Launch: No app specified.\n"); } catch { }
+                    try { NaturalCommands.Helpers.Logger.LogError("AppLauncher.Launch: No app specified."); } catch { }
                     return "No application specified to launch.";
                 }
 
@@ -28,30 +28,30 @@ namespace NaturalCommands.Helpers
                 try
                 {
                     System.Diagnostics.Process.Start(psi);
-                    try { System.IO.File.AppendAllText(logPath, $"[INFO] AppLauncher.Launch: Started '{app.AppExe}' successfully.\n"); } catch { }
+                    try { NaturalCommands.Helpers.Logger.LogInfo($"AppLauncher.Launch: Started '{app.AppExe}' successfully."); } catch { }
                     return $"Launched: {app.AppExe}";
                 }
                 catch (Exception ex)
                 {
-                    try { System.IO.File.AppendAllText(logPath, $"[ERROR] AppLauncher.Launch: Failed to start '{app.AppExe}': {ex.Message}\n"); } catch { }
+                    try { NaturalCommands.Helpers.Logger.LogError($"AppLauncher.Launch: Failed to start '{app.AppExe}': {ex.Message}"); } catch { }
                     // Try fallback: use explorer to open by verb
                     try
                     {
                         var psi2 = new System.Diagnostics.ProcessStartInfo("explorer.exe", app.AppExe) { UseShellExecute = true };
                         System.Diagnostics.Process.Start(psi2);
-                        try { System.IO.File.AppendAllText(logPath, $"[INFO] AppLauncher.Launch: Fallback explorer launched for '{app.AppExe}'.\n"); } catch { }
+                        try { NaturalCommands.Helpers.Logger.LogInfo($"AppLauncher.Launch: Fallback explorer launched for '{app.AppExe}'."); } catch { }
                         return $"Launched via explorer: {app.AppExe}";
                     }
                     catch (Exception ex2)
                     {
-                        try { System.IO.File.AppendAllText(logPath, $"[ERROR] AppLauncher.Launch: Explorer fallback failed for '{app.AppExe}': {ex2.Message}\n"); } catch { }
+                        try { NaturalCommands.Helpers.Logger.LogError($"AppLauncher.Launch: Explorer fallback failed for '{app.AppExe}': {ex2.Message}"); } catch { }
                         return $"Failed to launch '{app.AppExe}': {ex.Message}; fallback: {ex2.Message}";
                     }
                 }
             }
             catch (Exception exOuter)
             {
-                try { System.IO.File.AppendAllText(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log")), $"[ERROR] AppLauncher.Launch: Unexpected: {exOuter.Message}\n"); } catch { }
+                NaturalCommands.Helpers.Logger.LogError($"AppLauncher.Launch: Unexpected: {exOuter.Message}");
                 return $"App launch failed: {exOuter.Message}";
             }
         }

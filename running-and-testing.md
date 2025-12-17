@@ -6,6 +6,23 @@ dotnet clean NaturalCommands.csproj
 dotnet build NaturalCommands.csproj  
 dotnet build NaturalCommands.csproj  -c Release
 dotnet run --framework net10.0-windows -- listen
+dotnet publish ./NaturalCommands.csproj -c Release -f net10.0-windows -r win-x64 `
+  --self-contained true -p:PublishSingleFile=true `
+  -o "./bin/Release/net10.0-windows/win-x64/publish"
+
+## Publish and register Startup (one command)
+You can publish and create a per-user Startup shortcut with the included script (no admin required for the Startup shortcut):
+
+```pwsh
+# Publish self-contained and add a Startup shortcut that runs the app with `-- listen`
+powershell -ExecutionPolicy Bypass -File .\scripts\publish-and-register-startup.ps1 -SelfContained -CreateStartupShortcut
+```
+
+To publish framework-dependent (smaller) and skip the shortcut:
+
+```pwsh
+powershell -ExecutionPolicy Bypass -File .\scripts\publish-and-register-startup.ps1 -NoSelfContained -CreateStartupShortcut:$false
+```
 ```
 
 ## Output Files

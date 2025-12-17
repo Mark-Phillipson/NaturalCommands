@@ -86,9 +86,7 @@ namespace NaturalCommands
         {
             try
             {
-                var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log");
-                var full = Path.GetFullPath(logPath);
-                File.AppendAllText(full, $"[WordReplacementLoader] {msg}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"[WordReplacementLoader] {msg}");
             }
             catch { }
         }

@@ -95,9 +95,7 @@ namespace NaturalCommands.Helpers
             }
 
             var titleVariants = GetTitleVariants(titleSubstring);
-            string logPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log");
-            logPath = System.IO.Path.GetFullPath(logPath);
-            System.IO.File.AppendAllText(logPath, $"[DEBUG] FocusWindowByTitle: Checking variants: {string.Join(", ", titleVariants)}\n");
+            NaturalCommands.Helpers.Logger.LogDebug($"FocusWindowByTitle: Checking variants: {string.Join(", ", titleVariants)}");
 
             EnumWindows((hWnd, lParam) =>
             {
@@ -105,7 +103,7 @@ namespace NaturalCommands.Helpers
                 var title = new System.Text.StringBuilder(256);
                 GetWindowText(hWnd, title, title.Capacity);
                 string windowTitle = title.ToString();
-                System.IO.File.AppendAllText(logPath, $"[DEBUG] FocusWindowByTitle: Window title found: '{windowTitle}'\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"FocusWindowByTitle: Window title found: '{windowTitle}'");
                 foreach (var variant in titleVariants)
                 {
                     var variantWords = variant.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -120,7 +118,7 @@ namespace NaturalCommands.Helpers
                     }
                     if (allWordsPresent)
                     {
-                        System.IO.File.AppendAllText(logPath, $"[DEBUG] FocusWindowByTitle: Fuzzy matched variant '{variant}' in window title '{windowTitle}'\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"FocusWindowByTitle: Fuzzy matched variant '{variant}' in window title '{windowTitle}'");
                         foundHwnd = hWnd;
                         foundWindowTitle = windowTitle;
                         uint pid;
@@ -145,7 +143,7 @@ namespace NaturalCommands.Helpers
                 if (!restoreResult)
                 {
                     int err = Marshal.GetLastWin32Error();
-                    System.IO.File.AppendAllText(logPath, $"[ERROR] ShowWindow failed. GetLastError={err}\n");
+                    NaturalCommands.Helpers.Logger.LogError($"ShowWindow failed. GetLastError={err}");
                 }
                 IntPtr foregroundHwnd = GetForegroundWindow();
                 uint foregroundThread = GetWindowThreadProcessId(foregroundHwnd, out _);
@@ -154,7 +152,7 @@ namespace NaturalCommands.Helpers
                 if (!attachResult)
                 {
                     int err = Marshal.GetLastWin32Error();
-                    System.IO.File.AppendAllText(logPath, $"[ERROR] AttachThreadInput failed. GetLastError={err}\n");
+                    NaturalCommands.Helpers.Logger.LogError($"AttachThreadInput failed. GetLastError={err}");
                 }
                 // Send dummy Alt key input to help bypass focus restrictions
                 //keybd_event(0x12, 0, 0, 0); // Alt down
@@ -163,19 +161,19 @@ namespace NaturalCommands.Helpers
                 if (!focusResult)
                 {
                     int err = Marshal.GetLastWin32Error();
-                    System.IO.File.AppendAllText(logPath, $"[ERROR] SetForegroundWindow failed. GetLastError={err}\n");
+                    NaturalCommands.Helpers.Logger.LogError($"SetForegroundWindow failed. GetLastError={err}");
                 }
                 // Check if foreground window actually changed
                 IntPtr afterFocusHwnd = GetForegroundWindow();
                 bool actuallyFocused = (afterFocusHwnd == foundHwnd);
-                System.IO.File.AppendAllText(logPath, $"[DEBUG] After SetForegroundWindow: foregroundHwnd={afterFocusHwnd}, expectedHwnd={foundHwnd}, actuallyFocused={actuallyFocused}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"After SetForegroundWindow: foregroundHwnd={afterFocusHwnd}, expectedHwnd={foundHwnd}, actuallyFocused={actuallyFocused}");
                 if (attachResult)
                     AttachThreadInput(foregroundThread, targetThread, false); // detach
-                System.IO.File.AppendAllText(logPath, $"[DEBUG] FocusWindowByTitle: hwnd={foundHwnd}, proc={foundProcName}, class={foundClassName}, title={foundWindowTitle}, ShowWindow(SW_RESTORE)={restoreResult}, AttachThreadInput={attachResult}, SetForegroundWindow={focusResult}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"FocusWindowByTitle: hwnd={foundHwnd}, proc={foundProcName}, class={foundClassName}, title={foundWindowTitle}, ShowWindow(SW_RESTORE)={restoreResult}, AttachThreadInput={attachResult}, SetForegroundWindow={focusResult}");
                 // Fallback: simulate mouse click if not focused (either SetForegroundWindow failed or window not actually foreground)
                 if (!focusResult || !actuallyFocused)
                 {
-                    System.IO.File.AppendAllText(logPath, "[DEBUG] FocusWindowByTitle: SetForegroundWindow failed or window not foreground, trying mouse click fallback.\n");
+                    NaturalCommands.Helpers.Logger.LogDebug("FocusWindowByTitle: SetForegroundWindow failed or window not foreground, trying mouse click fallback.");
                     RECT rect;
                     if (GetWindowRect(foundHwnd, out rect))
                     {
@@ -183,22 +181,22 @@ namespace NaturalCommands.Helpers
                         int y = rect.Top + 10;
                         SetCursorPos(x, y);
                         mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, x, y, 0, 0);
-                        System.IO.File.AppendAllText(logPath, $"[DEBUG] FocusWindowByTitle: Simulated mouse click at ({x},{y}) on window.\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"FocusWindowByTitle: Simulated mouse click at ({x},{y}) on window.");
                         focusResult = SetForegroundWindow(foundHwnd);
                         if (!focusResult)
                         {
                             int err = Marshal.GetLastWin32Error();
-                            System.IO.File.AppendAllText(logPath, $"[ERROR] SetForegroundWindow after mouse click failed. GetLastError={err}\n");
+                            NaturalCommands.Helpers.Logger.LogError($"SetForegroundWindow after mouse click failed. GetLastError={err}");
                         }
                         afterFocusHwnd = GetForegroundWindow();
                         actuallyFocused = (afterFocusHwnd == foundHwnd);
-                        System.IO.File.AppendAllText(logPath, $"[DEBUG] FocusWindowByTitle: SetForegroundWindow after mouse click: {focusResult}, actuallyFocused: {actuallyFocused}\n");
+                        NaturalCommands.Helpers.Logger.LogDebug($"FocusWindowByTitle: SetForegroundWindow after mouse click: {focusResult}, actuallyFocused: {actuallyFocused}");
                     }
                 }
                 // Final fallback: show three focus apps (Ctrl+Alt+Tab) if still not focused
                 if (!focusResult || !actuallyFocused)
                 {
-                    System.IO.File.AppendAllText(logPath, "[DEBUG] FocusWindowByTitle: All focus attempts failed, sending Ctrl+Alt+Tab as last resort.\n");
+                    NaturalCommands.Helpers.Logger.LogDebug("FocusWindowByTitle: All focus attempts failed, sending Ctrl+Alt+Tab as last resort.");
                     // Send Ctrl+Alt+Tab key sequence
                     keybd_event(0x11, 0, 0, 0); // Ctrl down
                     keybd_event(0x12, 0, 0, 0); // Alt down
@@ -206,13 +204,13 @@ namespace NaturalCommands.Helpers
                     keybd_event(0x09, 0, 2, 0); // Tab up
                     keybd_event(0x12, 0, 2, 0); // Alt up
                     keybd_event(0x11, 0, 2, 0); // Ctrl up
-                    System.IO.File.AppendAllText(logPath, "[DEBUG] FocusWindowByTitle: Sent Ctrl+Alt+Tab.\n");
+                    NaturalCommands.Helpers.Logger.LogDebug("FocusWindowByTitle: Sent Ctrl+Alt+Tab.");
                 }
                 return actuallyFocused;
             }
             else
             {
-                System.IO.File.AppendAllText(logPath, $"[DEBUG] FocusWindowByTitle: No matching window found. Last proc={foundProcName}, class={foundClassName}\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"FocusWindowByTitle: No matching window found. Last proc={foundProcName}, class={foundClassName}");
             }
             return false;
         }

@@ -41,29 +41,29 @@ namespace ExecuteCommands_NET
 					if (dlgResult != null)
 					{
 						args = new string[] { "NaturalCommands.exe", dlgResult[0], dlgResult[1] };
-						Console.WriteLine($"[DEBUG] Using debug input: {dlgResult[0]} '{dlgResult[1]}' (target app: {dlgResult[2]})");
+						NaturalCommands.Helpers.Logger.LogDebug($"Using debug input: {dlgResult[0]} '{dlgResult[1]}' (target app: {dlgResult[2]})");
 					}
 					else
 					{
 						args = new string[] { "ExecuteCommands.exe", "natural", "focus fairies little helper" };
-						Console.WriteLine("[DEBUG] Debug dialog cancelled. Defaulting to sample input.");
+						NaturalCommands.Helpers.Logger.LogDebug("Debug dialog cancelled. Defaulting to sample input.");
 					}
 				}
 				catch (Exception ex)
 				{
 					args = new string[] { "ExecuteCommands.exe", "natural", "focus fairies little helper" };
-					Console.WriteLine($"[DEBUG] Failed to show debug input dialog: {ex.Message}. Using default sample.");
+					NaturalCommands.Helpers.Logger.LogError($"Failed to show debug input dialog: {ex.Message}. Using default sample.");
 				}
 			}
 			// Otherwise, if no arguments, default to natural mode and sample dictation
 			else if (args.Length < 2)
 			{
 				args = new string[] { "ExecuteCommands.exe", "natural", "close tab" };
-				Console.WriteLine("[DEBUG] No arguments detected. Defaulting to: natural 'close tab'");
+				NaturalCommands.Helpers.Logger.LogDebug("No arguments detected. Defaulting to: natural 'close tab'");
 			}
 
 			// Diagnostic: log raw args
-			Console.WriteLine($"[DIAG] Raw args: [{string.Join(", ", args)}]");
+			NaturalCommands.Helpers.Logger.LogDebug($"Raw args: [{string.Join(", ", args)}]");
 
 			string modeRaw = args[1];
 			string textRaw = args.Length > 2 ? string.Join(" ", args.Skip(2)) : "";
@@ -80,45 +80,32 @@ namespace ExecuteCommands_NET
 			text = NaturalCommands.Helpers.WordReplacementHelper.ApplyWordReplacements(text);
 
 			// Diagnostic: log normalized mode/text
-			Console.WriteLine($"[DIAG] Normalized mode: '{mode}', text: '{text}'");
+			NaturalCommands.Helpers.Logger.LogDebug($"Normalized mode: '{mode}', text: '{text}'");
 
 			if (string.IsNullOrWhiteSpace(mode))
 			{
-				Console.WriteLine("Error: Mode argument is empty. Usage: ExecuteCommands.exe <mode> <dictation>");
+				NaturalCommands.Helpers.Logger.LogError("Mode argument is empty. Usage: ExecuteCommands.exe <mode> <dictation>");
 				return;
 			}
 
 			IHandleProcesses handleProcesses = new HandleProcesses();
 			Commands commands = new Commands(handleProcesses);
 			string result = "";
-			// Log helper
-			string logPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log");
-			logPath = System.IO.Path.GetFullPath(logPath);
-			Console.WriteLine($"[DEBUG] Log file path: {logPath}"); // Diagnostic: print log path
+			// Use centralized Logger for startup logging
+			NaturalCommands.Helpers.Logger.LogDebug($"Log file path: {NaturalCommands.Helpers.Logger.LogPath}"); // Diagnostic: print log path
 			// Clear log file on startup
 			try {
-				if (System.IO.File.Exists(logPath))
-					System.IO.File.WriteAllText(logPath, "");
-			} catch(Exception ex) { Console.WriteLine($"[ERROR] Could not clear log file: {ex.Message}"); }
-			void Log(string message)
-			{
-				try
-				{
-					var logDir = System.IO.Path.GetDirectoryName(logPath);
-					if (!string.IsNullOrEmpty(logDir) && !System.IO.Directory.Exists(logDir))
-						System.IO.Directory.CreateDirectory(logDir);
-					System.IO.File.AppendAllText(logPath, $"{DateTime.Now}: {message}\n");
-				}
-				catch(Exception exception) {System.Console.WriteLine(exception.Message); }
-			}
+				if (System.IO.File.Exists(NaturalCommands.Helpers.Logger.LogPath))
+					System.IO.File.WriteAllText(NaturalCommands.Helpers.Logger.LogPath, "");
+			} catch(Exception ex) { NaturalCommands.Helpers.Logger.LogError($"Could not clear log file: {ex.Message}"); }
 
-			Log($"Args: {string.Join(", ", args)}");
-			Log($"ModeRaw: {modeRaw}, TextRaw: {textRaw}");
-			Log($"Normalized Mode: {mode}, Text: {text}");
+			NaturalCommands.Helpers.Logger.LogDebug($"Args: {string.Join(", ", args)}");
+			NaturalCommands.Helpers.Logger.LogDebug($"ModeRaw: {modeRaw}, TextRaw: {textRaw}");
+			NaturalCommands.Helpers.Logger.LogDebug($"Normalized Mode: {mode}, Text: {text}");
 			switch (mode)
 			{
 				case "natural":
-					Log($"[DEBUG] Program.cs: Passing to HandleNaturalAsync: '{text}'");
+					NaturalCommands.Helpers.Logger.LogDebug($"Program.cs: Passing to HandleNaturalAsync: '{text}'");
 					result = commands.HandleNaturalAsync(text);
 					break;
 				case "export-vs-commands":
@@ -133,8 +120,8 @@ namespace ExecuteCommands_NET
 					break;
 			}
 
-			Log($"Result: {result}");
-			Log(result); // Log raw result for test matching
+			NaturalCommands.Helpers.Logger.Log($"Result: {result}");
+			NaturalCommands.Helpers.Logger.Log(result); // Log raw result for test matching
 
 			// Log exact expected test substrings if present
 			string[] expectedSubstrings = new[] {
@@ -153,7 +140,7 @@ namespace ExecuteCommands_NET
 				string substrStripped = new string(substr.Where(c => !char.IsPunctuation(c)).ToArray());
 				if (resultStripped.IndexOf(substrStripped, StringComparison.OrdinalIgnoreCase) >= 0)
 				{
-					Log(substr);
+					NaturalCommands.Helpers.Logger.Log(substr);
 				}
 			}
 			Console.WriteLine(result);
