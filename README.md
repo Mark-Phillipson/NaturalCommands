@@ -1,3 +1,35 @@
+## Talon Voice Integration
+
+NaturalCommands can be triggered using Talon Voice by saying **"natural"** (or **"nat"**) followed by the command you want to execute. For example:
+
+- `natural what can I say`
+- `natural dictate`
+
+### Talon File Commands
+
+```talon
+^(natural | nat) <user.text>$:
+	user.run_application_csharp_natural(text)
+^(natural | nat) dictate$:
+	speech.disable()
+	user.run_application_csharp_natural("dictate")
+```
+
+### Python Code
+
+```python
+def run_application_csharp_natural(naturalCommand: str):
+	"""runs the natural command with the given text"""
+	import os
+	commandline = r'C:\Users\MPhil\source\repos\NaturalCommands\bin\Release\net10.0-windows\NaturalCommands.exe'
+	args1 = ' ' + r'/natural' + ' '
+	args2 = '' + r'/' + naturalCommand + ''
+	arguments = [args1, args2]
+	cwd = os.path.dirname(commandline)
+	print(commandline)
+	print(naturalCommand)
+	ui.launch(path=commandline, args=arguments, cwd=cwd)
+```
 # NaturalCommands
 
 Execute Windows and Visual Studio commands using natural language.
@@ -11,7 +43,9 @@ NaturalCommands is a lightweight Windows application that maps natural language 
 - Map natural language to keyboard and window actions
 - Voice dictation helpers and multi-action support
 - Visual Studio command helpers and shortcuts
-- Unit tests and Playwright tests included
+## Voice Command: "What can I say?"
+
+You can say **"what can I say"** at any time to display a list of available commands.
 
 ## Prerequisites
 
