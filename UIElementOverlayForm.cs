@@ -219,11 +219,15 @@ namespace NaturalCommands
                 }
 
                 _currentInstance = new UIElementOverlayForm(elements);
-                _currentInstance.Show();
-                _currentInstance.Activate();
-                _currentInstance.Focus();
-
+                
+                // Use ShowDialog to keep the form alive and responsive
+                // This blocks until the form is closed (via ESC or clicking an element)
                 Logger.LogDebug($"Overlay shown with {elements.Count} elements.");
+                _currentInstance.ShowDialog();
+                
+                // Clean up after dialog closes
+                _currentInstance.Dispose();
+                _currentInstance = null;
             }
             catch (Exception ex)
             {
