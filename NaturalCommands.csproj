@@ -20,9 +20,6 @@
         <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
         <PackageReference Include="Azure.Identity" Version="1.11.4" />
         <PackageReference Include="InputSimulatorCore" Version="1.0.5" />
-        <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0">
-            <EmbedInteropTypes>true</EmbedInteropTypes>
-        </PackageReference>
         <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.5" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="7.0.13" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="6.35.0" />
@@ -61,5 +58,17 @@
         <None Include="emoji_mappings.json">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <COMReference Include="UIAutomationClient">
+            <Guid>944de083-8fb8-45cf-bcb7-c477acb2f897</Guid>
+            <VersionMajor>1</VersionMajor>
+            <VersionMinor>0</VersionMinor>
+            <Lcid>0</Lcid>
+            <WrapperTool>tlbimp</WrapperTool>
+            <Isolated>false</Isolated>
+            <EmbedInteropTypes>true</EmbedInteropTypes>
+        </COMReference>
     </ItemGroup>
 </Project>
