@@ -32,7 +32,7 @@ def run_application_csharp_natural(naturalCommand: str):
 ```
 # NaturalCommands
 
-Execute Windows and Visual Studio commands using natural language.
+Execute Windows and Visual Studio commands using natural language. If a command is not recognized, the AI will infer the most likely intended command, so you are not limited to a single phrase—commands are interpreted by meaning.
 
 ## Overview
 
@@ -40,10 +40,11 @@ NaturalCommands is a lightweight Windows application that maps natural language 
 
 ## Features
 
-- Map natural language to keyboard and window actions
-- Voice dictation helpers and multi-action support
-- Visual Studio command helpers and shortcuts
-- **Show letters** feature for voice-based UI element navigation
+ - Map natural language to keyboard and window actions
+ - Voice dictation helpers and multi-action support
+ - Visual Studio command helpers and shortcuts
+ - **Show letters** feature for voice-based UI element navigation
+ - **Flexible command interpretation:** If a command is not recognized, the AI will decide or figure out the likely command based on the meaning, so commands are not limited to a single phrase.
 
 ## Voice Command: "What can I say?"
 
