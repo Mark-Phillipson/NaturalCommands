@@ -1057,6 +1057,97 @@ namespace NaturalCommands
                 AppendLog("[INFO] ExecuteActionAsync: Attempt to set always-on-top blocked by configuration.\n");
                 return "Setting windows always-on-top has been disabled.";
             }
+            // Focus window by title substring
+            else if (action is FocusWindowAction focusAction)
+            {
+                // Workaround for speech-to-text errors: normalize common misrecognitions
+                string normalized = focusAction.WindowTitleSubstring
+                    .Replace("tall window", "tool window", StringComparison.OrdinalIgnoreCase)
+                    .Replace("tall", "tool", StringComparison.OrdinalIgnoreCase)
+                    .Replace("propertie", "properties", StringComparison.OrdinalIgnoreCase)
+                    .Replace("property's", "properties", StringComparison.OrdinalIgnoreCase)
+                    .Replace("propertys", "properties", StringComparison.OrdinalIgnoreCase)
+                    .Replace("'s", "s", StringComparison.OrdinalIgnoreCase)
+                    .Replace("'", "", StringComparison.OrdinalIgnoreCase)
+                    .Trim();
+                if (!string.Equals(normalized, focusAction.WindowTitleSubstring, StringComparison.OrdinalIgnoreCase))
+                {
+                    AppendLog($"[INFO] Normalized window title substring from '{focusAction.WindowTitleSubstring}' to '{normalized}'\n");
+                }
+                string? procName = CurrentApplicationHelper.GetCurrentProcessName();
+                if (procName == "devenv" && (normalized.Contains("tool window") || normalized.Contains("tool")))
+                {
+                    // Map common tool window names to Visual Studio commands
+                    var toolWindowMap = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
+                    {
+                        { "properties", "View.PropertiesWindow" },
+                        { "solution explorer", "View.SolutionExplorer" },
+                        { "toolbox", "View.Toolbox" },
+                        { "error list", "View.ErrorList" },
+                        { "output", "View.Output" },
+                        { "class view", "View.ClassView" },
+                        { "command window", "View.CommandWindow" },
+                        { "task list", "View.TaskList" },
+                        { "team explorer", "View.TeamExplorer" },
+                        { "bookmarks", "View.BookmarkWindow" },
+                        { "call hierarchy", "View.CallHierarchy" },
+                        { "object browser", "View.ObjectBrowser" },
+                        { "find results", "View.FindResults1" },
+                        { "pending changes", "View.PendingChanges" },
+                        { "git changes", "View.GitChanges" },
+                        { "git repository", "View.GitRepository" },
+                        { "breakpoints", "Debug.BreakpointsWindow" },
+                        { "locals", "Debug.Locals" },
+                        { "autos", "Debug.Autos" },
+                        { "watch", "Debug.Watch" },
+                        { "immediate", "Debug.Immediate" },
+                        { "call stack", "Debug.CallStack" },
+                        { "threads", "Debug.Threads" },
+                        { "modules", "Debug.Modules" },
+                        { "memory", "Debug.Memory1" },
+                        { "disassembly", "Debug.Disassembly" },
+                        { "output window", "View.Output" }
+                    };
+                    // Try to find the tool window name in the normalized string
+                    foreach (var kvp in toolWindowMap)
+                    {
+                        if (normalized.Contains(kvp.Key))
+                        {
+                            bool vsResult = NaturalCommands.Helpers.VisualStudioHelper.ExecuteCommand(kvp.Value);
+                            if (vsResult)
+                            {
+                                AppendLog($"[INFO] Focused Visual Studio tool window: '{kvp.Key}' via command '{kvp.Value}'\n");
+                                return $"Focused Visual Studio tool window: {kvp.Key}";
+                            }
+                            else
+                            {
+                                AppendLog($"[WARN] Failed to focus Visual Studio tool window: '{kvp.Key}' via command '{kvp.Value}'\n");
+                                return $"Failed to focus Visual Studio tool window: {kvp.Key}";
+                            }
+                        }
+                    }
+                    // If no known tool window matched, log and fall through to window title focus
+                    AppendLog($"[WARN] No known Visual Studio tool window matched in '{normalized}', falling back to window title focus.\n");
+                }
+                // Try the normalized string first (for non-VS or unknown tool windows)
+                bool focused = NaturalCommands.Helpers.WindowFocusHelper.FocusWindowByTitle(normalized);
+                // Fallback: if the normalized string contains 'properties' and 'tool window', also try just 'properties'
+                if (!focused && normalized.Contains("properties", StringComparison.OrdinalIgnoreCase) && normalized.Contains("tool window", StringComparison.OrdinalIgnoreCase))
+                {
+                    AppendLog($"[INFO] Fallback: trying to focus window with title containing just 'properties'\n");
+                    focused = NaturalCommands.Helpers.WindowFocusHelper.FocusWindowByTitle("properties");
+                }
+                if (focused)
+                {
+                    AppendLog($"[INFO] Focused window with title containing: '{normalized}' (or fallback)\n");
+                    return $"Focused window: {normalized}";
+                }
+                else
+                {
+                    AppendLog($"[WARN] Could not find window with title containing: '{normalized}' (or fallback)\n");
+                    return $"Could not find window with title containing: {normalized}";
+                }
+            }
             // Multi-action sequences: run a list of actions in order
             else if (action is NaturalCommands.RunMultipleActionsAction multiAction)
             {
@@ -1216,6 +1307,32 @@ namespace NaturalCommands
             AppendLog($"[DEBUG] HandleNaturalAsync: Action type: {actionTypeName}\n");
             if (action == null)
             {
+                // Try normalization/fuzzy correction before AI fallback
+                string normalized = text
+                    .Replace("tall window", "tool window", StringComparison.OrdinalIgnoreCase)
+                    .Replace("tall", "tool", StringComparison.OrdinalIgnoreCase)
+                    .Replace("propertie", "properties", StringComparison.OrdinalIgnoreCase)
+                    .Replace("property's", "properties", StringComparison.OrdinalIgnoreCase)
+                    .Replace("propertys", "properties", StringComparison.OrdinalIgnoreCase)
+                    .Replace("'s", "s", StringComparison.OrdinalIgnoreCase)
+                    .Replace("'", "", StringComparison.OrdinalIgnoreCase)
+                    .Trim();
+                if (!string.Equals(normalized, text, StringComparison.OrdinalIgnoreCase))
+                {
+                    AppendLog($"[INFO] HandleNaturalAsync: Normalized input from '{text}' to '{normalized}' before AI fallback\n");
+                    var retryTask = InterpretAsync(normalized);
+                    retryTask.Wait();
+                    var retryAction = retryTask.Result;
+                    if (retryAction != null)
+                    {
+                        AppendLog($"[INFO] HandleNaturalAsync: Normalized retry succeeded with action: {retryAction.GetType().Name}\n");
+                        action = retryAction;
+                        actionTypeName = action.GetType().Name;
+                    }
+                }
+            }
+            if (action == null)
+            {
                 // Robust fallback for 'focus windows terminal' and 'focus' commands
                 if (lowerText.Contains("focus") && lowerText.Contains("windows terminal"))
                 {
@@ -1251,7 +1368,7 @@ namespace NaturalCommands
                         WindowsInput.Native.VirtualKeyCode.TAB);
                     return "[Natural mode] Sent Ctrl+Alt+Tab for app switcher (focus fallback)";
                 }
-                // Fallback to OpenAI if rule-based match fails
+                // Fallback to OpenAI if rule-based and normalized match fail
                 AppendLog($"[DEBUG] HandleNaturalAsync: Fallback to OpenAI for: {text}\n");
                 var aiActionTask = InterpretWithAIAsync(text);
                 aiActionTask.Wait();
