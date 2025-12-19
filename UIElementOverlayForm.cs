@@ -87,7 +87,11 @@ namespace NaturalCommands
                     labelSize.Width + 8, 
                     labelSize.Height + 4);
 
-                // Ensure label is visible on screen
+                // Ensure label is visible on screen - constrain to screen bounds
+                if (labelRect.X < 0)
+                    labelRect.X = 0;
+                if (labelRect.Y < 0)
+                    labelRect.Y = 0;
                 if (labelRect.Right > Bounds.Width)
                     labelRect.X = Bounds.Width - labelRect.Width;
                 if (labelRect.Bottom > Bounds.Height)
