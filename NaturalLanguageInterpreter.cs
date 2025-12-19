@@ -256,6 +256,7 @@ namespace NaturalCommands
             ("focus <window name>", "Focus a window by its name (e.g. focus Zoom)"),
             ("show help", "Show help and available commands"),
             ("natural dictate", "Open the voice dictation form (speak or type natural language commands)"),
+            ("show letters", "Display letter labels on clickable UI elements for voice-based navigation"),
             ("emoji set <name> <emoji>", "Set an emoji for a named shortcut (e.g. emoji set happy 😀)"),
             ("emoji <name>", "Insert the configured emoji for the given name"),
             ("emoji <emoji>", "Insert the given emoji immediately")
@@ -891,6 +892,18 @@ namespace NaturalCommands
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
 
+            // Show letters navigation feature
+            var showLettersPatterns = new[] {
+                "show letters", "natural show letters", "display letters", "label elements", 
+                "show labels", "click by letter", "letter navigation"
+            };
+            if (showLettersPatterns.Any(p => text.Contains(p)))
+            {
+                var action = new ShowLettersAction(ScopeToActiveWindow: true);
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (show letters)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
             // Visual Studio Command Lookup
 
             if (IsVisualStudioActive())
@@ -1145,6 +1158,20 @@ namespace NaturalCommands
             else if (action is NaturalCommands.ExecuteVSCommandAction vsCmd)
             {
                 return NaturalCommands.Helpers.VSCommandHandler.ExecuteVSCommand(vsCmd);
+            }
+            else if (action is NaturalCommands.ShowLettersAction showLetters)
+            {
+                try
+                {
+                    UIElementOverlayForm.ShowOverlay(showLetters.ScopeToActiveWindow);
+                    AppendLog("[INFO] Show letters overlay displayed.\n");
+                    return "Show letters overlay displayed. Type letters to click elements, or press ESC to cancel.";
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"[ERROR] Failed to show letters overlay: {ex.Message}\n");
+                    return $"Failed to show letters overlay: {ex.Message}";
+                }
             }
             else
             {
