@@ -1,8 +1,9 @@
-## Build the Application
+ ## Build the Application
 ```pwsh
 # Build the main project (requires .NET 10)
 dotnet clean NaturalCommands.csproj 
 
+dotnet build NaturalCommands.csproj  
 dotnet build NaturalCommands.csproj  
 dotnet build NaturalCommands.csproj  -c Release
 dotnet run --framework net10.0-windows -- listen
@@ -43,6 +44,7 @@ dotnet run --framework net10.0-windows -- natural "put this window on the left h
 dotnet run --framework net10.0-windows -- natural "put this window on the right half"
 dotnet run --framework net10.0-windows -- natural " close this window"
 dotnet run --framework net10.0-windows -- natural "natural dictate"  # Opens the voice dictation form for speaking or typing natural language commands
+dotnet run --framework net10.0-windows -- natural "show letters"  # Display letter labels on clickable UI elements for voice navigation
 ```
 
 ## Listen mode (resident hotkey)
