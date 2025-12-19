@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Windows.Automation;
 
 namespace NaturalCommands.Helpers
 {
     /// <summary>
     /// Helper class for enumerating UI elements using Windows UI Automation API.
     /// Used to find clickable elements for the "show letters" feature.
-    /// Uses dynamic COM to avoid compile-time dependencies.
+    /// Uses managed System.Windows.Automation API.
     /// </summary>
     public static class UIAutomationHelper
     {
@@ -35,26 +36,10 @@ namespace NaturalCommands.Helpers
         {
             public Rectangle Bounds { get; set; }
             public string Label { get; set; } = "";
-            public dynamic Element { get; set; } = null!;
+            public AutomationElement Element { get; set; } = null!;
             public string Name { get; set; } = "";
             public string ControlType { get; set; } = "";
         }
-
-        // UI Automation control type IDs
-        private const int UIA_ButtonControlTypeId = 50000;
-        private const int UIA_HyperlinkControlTypeId = 50005;
-        private const int UIA_MenuItemControlTypeId = 50011;
-        private const int UIA_CheckBoxControlTypeId = 50002;
-        private const int UIA_RadioButtonControlTypeId = 50013;
-        private const int UIA_TabItemControlTypeId = 50019;
-        private const int UIA_ComboBoxControlTypeId = 50003;
-
-        // UI Automation property IDs
-        private const int UIA_ControlTypePropertyId = 30003;
-
-        // UI Automation pattern IDs
-        private const int UIA_InvokePatternId = 10000;
-        private const int UIA_TogglePatternId = 10015;
 
         /// <summary>
         /// Generates two-letter labels using the Talon alphabet (a, b, c, ..., z, then aa, ab, ...).
@@ -95,16 +80,7 @@ namespace NaturalCommands.Helpers
 
             try
             {
-                // Create UI Automation COM object dynamically
-                Type? automationType = Type.GetTypeFromProgID("UIAutomationClient.CUIAutomation");
-                if (automationType == null)
-                {
-                    Logger.LogError("Could not get UIAutomationClient COM type.");
-                    return clickableElements;
-                }
-
-                dynamic automation = Activator.CreateInstance(automationType)!;
-                dynamic rootElement;
+                AutomationElement rootElement;
 
                 if (scopeToActiveWindow)
                 {
@@ -114,11 +90,11 @@ namespace NaturalCommands.Helpers
                         Logger.LogError("Could not get foreground window handle.");
                         return clickableElements;
                     }
-                    rootElement = automation.ElementFromHandle(hwnd);
+                    rootElement = AutomationElement.FromHandle(hwnd);
                 }
                 else
                 {
-                    rootElement = automation.GetRootElement();
+                    rootElement = AutomationElement.RootElement;
                 }
 
                 if (rootElement == null)
@@ -128,7 +104,7 @@ namespace NaturalCommands.Helpers
                 }
 
                 // Walk the tree and collect clickable elements
-                WalkElements(rootElement, automation, clickableElements, 0, 500); // Limit to 500 elements
+                WalkElements(rootElement, clickableElements, 0, 500); // Limit to 500 elements
 
                 Logger.LogDebug($"Found {clickableElements.Count} clickable elements.");
             }
@@ -140,7 +116,7 @@ namespace NaturalCommands.Helpers
             return clickableElements;
         }
 
-        private static void WalkElements(dynamic element, dynamic automation, 
+        private static void WalkElements(AutomationElement element, 
             List<ClickableElement> clickableElements, int depth, int maxElements)
         {
             if (element == null || clickableElements.Count >= maxElements || depth > 20)
@@ -155,11 +131,9 @@ namespace NaturalCommands.Helpers
                     if (bounds.Width > 0 && bounds.Height > 0)
                     {
                         string name = "";
-                        try { name = element.CurrentName ?? ""; } catch { }
+                        try { name = element.Current.Name ?? ""; } catch { }
                         
-                        int controlTypeId = 0;
-                        try { controlTypeId = element.CurrentControlType; } catch { }
-                        var controlType = GetControlTypeName(controlTypeId);
+                        var controlType = GetControlTypeName(element.Current.ControlType);
 
                         clickableElements.Add(new ClickableElement
                         {
@@ -171,17 +145,17 @@ namespace NaturalCommands.Helpers
                     }
                 }
 
-                // Recursively walk children
+                // Recursively walk children using TreeWalker
                 try
                 {
-                    var walker = automation.ControlViewWalker;
-                    var child = walker.GetFirstChildElement(element);
+                    var walker = TreeWalker.ControlViewWalker;
+                    var child = walker.GetFirstChild(element);
                     while (child != null && clickableElements.Count < maxElements)
                     {
-                        WalkElements(child, automation, clickableElements, depth + 1, maxElements);
+                        WalkElements(child, clickableElements, depth + 1, maxElements);
                         try
                         {
-                            child = walker.GetNextSiblingElement(child);
+                            child = walker.GetNextSibling(child);
                         }
                         catch
                         {
@@ -198,31 +172,27 @@ namespace NaturalCommands.Helpers
             }
         }
 
-        private static bool IsElementClickable(dynamic element)
+        private static bool IsElementClickable(AutomationElement element)
         {
             try
             {
                 // Check if element is enabled and on-screen
-                int isEnabled = 0;
-                int isOffscreen = 1;
-                try { isEnabled = element.CurrentIsEnabled; } catch { }
-                try { isOffscreen = element.CurrentIsOffscreen; } catch { }
-                
-                if (isEnabled == 0 || isOffscreen != 0)
+                if (!element.Current.IsEnabled || element.Current.IsOffscreen)
                     return false;
 
                 // Check if element supports Invoke or Toggle patterns (clickable)
                 object? invokePattern = null;
                 object? togglePattern = null;
+                
                 try
                 {
-                    invokePattern = element.GetCurrentPattern(UIA_InvokePatternId);
+                    invokePattern = element.GetCurrentPattern(InvokePattern.Pattern);
                 }
                 catch { }
 
                 try
                 {
-                    togglePattern = element.GetCurrentPattern(UIA_TogglePatternId);
+                    togglePattern = element.GetCurrentPattern(TogglePattern.Pattern);
                 }
                 catch { }
 
@@ -234,16 +204,16 @@ namespace NaturalCommands.Helpers
             }
         }
 
-        private static Rectangle GetElementBounds(dynamic element)
+        private static Rectangle GetElementBounds(AutomationElement element)
         {
             try
             {
-                var rect = element.CurrentBoundingRectangle;
+                var rect = element.Current.BoundingRectangle;
                 return new Rectangle(
-                    (int)rect.left,
-                    (int)rect.top,
-                    (int)(rect.right - rect.left),
-                    (int)(rect.bottom - rect.top)
+                    (int)rect.Left,
+                    (int)rect.Top,
+                    (int)rect.Width,
+                    (int)rect.Height
                 );
             }
             catch
@@ -252,32 +222,29 @@ namespace NaturalCommands.Helpers
             }
         }
 
-        private static string GetControlTypeName(int controlTypeId)
+        private static string GetControlTypeName(ControlType controlType)
         {
-            return controlTypeId switch
-            {
-                UIA_ButtonControlTypeId => "Button",
-                UIA_HyperlinkControlTypeId => "Link",
-                UIA_MenuItemControlTypeId => "MenuItem",
-                UIA_CheckBoxControlTypeId => "CheckBox",
-                UIA_RadioButtonControlTypeId => "RadioButton",
-                UIA_TabItemControlTypeId => "TabItem",
-                UIA_ComboBoxControlTypeId => "ComboBox",
-                _ => "Unknown"
-            };
+            if (controlType == ControlType.Button) return "Button";
+            if (controlType == ControlType.Hyperlink) return "Link";
+            if (controlType == ControlType.MenuItem) return "MenuItem";
+            if (controlType == ControlType.CheckBox) return "CheckBox";
+            if (controlType == ControlType.RadioButton) return "RadioButton";
+            if (controlType == ControlType.TabItem) return "TabItem";
+            if (controlType == ControlType.ComboBox) return "ComboBox";
+            return "Unknown";
         }
 
         /// <summary>
         /// Clicks on a UI element using UI Automation.
         /// </summary>
-        public static bool ClickElement(dynamic element)
+        public static bool ClickElement(AutomationElement element)
         {
             try
             {
                 // Try Invoke pattern first (most common for clickable elements)
                 try
                 {
-                    var invokePattern = element.GetCurrentPattern(UIA_InvokePatternId);
+                    var invokePattern = element.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
                     if (invokePattern != null)
                     {
                         invokePattern.Invoke();
@@ -289,7 +256,7 @@ namespace NaturalCommands.Helpers
                 // Try Toggle pattern for checkboxes and radio buttons
                 try
                 {
-                    var togglePattern = element.GetCurrentPattern(UIA_TogglePatternId);
+                    var togglePattern = element.GetCurrentPattern(TogglePattern.Pattern) as TogglePattern;
                     if (togglePattern != null)
                     {
                         togglePattern.Toggle();
