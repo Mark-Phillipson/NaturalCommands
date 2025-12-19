@@ -55,7 +55,7 @@ namespace NaturalCommands
             _labelFont = new Font("Segoe UI", 10, FontStyle.Bold);
             _labelBackgroundBrush = new SolidBrush(Color.FromArgb(220, 255, 215, 0)); // Semi-transparent yellow
             _labelTextBrush = new SolidBrush(Color.Black);
-            _labelBorderPen = new Pen(Color.FromArgb(255, 0, 0, 0), 2);
+            _labelBorderPen = new Pen(Color.FromArgb(255, 0, 0, 0), 3); // General border now 3px
 
             // Handle keyboard input for label selection
             KeyPreview = true;
@@ -74,17 +74,23 @@ namespace NaturalCommands
             graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
             // Draw labels for each element
+            // Get virtual screen origin for correct label placement
+            int virtualScreenX = SystemInformation.VirtualScreen.Left;
+            int virtualScreenY = SystemInformation.VirtualScreen.Top;
+
             foreach (var kvp in _labelToElementMap)
             {
                 var label = kvp.Key;
                 var element = kvp.Value;
 
-                // Position label at top-left corner of element
+                // Position label at top-left corner of element, adjusted for virtual screen origin
                 var labelSize = graphics.MeasureString(label.ToUpper(), _labelFont);
+                float x = element.Bounds.Left - virtualScreenX;
+                float y = element.Bounds.Top - virtualScreenY;
                 var labelRect = new RectangleF(
-                    element.Bounds.Left, 
-                    element.Bounds.Top,
-                    labelSize.Width + 8, 
+                    x,
+                    y,
+                    labelSize.Width + 8,
                     labelSize.Height + 4);
 
                 // Ensure label is visible on screen - constrain to screen bounds
@@ -99,8 +105,16 @@ namespace NaturalCommands
 
                 // Draw label background
                 graphics.FillRectangle(_labelBackgroundBrush, labelRect);
-                graphics.DrawRectangle(_labelBorderPen, 
-                    Rectangle.Round(labelRect));
+                // Draw a blue border for text boxes
+                if (element.ControlType == "TextBox")
+                {
+                    using (var bluePen = new Pen(Color.Blue, 3)) // Blue border 3px
+                        graphics.DrawRectangle(bluePen, Rectangle.Round(labelRect));
+                }
+                else
+                {
+                    graphics.DrawRectangle(_labelBorderPen, Rectangle.Round(labelRect));
+                }
 
                 // Draw label text
                 var textPoint = new PointF(labelRect.X + 4, labelRect.Y + 2);
@@ -167,25 +181,35 @@ namespace NaturalCommands
         {
             try
             {
-                Logger.LogDebug($"Clicking element: {element.Name} ({element.ControlType}) at {element.Bounds}");
-                
-                bool success = UIAutomationHelper.ClickElement(element.Element);
-                
-                if (success)
+                Logger.LogDebug($"Clicking/focusing element: {element.Name} ({element.ControlType}) at {element.Bounds}");
+                bool success = false;
+                if (element.ControlType == "TextBox")
                 {
-                    Logger.LogDebug("Element clicked successfully via UI Automation.");
+                    try
+                    {
+                        element.Element.SetFocus();
+                        success = true;
+                        Logger.LogDebug("TextBox focused via SetFocus().");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError($"Failed to focus TextBox: {ex.Message}");
+                    }
                 }
                 else
                 {
-                    Logger.LogError("Failed to click element via UI Automation.");
+                    success = UIAutomationHelper.ClickElement(element.Element);
+                    if (success)
+                        Logger.LogDebug("Element clicked successfully via UI Automation.");
+                    else
+                        Logger.LogError("Failed to click element via UI Automation.");
                 }
-
-                // Close the overlay after clicking
+                // Close the overlay after clicking/focusing
                 Close();
             }
             catch (Exception ex)
             {
-                Logger.LogError($"Error clicking element: {ex.Message}");
+                Logger.LogError($"Error clicking/focusing element: {ex.Message}");
                 Close();
             }
         }

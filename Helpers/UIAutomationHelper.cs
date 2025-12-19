@@ -131,16 +131,25 @@ namespace NaturalCommands.Helpers
 
             try
             {
-                // Check if element is clickable and visible
-                if (IsElementClickable(element))
+                // Check if element is clickable, a text box, or a document, and visible
+                bool isClickable = IsElementClickable(element);
+                bool isTextBox = false;
+                try
+                {
+                    var ct = element.Current.ControlType;
+                    isTextBox = (ct == ControlType.Edit || ct == ControlType.Document);
+                }
+                catch { }
+
+                if (isClickable || isTextBox)
                 {
                     var bounds = GetElementBounds(element);
                     if (bounds.Width > 0 && bounds.Height > 0)
                     {
                         string name = "";
                         try { name = element.Current.Name ?? ""; } catch { }
-                        
                         var controlType = GetControlTypeName(element.Current.ControlType);
+                        if (isTextBox) controlType = "TextBox";
 
                         clickableElements.Add(new ClickableElement
                         {
@@ -238,6 +247,8 @@ namespace NaturalCommands.Helpers
             if (controlType == ControlType.RadioButton) return "RadioButton";
             if (controlType == ControlType.TabItem) return "TabItem";
             if (controlType == ControlType.ComboBox) return "ComboBox";
+            if (controlType == ControlType.Edit) return "TextBox";
+            if (controlType == ControlType.Document) return "TextBox";
             return "Unknown";
         }
 
