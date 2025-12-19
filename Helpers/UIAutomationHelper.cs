@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
-using UIAutomationClient;
 
 namespace NaturalCommands.Helpers
 {
     /// <summary>
     /// Helper class for enumerating UI elements using Windows UI Automation API.
     /// Used to find clickable elements for the "show letters" feature.
+    /// Uses dynamic COM to avoid compile-time dependencies.
     /// </summary>
     public static class UIAutomationHelper
     {
@@ -35,10 +35,26 @@ namespace NaturalCommands.Helpers
         {
             public Rectangle Bounds { get; set; }
             public string Label { get; set; } = "";
-            public IUIAutomationElement Element { get; set; } = null!;
+            public dynamic Element { get; set; } = null!;
             public string Name { get; set; } = "";
             public string ControlType { get; set; } = "";
         }
+
+        // UI Automation control type IDs
+        private const int UIA_ButtonControlTypeId = 50000;
+        private const int UIA_HyperlinkControlTypeId = 50005;
+        private const int UIA_MenuItemControlTypeId = 50011;
+        private const int UIA_CheckBoxControlTypeId = 50002;
+        private const int UIA_RadioButtonControlTypeId = 50013;
+        private const int UIA_TabItemControlTypeId = 50019;
+        private const int UIA_ComboBoxControlTypeId = 50003;
+
+        // UI Automation property IDs
+        private const int UIA_ControlTypePropertyId = 30003;
+
+        // UI Automation pattern IDs
+        private const int UIA_InvokePatternId = 10000;
+        private const int UIA_TogglePatternId = 10015;
 
         /// <summary>
         /// Generates two-letter labels using the Talon alphabet (a, b, c, ..., z, then aa, ab, ...).
@@ -79,8 +95,16 @@ namespace NaturalCommands.Helpers
 
             try
             {
-                var automation = new CUIAutomation();
-                IUIAutomationElement rootElement;
+                // Create UI Automation COM object dynamically
+                Type? automationType = Type.GetTypeFromProgID("UIAutomationClient.CUIAutomation");
+                if (automationType == null)
+                {
+                    Logger.LogError("Could not get UIAutomationClient COM type.");
+                    return clickableElements;
+                }
+
+                dynamic automation = Activator.CreateInstance(automationType)!;
+                dynamic rootElement;
 
                 if (scopeToActiveWindow)
                 {
@@ -103,10 +127,6 @@ namespace NaturalCommands.Helpers
                     return clickableElements;
                 }
 
-                // Create condition for clickable elements (buttons, links, menu items, etc.)
-                var condition = CreateClickableCondition(automation);
-                var walker = automation.CreateTreeWalker(condition);
-
                 // Walk the tree and collect clickable elements
                 WalkElements(rootElement, automation, clickableElements, 0, 500); // Limit to 500 elements
 
@@ -120,48 +140,7 @@ namespace NaturalCommands.Helpers
             return clickableElements;
         }
 
-        private static IUIAutomationCondition CreateClickableCondition(IUIAutomation automation)
-        {
-            // Create conditions for various clickable control types
-            var buttonCondition = automation.CreatePropertyCondition(
-                UIA_PropertyIds.UIA_ControlTypePropertyId,
-                UIA_ControlTypeIds.UIA_ButtonControlTypeId);
-
-            var linkCondition = automation.CreatePropertyCondition(
-                UIA_PropertyIds.UIA_ControlTypePropertyId,
-                UIA_ControlTypeIds.UIA_HyperlinkControlTypeId);
-
-            var menuItemCondition = automation.CreatePropertyCondition(
-                UIA_PropertyIds.UIA_ControlTypePropertyId,
-                UIA_ControlTypeIds.UIA_MenuItemControlTypeId);
-
-            var checkBoxCondition = automation.CreatePropertyCondition(
-                UIA_PropertyIds.UIA_ControlTypePropertyId,
-                UIA_ControlTypeIds.UIA_CheckBoxControlTypeId);
-
-            var radioButtonCondition = automation.CreatePropertyCondition(
-                UIA_PropertyIds.UIA_ControlTypePropertyId,
-                UIA_ControlTypeIds.UIA_RadioButtonControlTypeId);
-
-            var tabItemCondition = automation.CreatePropertyCondition(
-                UIA_PropertyIds.UIA_ControlTypePropertyId,
-                UIA_ControlTypeIds.UIA_TabItemControlTypeId);
-
-            var comboBoxCondition = automation.CreatePropertyCondition(
-                UIA_PropertyIds.UIA_ControlTypePropertyId,
-                UIA_ControlTypeIds.UIA_ComboBoxControlTypeId);
-
-            // Combine all conditions with OR
-            var conditions = new IUIAutomationCondition[]
-            {
-                buttonCondition, linkCondition, menuItemCondition, 
-                checkBoxCondition, radioButtonCondition, tabItemCondition, comboBoxCondition
-            };
-
-            return automation.CreateOrConditionFromArray(conditions);
-        }
-
-        private static void WalkElements(IUIAutomationElement element, IUIAutomation automation, 
+        private static void WalkElements(dynamic element, dynamic automation, 
             List<ClickableElement> clickableElements, int depth, int maxElements)
         {
             if (element == null || clickableElements.Count >= maxElements || depth > 20)
@@ -175,8 +154,12 @@ namespace NaturalCommands.Helpers
                     var bounds = GetElementBounds(element);
                     if (bounds.Width > 0 && bounds.Height > 0)
                     {
-                        var name = element.CurrentName ?? "";
-                        var controlType = GetControlTypeName(element.CurrentControlType);
+                        string name = "";
+                        try { name = element.CurrentName ?? ""; } catch { }
+                        
+                        int controlTypeId = 0;
+                        try { controlTypeId = element.CurrentControlType; } catch { }
+                        var controlType = GetControlTypeName(controlTypeId);
 
                         clickableElements.Add(new ClickableElement
                         {
@@ -189,13 +172,24 @@ namespace NaturalCommands.Helpers
                 }
 
                 // Recursively walk children
-                var walker = automation.ControlViewWalker;
-                var child = walker.GetFirstChildElement(element);
-                while (child != null && clickableElements.Count < maxElements)
+                try
                 {
-                    WalkElements(child, automation, clickableElements, depth + 1, maxElements);
-                    child = walker.GetNextSiblingElement(child);
+                    var walker = automation.ControlViewWalker;
+                    var child = walker.GetFirstChildElement(element);
+                    while (child != null && clickableElements.Count < maxElements)
+                    {
+                        WalkElements(child, automation, clickableElements, depth + 1, maxElements);
+                        try
+                        {
+                            child = walker.GetNextSiblingElement(child);
+                        }
+                        catch
+                        {
+                            child = null;
+                        }
+                    }
                 }
+                catch { }
             }
             catch (Exception ex)
             {
@@ -204,26 +198,31 @@ namespace NaturalCommands.Helpers
             }
         }
 
-        private static bool IsElementClickable(IUIAutomationElement element)
+        private static bool IsElementClickable(dynamic element)
         {
             try
             {
                 // Check if element is enabled and on-screen
-                if (element.CurrentIsEnabled == 0 || element.CurrentIsOffscreen != 0)
+                int isEnabled = 0;
+                int isOffscreen = 1;
+                try { isEnabled = element.CurrentIsEnabled; } catch { }
+                try { isOffscreen = element.CurrentIsOffscreen; } catch { }
+                
+                if (isEnabled == 0 || isOffscreen != 0)
                     return false;
 
                 // Check if element supports Invoke or Toggle patterns (clickable)
-                object invokePattern = null;
-                object togglePattern = null;
+                object? invokePattern = null;
+                object? togglePattern = null;
                 try
                 {
-                    invokePattern = element.GetCurrentPattern(UIA_PatternIds.UIA_InvokePatternId);
+                    invokePattern = element.GetCurrentPattern(UIA_InvokePatternId);
                 }
                 catch { }
 
                 try
                 {
-                    togglePattern = element.GetCurrentPattern(UIA_PatternIds.UIA_TogglePatternId);
+                    togglePattern = element.GetCurrentPattern(UIA_TogglePatternId);
                 }
                 catch { }
 
@@ -235,7 +234,7 @@ namespace NaturalCommands.Helpers
             }
         }
 
-        private static Rectangle GetElementBounds(IUIAutomationElement element)
+        private static Rectangle GetElementBounds(dynamic element)
         {
             try
             {
@@ -257,13 +256,13 @@ namespace NaturalCommands.Helpers
         {
             return controlTypeId switch
             {
-                UIA_ControlTypeIds.UIA_ButtonControlTypeId => "Button",
-                UIA_ControlTypeIds.UIA_HyperlinkControlTypeId => "Link",
-                UIA_ControlTypeIds.UIA_MenuItemControlTypeId => "MenuItem",
-                UIA_ControlTypeIds.UIA_CheckBoxControlTypeId => "CheckBox",
-                UIA_ControlTypeIds.UIA_RadioButtonControlTypeId => "RadioButton",
-                UIA_ControlTypeIds.UIA_TabItemControlTypeId => "TabItem",
-                UIA_ControlTypeIds.UIA_ComboBoxControlTypeId => "ComboBox",
+                UIA_ButtonControlTypeId => "Button",
+                UIA_HyperlinkControlTypeId => "Link",
+                UIA_MenuItemControlTypeId => "MenuItem",
+                UIA_CheckBoxControlTypeId => "CheckBox",
+                UIA_RadioButtonControlTypeId => "RadioButton",
+                UIA_TabItemControlTypeId => "TabItem",
+                UIA_ComboBoxControlTypeId => "ComboBox",
                 _ => "Unknown"
             };
         }
@@ -271,15 +270,14 @@ namespace NaturalCommands.Helpers
         /// <summary>
         /// Clicks on a UI element using UI Automation.
         /// </summary>
-        public static bool ClickElement(IUIAutomationElement element)
+        public static bool ClickElement(dynamic element)
         {
             try
             {
                 // Try Invoke pattern first (most common for clickable elements)
                 try
                 {
-                    var invokePattern = element.GetCurrentPattern(UIA_PatternIds.UIA_InvokePatternId) 
-                        as IUIAutomationInvokePattern;
+                    var invokePattern = element.GetCurrentPattern(UIA_InvokePatternId);
                     if (invokePattern != null)
                     {
                         invokePattern.Invoke();
@@ -291,8 +289,7 @@ namespace NaturalCommands.Helpers
                 // Try Toggle pattern for checkboxes and radio buttons
                 try
                 {
-                    var togglePattern = element.GetCurrentPattern(UIA_PatternIds.UIA_TogglePatternId) 
-                        as IUIAutomationTogglePattern;
+                    var togglePattern = element.GetCurrentPattern(UIA_TogglePatternId);
                     if (togglePattern != null)
                     {
                         togglePattern.Toggle();

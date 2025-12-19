@@ -59,16 +59,4 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
-
-    <ItemGroup>
-        <COMReference Include="UIAutomationClient">
-            <Guid>944de083-8fb8-45cf-bcb7-c477acb2f897</Guid>
-            <VersionMajor>1</VersionMajor>
-            <VersionMinor>0</VersionMinor>
-            <Lcid>0</Lcid>
-            <WrapperTool>tlbimp</WrapperTool>
-            <Isolated>false</Isolated>
-            <EmbedInteropTypes>true</EmbedInteropTypes>
-        </COMReference>
-    </ItemGroup>
 </Project>
