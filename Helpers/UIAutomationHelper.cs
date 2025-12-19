@@ -42,21 +42,15 @@ namespace NaturalCommands.Helpers
         }
 
         /// <summary>
-        /// Generates two-letter labels using the Talon alphabet (a, b, c, ..., z, then aa, ab, ...).
+        /// Generates two-letter labels using the Talon alphabet (aa, ab, ac, ...).
+        /// Always uses two-letter combinations to avoid single-letter instant activation.
         /// </summary>
         public static List<string> GenerateLabels(int count)
         {
             var labels = new List<string>();
             var alphabet = "abcdefghijklmnopqrstuvwxyz";
 
-            // Single letters first
-            foreach (var letter in alphabet)
-            {
-                if (labels.Count >= count) break;
-                labels.Add(letter.ToString());
-            }
-
-            // Two-letter combinations
+            // Generate only two-letter combinations
             foreach (var first in alphabet)
             {
                 foreach (var second in alphabet)
