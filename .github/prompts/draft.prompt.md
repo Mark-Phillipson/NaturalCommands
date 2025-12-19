@@ -1,19 +1,12 @@
 
-Title: Detect installed games and make them voice-launchable 🎮🔊
+ Look into the possibility of creating a feature where I can say something like natural show letters and a user interface would draw unique two letter combinations an all clickable items in the current user interface on the current screen
 
-Description (short):
-Add a feature that detects installed games on the user's system and ensures they are added to the app list so games can be launched by voice.
+to allow for quick navigation and selection using voice commands.
 
-Acceptance criteria:
-- The system scans common game sources (Steam library, Epic/GOG installers, Microsoft Store entries, Start Menu shortcuts, and common game folders) and returns a deduplicated list of installed games.
-- Missing games are added (or flagged for confirmation) in the app/game catalog used by voice commands.
-- Voice launch commands (e.g., "Play <game name>") can successfully launch detected games via the existing `AppLauncher` flow.
-- Provide sensible logging and a small UI or settings entry to review/confirm detected matches.
-- Include unit/integration tests where applicable and update docs (`README.md` or `running-and-testing.md`) with usage notes.
+ The user should then be able to use the talon alphabet to pick a particular label that would in turn trigger a click event on the corresponding UI element.
 
-Implementation notes / tips (optional):
-- Prefer Start Menu shortcuts and package manifests (MSIX) for reliability, and use Steam/Epic/GOG manifests or registry entries where available.
-- Handle duplicates by normalizing titles and asking the user for confirmation in ambiguous cases.
-- Add a background scan and a "Rescan" action in the UI.
+ May need to use the accessibility API to enumerate the UI elements on the screen and their bounding rectangles to accurately overlay the labels.
 
-Would you like me to also create an issue/PR with a more detailed implementation plan? 🔧
+Would need to work on both browsers and window desktop applications.
+
+Please plan this out and if possible provide an implementation.

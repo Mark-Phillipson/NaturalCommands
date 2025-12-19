@@ -43,6 +43,8 @@ NaturalCommands is a lightweight Windows application that maps natural language 
 - Map natural language to keyboard and window actions
 - Voice dictation helpers and multi-action support
 - Visual Studio command helpers and shortcuts
+- **Show letters** feature for voice-based UI element navigation
+
 ## Voice Command: "What can I say?"
 
 You can say **"what can I say"** at any time to display a list of available commands.
@@ -71,6 +73,44 @@ Run the app in resident mode to open the voice dictation UI from anywhere via a 
 - Fallback: use the system tray menu item **Open Voice Dictation (Win+Ctrl+H)**
 
 When voice typing stops, the **Send Command** button is focused and the form’s **Enter** key submits (AcceptButton), so you can press Enter to send the captured text.
+
+## Show Letters Feature 🎯
+
+The "show letters" feature enables voice-based navigation of UI elements by overlaying letter labels on clickable items.
+
+### Usage
+
+1. Say **"show letters"** or **"natural show letters"**
+2. A transparent overlay will appear showing two-letter labels (a, b, c, ..., aa, ab, ...) on all clickable elements
+3. Type the letters corresponding to the element you want to click using the Talon alphabet
+4. The element will be clicked automatically
+5. Press **ESC** to cancel without clicking
+
+### Examples
+
+```bash
+# Show letter labels on clickable elements
+dotnet run --framework net10.0-windows -- natural "show letters"
+
+# Then type letters like "a", "b", "ab", etc. to click the corresponding element
+```
+
+### Supported Elements
+
+The feature works with:
+- Buttons
+- Links
+- Menu items
+- Checkboxes
+- Radio buttons
+- Tab items
+- Combo boxes
+
+### Works With
+
+- **Web browsers** (Edge, Chrome, Firefox)
+- **Desktop applications** (Windows native apps)
+- Any application that supports Windows UI Automation API
 
 ## Contributing
 
