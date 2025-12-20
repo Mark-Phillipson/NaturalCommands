@@ -122,71 +122,36 @@ namespace NaturalCommands.Helpers
                 {
                     return "No active window found.";
                 }
-                IntPtr currentMonitor = Win32ApiHelper.MonitorFromWindow(activeHWnd, 2 /*MONITOR_DEFAULTTONEAREST*/);
-                Win32ApiHelper.MONITORINFOEX currentInfo = new Win32ApiHelper.MONITORINFOEX();
-                currentInfo.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Win32ApiHelper.MONITORINFOEX));
-                bool gotCurrentInfo = Win32ApiHelper.GetMonitorInfo(currentMonitor, ref currentInfo);
-                if (!gotCurrentInfo)
+                Screen currentScreen;
+                try
                 {
-                    return "Failed to get current monitor info.";
+                    currentScreen = Screen.FromHandle(activeHWnd);
                 }
-                IntPtr nextMonitor = IntPtr.Zero;
-                foreach (IntPtr monitor in Win32ApiHelper.GetAllMonitors())
+                catch
                 {
-                    if (monitor != currentMonitor)
+                    currentScreen = Screen.PrimaryScreen;
+                }
+                Screen[] allScreens = Screen.AllScreens;
+                Screen nextScreen = Screen.PrimaryScreen;
+                for (int i = 0; i < allScreens.Length; i++)
+                {
+                    if (allScreens[i].DeviceName == currentScreen.DeviceName)
                     {
-                        nextMonitor = monitor;
+                        nextScreen = allScreens[(i + 1) % allScreens.Length];
                         break;
                     }
                 }
-                if (nextMonitor == IntPtr.Zero)
-                {
-                        // no other monitor — fallback to primary
-                        try
-                        {
-                            NaturalCommands.Helpers.Logger.LogWarning("WindowManager: no other monitor found, using primary screen");
-                        }
-                        catch { }
-                        Win32ApiHelper.MONITORINFOEX primaryInfo = new Win32ApiHelper.MONITORINFOEX();
-                        try
-                        {
-                            var wa = Screen.PrimaryScreen?.WorkingArea ?? new System.Drawing.Rectangle(0, 0, SystemInformation.PrimaryMonitorSize.Width, SystemInformation.PrimaryMonitorSize.Height);
-                            primaryInfo.rcWork.Left = wa.Left;
-                            primaryInfo.rcWork.Top = wa.Top;
-                            primaryInfo.rcWork.Right = wa.Right;
-                            primaryInfo.rcWork.Bottom = wa.Bottom;
-                        }
-                        catch
-                        {
-                            return "No other monitor found.";
-                        }
-                        int widthP = (primaryInfo.rcWork.Right - primaryInfo.rcWork.Left);
-                        int heightP = (primaryInfo.rcWork.Bottom - primaryInfo.rcWork.Top);
-                        int widthPercentP = move.WidthPercent.HasValue ? move.WidthPercent.Value : 100;
-                        int heightPercentP = move.HeightPercent.HasValue ? move.HeightPercent.Value : 100;
-                        int xP = primaryInfo.rcWork.Left + (widthP - (widthP * widthPercentP / 100)) / 2;
-                        int yP = primaryInfo.rcWork.Top + (heightP - (heightP * heightPercentP / 100)) / 2;
-                        bool successP = Win32ApiHelper.SetWindowPos(activeHWnd, IntPtr.Zero, xP, yP, widthP, heightP, 0x0040 /*SWP_SHOWWINDOW*/);
-                        if (!successP)
-                        {
-                            int error = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
-                            return $"Failed to move window to primary monitor. Win32 error: {error}";
-                        }
-                        return "Window moved to primary monitor.";
-                }
-                Win32ApiHelper.MONITORINFOEX nextInfo = new Win32ApiHelper.MONITORINFOEX();
-                nextInfo.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Win32ApiHelper.MONITORINFOEX));
-                bool gotNextInfo = Win32ApiHelper.GetMonitorInfo(nextMonitor, ref nextInfo);
-                if (!gotNextInfo)
-                {
-                    return "Failed to get next monitor info.";
-                }
-                int width = (nextInfo.rcWork.Right - nextInfo.rcWork.Left);
-                int height = (nextInfo.rcWork.Bottom - nextInfo.rcWork.Top);
-                int widthPercent = move.WidthPercent.HasValue ? move.WidthPercent.Value : 100;
-                int heightPercent = move.HeightPercent.HasValue ? move.HeightPercent.Value : 100;
-                int x = nextInfo.rcWork.Left + (width - (width * widthPercent / 100)) / 2;
-                int y = nextInfo.rcWork.Top + (height - (height * heightPercent / 100)) / 2;
+                // Get current window size
+                Win32ApiHelper.RECT currentRect = new Win32ApiHelper.RECT();
+                Win32ApiHelper.GetWindowRect(activeHWnd, ref currentRect);
+                int currentWidth = currentRect.Right - currentRect.Left;
+                int currentHeight = currentRect.Bottom - currentRect.Top;
+
+                var rect = nextScreen.WorkingArea;
+                int width = move.WidthPercent.GetValueOrDefault(0) == 0 ? currentWidth : (rect.Width * move.WidthPercent.GetValueOrDefault(100) / 100);
+                int height = move.HeightPercent.GetValueOrDefault(0) == 0 ? currentHeight : (rect.Height * move.HeightPercent.GetValueOrDefault(100) / 100);
+                int x = rect.Left + (rect.Width - width) / 2;
+                int y = rect.Top + (rect.Height - height) / 2;
                 bool success = Win32ApiHelper.SetWindowPos(activeHWnd, IntPtr.Zero, x, y, width, height, 0x0040 /*SWP_SHOWWINDOW*/);
                 if (!success)
                 {
