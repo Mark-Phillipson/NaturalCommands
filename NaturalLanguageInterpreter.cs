@@ -907,6 +907,16 @@ namespace NaturalCommands
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
 
+            var showTaskbarPatterns = new[] {
+                "show taskbar", "taskbar letters", "show tray", "focus taskbar"
+            };
+            if (showTaskbarPatterns.Any(p => text.Contains(p)))
+            {
+                var action = new ShowTaskbarAction();
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (show taskbar)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
             // Visual Studio Command Lookup
 
             if (IsVisualStudioActive())
@@ -1265,6 +1275,34 @@ namespace NaturalCommands
                 {
                     AppendLog($"[ERROR] Failed to show letters overlay: {ex.Message}\n");
                     return $"Failed to show letters overlay: {ex.Message}";
+                }
+            }
+            else if (action is NaturalCommands.ShowTaskbarAction)
+            {
+                try
+                {
+                    // Prefer enumerating the Taskbar HWND directly so we get the middle app area reliably
+                    IntPtr trayHwnd = NaturalCommands.Helpers.WindowFocusHelper.GetTaskbarHwnd();
+                    bool focused = NaturalCommands.Helpers.WindowFocusHelper.FocusTaskbar();
+                    if (trayHwnd != IntPtr.Zero)
+                    {
+                        AppendLog($"[DEBUG] Found Taskbar hwnd: {trayHwnd}\n");
+                        UIElementOverlayForm.ShowOverlayForWindow(trayHwnd);
+                        AppendLog("[INFO] Show letters overlay displayed for Taskbar.\n");
+                        return "Taskbar focused and show letters overlay displayed. Type letters to click elements, or press ESC to cancel.";
+                    }
+                    else
+                    {
+                        if (!focused) AppendLog("[WARN] FocusTaskbar returned false; proceeding to default overlay anyway.\n");
+                        UIElementOverlayForm.ShowOverlay(true);
+                        AppendLog("[INFO] Show letters overlay displayed.\n");
+                        return "Show letters overlay displayed. Type letters to click elements, or press ESC to cancel.";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"[ERROR] Failed to show taskbar overlay: {ex.Message}\n");
+                    return $"Failed to show letters overlay for taskbar: {ex.Message}";
                 }
             }
             else

@@ -123,6 +123,88 @@ namespace NaturalCommands.Helpers
             return clickableElements;
         }
 
+        /// <summary>
+        /// Enumerates clickable UI elements rooted at the specified window handle.
+        /// Useful for finding clickable items on the Taskbar (Shell_TrayWnd) or other chrome windows.
+        /// </summary>
+        public static List<ClickableElement> EnumerateClickableElementsForWindow(IntPtr hwnd)
+        {
+            var clickableElements = new List<ClickableElement>();
+            try
+            {
+                if (hwnd == IntPtr.Zero) return clickableElements;
+                var rootElement = AutomationElement.FromHandle(hwnd);
+                if (rootElement == null) return clickableElements;
+                WalkElements(rootElement, clickableElements, 0, 500);
+                Logger.LogDebug($"Found {clickableElements.Count} clickable elements for hwnd {hwnd}.");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error enumerating elements for hwnd {hwnd}: {ex.Message}");
+            }
+            return clickableElements;
+        }
+
+        private static bool IsElementClickable(AutomationElement element)
+        {
+            try
+            {
+                // Check if element is enabled and on-screen
+                if (!element.Current.IsEnabled || element.Current.IsOffscreen)
+                    return false;
+
+                // Check if element supports Invoke or Toggle patterns (clickable)
+                object? invokePattern = null;
+                object? togglePattern = null;
+                object? selectionItemPattern = null;
+                
+                try
+                {
+                    invokePattern = element.GetCurrentPattern(InvokePattern.Pattern);
+                }
+                catch { }
+
+                try
+                {
+                    togglePattern = element.GetCurrentPattern(TogglePattern.Pattern);
+                }
+                catch { }
+
+                try
+                {
+                    selectionItemPattern = element.GetCurrentPattern(SelectionItemPattern.Pattern);
+                }
+                catch { }
+
+                if (invokePattern != null || togglePattern != null || selectionItemPattern != null)
+                    return true;
+
+                // Sometimes taskbar items don't expose patterns but are clearly clickable; consider common control types
+                try
+                {
+                    var ct = element.Current.ControlType;
+                    if (ct == ControlType.Button || ct == ControlType.ListItem || ct == ControlType.MenuItem || ct == ControlType.Hyperlink || ct == ControlType.TabItem)
+                        return true;
+                }
+                catch { }
+
+                // As a last resort, accept elements that have a non-empty bounding rectangle
+                try
+                {
+                    var rect = element.Current.BoundingRectangle;
+                    if (!rect.IsEmpty && rect.Width > 0 && rect.Height > 0)
+                        return true;
+                }
+                catch { }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static void WalkElements(AutomationElement element, 
             List<ClickableElement> clickableElements, int depth, int maxElements)
         {
@@ -185,38 +267,6 @@ namespace NaturalCommands.Helpers
             {
                 // Some elements may throw exceptions when accessed, just skip them
                 Logger.LogDebug($"Skipped element due to error: {ex.Message}");
-            }
-        }
-
-        private static bool IsElementClickable(AutomationElement element)
-        {
-            try
-            {
-                // Check if element is enabled and on-screen
-                if (!element.Current.IsEnabled || element.Current.IsOffscreen)
-                    return false;
-
-                // Check if element supports Invoke or Toggle patterns (clickable)
-                object? invokePattern = null;
-                object? togglePattern = null;
-                
-                try
-                {
-                    invokePattern = element.GetCurrentPattern(InvokePattern.Pattern);
-                }
-                catch { }
-
-                try
-                {
-                    togglePattern = element.GetCurrentPattern(TogglePattern.Pattern);
-                }
-                catch { }
-
-                return invokePattern != null || togglePattern != null;
-            }
-            catch
-            {
-                return false;
             }
         }
 
@@ -283,7 +333,19 @@ namespace NaturalCommands.Helpers
                 }
                 catch { }
 
-                Logger.LogError("Element does not support Invoke or Toggle patterns.");
+                // Try SelectionItemPattern (useful for selectable items such as taskbar jump items)
+                try
+                {
+                    var selectionItem = element.GetCurrentPattern(SelectionItemPattern.Pattern) as SelectionItemPattern;
+                    if (selectionItem != null)
+                    {
+                        selectionItem.Select();
+                        return true;
+                    }
+                }
+                catch { }
+
+                Logger.LogError("Element does not support Invoke, Toggle, or SelectionItem patterns.");
                 return false;
             }
             catch (Exception ex)

@@ -122,17 +122,23 @@ namespace NaturalCommands.Helpers
                 {
                     return "No active window found.";
                 }
-                Screen currentScreen;
+                Screen? currentScreen;
                 try
                 {
                     currentScreen = Screen.FromHandle(activeHWnd);
                 }
                 catch
                 {
-                    currentScreen = Screen.PrimaryScreen;
+                    currentScreen = Screen.PrimaryScreen ?? (Screen.AllScreens.Length > 0 ? Screen.AllScreens[0] : null);
                 }
+
+                if (currentScreen == null)
+                {
+                    return "No screens detected.";
+                }
+
                 Screen[] allScreens = Screen.AllScreens;
-                Screen nextScreen = Screen.PrimaryScreen;
+                Screen nextScreen = currentScreen; // default to current if we can't find another
                 for (int i = 0; i < allScreens.Length; i++)
                 {
                     if (allScreens[i].DeviceName == currentScreen.DeviceName)

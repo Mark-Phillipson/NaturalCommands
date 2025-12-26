@@ -264,5 +264,130 @@ namespace NaturalCommands.Helpers
             }
             return false;
         }
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
+
+        /// <summary>
+        /// Attempts to focus the Windows Taskbar. First tries to find the Shell_TrayWnd and set it foreground,
+        /// falling back to sending Win+T if necessary.
+        /// </summary>
+        // Additional PInvoke for child enumeration
+        [DllImport("user32.dll")]
+        private static extern bool EnumChildWindows(IntPtr hWndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
+        private delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
+
+        public static bool FocusTaskbar()
+        {
+            try
+            {
+                IntPtr trayHwnd = FindWindow("Shell_TrayWnd", null);
+                if (trayHwnd != IntPtr.Zero)
+                {
+                    try { ShowWindow(trayHwnd, SW_RESTORE); } catch { }
+
+                    // First try AttachThreadInput + SetForegroundWindow like other focus helpers
+                    IntPtr foregroundHwnd = GetForegroundWindow();
+                    uint foregroundThread = GetWindowThreadProcessId(foregroundHwnd, out _);
+                    uint trayThread = GetWindowThreadProcessId(trayHwnd, out _);
+                    bool attachResult = false;
+                    try
+                    {
+                        attachResult = AttachThreadInput(foregroundThread, trayThread, true);
+                    }
+                    catch { }
+
+                    bool setResult = SetForegroundWindow(trayHwnd);
+                    NaturalCommands.Helpers.Logger.LogDebug($"FocusTaskbar: Attempted SetForegroundWindow on Shell_TrayWnd: {setResult}, AttachThreadInput: {attachResult}");
+
+                    if (attachResult)
+                        AttachThreadInput(foregroundThread, trayThread, false);
+
+                    if (setResult)
+                        return true;
+
+                    // As a more reliable fallback, try to find a toolbar child and simulate a click inside it to ensure taskbar becomes focused
+                    IntPtr toolbarHwnd = IntPtr.Zero;
+                    EnumChildWindows(trayHwnd, (h, l) =>
+                    {
+                        var className = new System.Text.StringBuilder(256);
+                        GetClassName(h, className, className.Capacity);
+                        var cn = className.ToString();
+                        if (cn.IndexOf("MSTask", StringComparison.OrdinalIgnoreCase) >= 0 || cn.IndexOf("ToolbarWindow32", StringComparison.OrdinalIgnoreCase) >= 0 || cn.IndexOf("ReBarWindow32", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            toolbarHwnd = h;
+                            return false; // stop enumeration
+                        }
+                        return true;
+                    }, IntPtr.Zero);
+
+                    if (toolbarHwnd == IntPtr.Zero)
+                    {
+                        // Try common FindWindowEx names
+                        IntPtr maybe = FindWindowEx(trayHwnd, IntPtr.Zero, "MSTaskSwWClass", null);
+                        if (maybe != IntPtr.Zero) toolbarHwnd = maybe;
+                        maybe = FindWindowEx(trayHwnd, IntPtr.Zero, "TaskListThumbnailWnd", null);
+                        if (maybe != IntPtr.Zero) toolbarHwnd = maybe;
+                    }
+
+                    if (toolbarHwnd != IntPtr.Zero)
+                    {
+                        RECT rect;
+                        GetWindowRect(toolbarHwnd, out rect);
+                        int cx = (rect.Left + rect.Right) / 2;
+                        int cy = (rect.Top + rect.Bottom) / 2;
+
+                        NaturalCommands.Helpers.Logger.LogDebug($"FocusTaskbar: Simulating click at ({cx},{cy}) within toolbar hwnd {toolbarHwnd}");
+
+                        // simulate mouse click at center of toolbar
+                        SetCursorPos(cx, cy);
+                        mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, cx, cy, 0, 0);
+
+                        System.Threading.Thread.Sleep(100);
+
+                        bool finalSet = SetForegroundWindow(trayHwnd);
+                        NaturalCommands.Helpers.Logger.LogDebug($"FocusTaskbar: After simulated click SetForegroundWindow result: {finalSet}");
+                        return finalSet;
+                    }
+                }
+
+                // Fallback: send Win+T to focus the taskbar
+                keybd_event(0x5B, 0, 0, 0); // Win down
+                keybd_event(0x54, 0, 0, 0); // T down
+                keybd_event(0x54, 0, 2, 0); // T up
+                keybd_event(0x5B, 0, 2, 0); // Win up
+
+                System.Threading.Thread.Sleep(120);
+
+                IntPtr fg = GetForegroundWindow();
+                if (fg != IntPtr.Zero)
+                {
+                    var classNameSb = new System.Text.StringBuilder(256);
+                    GetClassName(fg, classNameSb, classNameSb.Capacity);
+                    if (classNameSb.ToString().Equals("Shell_TrayWnd", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                NaturalCommands.Helpers.Logger.LogError($"FocusTaskbar error: {ex.Message}");
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Returns the HWND for the Windows Taskbar (Shell_TrayWnd) or IntPtr.Zero if not found.
+        /// </summary>
+        public static IntPtr GetTaskbarHwnd()
+        {
+            try
+            {
+                return FindWindow("Shell_TrayWnd", null);
+            }
+            catch { return IntPtr.Zero; }
+        }
     }
 }

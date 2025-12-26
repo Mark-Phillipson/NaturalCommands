@@ -32,6 +32,8 @@ namespace DictationBoxMSP
         private System.Windows.Forms.Timer startDictationTimer = null!;
         private System.Windows.Forms.Timer dictationStopDebounceTimer = null!;
         private readonly DebounceGate dictationStopDebounce = new DebounceGate(850);
+        // When true, detect dictation 'stopped' on short pauses. Default false to keep voice typing enabled until user stops it.
+        private readonly bool autoDetectDictationStop = false;
         private readonly TemporaryMarqueeOverride temporaryMarqueeOverride = new TemporaryMarqueeOverride();
         private int timeoutMs = 0;
         private bool isBackgroundTransparent = false;
@@ -42,13 +44,15 @@ namespace DictationBoxMSP
 
         public string ResultText => txtInput.Text ?? string.Empty;
 
-        public VoiceDictationForm(int timeoutMs = -1, bool autoStartDictation = true)
+        public VoiceDictationForm(int timeoutMs = -1, bool autoStartDictation = true, bool autoDetectStop = false)
         {
             this.timeoutMs = timeoutMs;
+            // Allow optional enabling of automatic 'dictation stopped' detection (defaults to false)
+            try { autoDetectDictationStop = autoDetectStop; } catch { }
             InitializeComponents();
             ApplySharedStyles();
 
-            // Start in transparent mode by default: save current state then apply semi-transparent opacity
+            // Default to opaque (non-transparent) window. Preserve current state so Toggle can restore later.
             try
             {
                 // Preserve values so Toggle can restore them later
@@ -56,11 +60,9 @@ namespace DictationBoxMSP
                 savedTxtInputBackColor = txtInput.BackColor;
                 savedBottomPanelBackColor = bottomPanel.BackColor;
 
-                this.Opacity = 0.65;
-                txtInput.BackColor = DisplayMessage.SharedBackColor;
-                bottomPanel.BackColor = DisplayMessage.SharedBackColor;
-                isBackgroundTransparent = true;
-                try { btnToggleTransparent.Text = "Disable Trans&parent"; } catch { }
+                // Start opaque by default
+                isBackgroundTransparent = false;
+                try { btnToggleTransparent.Text = "Toggle Trans&parent"; } catch { }
             }
             catch { }
 
@@ -161,6 +163,23 @@ namespace DictationBoxMSP
 
             buttonsContainer.Controls.Add(flow);
 
+            // Fix tab order to match visual left-to-right order. With FlowDirection=RightToLeft the visual
+            // left-to-right ordering of controls is the reverse of the addition order. Explicitly set TabIndex
+            // so pressing Tab moves focus in the same order the buttons appear on screen.
+            try
+            {
+                // Ensure text input receives focus first
+                txtInput.TabIndex = 0;
+                // Visual left-to-right order: Search Web, Toggle Transparent, Open in VS Code, Copy Text, Send Command, Cancel
+                btnSearchWeb.TabIndex = 1;
+                btnToggleTransparent.TabIndex = 2;
+                btnOpenInVsc.TabIndex = 3;
+                btnCopyText.TabIndex = 4;
+                btnSendCommand.TabIndex = 5;
+                btnCancel.TabIndex = 6;
+            }
+            catch { }
+
             // Transient row (bottom of bottomPanel)
             lblTransient = new Label()
             {
@@ -222,7 +241,8 @@ namespace DictationBoxMSP
                 {
                     try
                     {
-                        ShowTemporaryMarquee("Listening… — press Enter to send", 30 * 60 * 1000);
+                        // Do not pre-set a long-lived temporary marquee here. Temporary marquee should only be shown
+                        // when the user has focus on the Send Command button. Initialize marquee labels with normal items.
                         for (int i = 0; i < marqueeLabels.Count; i++)
                         {
                             var lbl = marqueeLabels[i];
@@ -274,6 +294,8 @@ namespace DictationBoxMSP
             btnCancel.Click += BtnCancel_Click;
             // start button removed; dictation triggered via voice phrase
             btnSendCommand.Click += BtnSendCommand_Click;
+            btnSendCommand.GotFocus += BtnSendCommand_GotFocus;
+            btnSendCommand.LostFocus += BtnSendCommand_LostFocus;
             btnCopyText.Click += BtnCopyText_Click;
             btnOpenInVsc.Click += BtnOpenInVsc_Click;
             btnToggleTransparent.Click += BtnToggleTransparent_Click;
@@ -442,9 +464,12 @@ namespace DictationBoxMSP
 
             try
             {
-                dictationStopDebounce.MarkChange(Environment.TickCount64);
-                if (!dictationStopDebounceTimer.Enabled)
-                    dictationStopDebounceTimer.Start();
+                if (autoDetectDictationStop)
+                {
+                    dictationStopDebounce.MarkChange(Environment.TickCount64);
+                    if (!dictationStopDebounceTimer.Enabled)
+                        dictationStopDebounceTimer.Start();
+                }
             }
             catch { }
         }
@@ -464,6 +489,8 @@ namespace DictationBoxMSP
 
         private async void OnDictationStopped()
         {
+            try { if (!autoDetectDictationStop) return; } catch { }
+
             try { this.AcceptButton = btnSendCommand; } catch { }
 
             try
@@ -594,6 +621,26 @@ namespace DictationBoxMSP
                     };
                     Process.Start(psi2);
                 }
+            }
+            catch { }
+        }
+
+        private void BtnSendCommand_GotFocus(object? sender, EventArgs e)
+        {
+            try
+            {
+                // Only show the temporary marquee while the Send Command button has focus
+                ShowTemporaryMarquee("Listening finished — press Enter to send", 30 * 1000);
+            }
+            catch { }
+        }
+
+        private void BtnSendCommand_LostFocus(object? sender, EventArgs e)
+        {
+            try
+            {
+                // Clear any temporary marquee so normal marquee items resume
+                temporaryMarqueeOverride.Clear();
             }
             catch { }
         }

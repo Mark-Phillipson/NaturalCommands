@@ -9,7 +9,7 @@ dotnet build NaturalCommands.csproj  -c Release
 dotnet run --framework net10.0-windows -- listen
 dotnet publish ./NaturalCommands.csproj -c Release -f net10.0-windows -r win-x64 `
   --self-contained true -p:PublishSingleFile=true `
-  -o "./bin/Release/net10.0-windows/win-x64/publish"
+  -o "./bin/Release/net10.0-windowsdotnet clean NaturalCommands.csproj/win-x64/publish"
 
 ## Publish and register Startup (one command)
 You can publish and create a per-user Startup shortcut with the included script (no admin required for the Startup shortcut):
@@ -45,6 +45,7 @@ dotnet run --framework net10.0-windows -- natural "put this window on the right 
 dotnet run --framework net10.0-windows -- natural " close this window"
 dotnet run --framework net10.0-windows -- natural "natural dictate"  # Opens the voice dictation form for speaking or typing natural language commands
 dotnet run --framework net10.0-windows -- natural "show letters"  # Display letter labels on clickable UI elements for voice navigation
+dotnet run --framework net10.0-windows -- natural "show taskbar"  # Focus the Taskbar then display letters for taskbar elements
 ```
 
 ## Listen mode (resident hotkey)

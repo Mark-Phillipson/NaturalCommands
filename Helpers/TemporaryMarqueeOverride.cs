@@ -14,6 +14,12 @@ namespace NaturalCommands.Helpers
             _expiresAtMs = nowMs + Math.Max(0, durationMs);
         }
 
+        public void Clear()
+        {
+            Message = null;
+            _expiresAtMs = 0;
+        }
+
         public bool IsActive(long nowMs)
         {
             if (string.IsNullOrWhiteSpace(Message)) return false;

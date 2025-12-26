@@ -47,5 +47,16 @@ namespace NaturalCommands_NET.Tests
             Assert.Equal("Hello", ov.GetMessage(109));
             Assert.Null(ov.GetMessage(110));
         }
+
+        [Fact]
+        public void TemporaryMarqueeOverride_Clear_RemovesMessage()
+        {
+            var ov = new TemporaryMarqueeOverride();
+
+            ov.Set("Hello", 1000, 0);
+            Assert.Equal("Hello", ov.GetMessage(10));
+            ov.Clear();
+            Assert.Null(ov.GetMessage(10));
+        }
     }
 }

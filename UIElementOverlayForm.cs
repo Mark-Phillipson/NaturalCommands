@@ -62,6 +62,24 @@ namespace NaturalCommands
             KeyPress += OnKeyPress;
             KeyDown += OnKeyDown;
 
+            // Ensure overlay grabs focus and stays topmost when shown so it receives keyboard input
+            Shown += (s, e) => {
+                try
+                {
+                    this.Activate();
+                    this.Focus();
+                    this.BringToFront();
+                    // Ensure topmost using SetWindowPos (HWND_TOPMOST = -1, SWP_NOMOVE|SWP_NOSIZE = 0x0001|0x0002)
+                    Win32ApiHelper.SetWindowPos(this.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002);
+                    Win32ApiHelper.SetForegroundWindow(this.Handle);
+                    Logger.LogDebug($"Overlay Shown: activated and requested foreground (hwnd={this.Handle}).");
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"Error activating overlay: {ex.Message}");
+                }
+            };
+
             Logger.LogDebug($"Overlay created with {elements.Count} labeled elements.");
         }
 
@@ -177,6 +195,15 @@ namespace NaturalCommands
             }
         }
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool SetCursorPos(int X, int Y);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, int dwExtraInfo);
+
+        private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+        private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+
         private void ClickElement(UIAutomationHelper.ClickableElement element)
         {
             try
@@ -195,17 +222,55 @@ namespace NaturalCommands
                     {
                         Logger.LogError($"Failed to focus TextBox: {ex.Message}");
                     }
+                    // Close overlay after focusing text box
+                    Close();
+                    return;
                 }
                 else
                 {
+                    // First try UI Automation patterns (Invoke, Toggle, SelectionItem)
                     success = UIAutomationHelper.ClickElement(element.Element);
                     if (success)
-                        Logger.LogDebug("Element clicked successfully via UI Automation.");
-                    else
-                        Logger.LogError("Failed to click element via UI Automation.");
+                    {
+                        Logger.LogDebug("Element activated via UI Automation patterns.");
+                        // Close the overlay and return
+                        Close();
+                        return;
+                    }
+
+                    // If UI Automation failed, fallback to mouse click at element center.
+                    // We must close the overlay first so the click reaches the underlying window.
+                    var centerX = element.Bounds.Left + (element.Bounds.Width / 2);
+                    var centerY = element.Bounds.Top + (element.Bounds.Height / 2);
+
+                    Logger.LogDebug($"UI Automation didn't activate element; falling back to mouse click at ({centerX},{centerY}).");
+
+                    // Close overlay and give the system a brief moment to remove it
+                    Close();
+                    System.Windows.Forms.Application.DoEvents();
+                    System.Threading.Thread.Sleep(90);
+
+                    try
+                    {
+                        // Save current cursor position
+                        var prevPos = System.Windows.Forms.Cursor.Position;
+                        // Move cursor and click
+                        SetCursorPos(centerX, centerY);
+                        mouse_event(MOUSEEVENTF_LEFTDOWN, centerX, centerY, 0, 0);
+                        mouse_event(MOUSEEVENTF_LEFTUP, centerX, centerY, 0, 0);
+                        Logger.LogDebug("Performed mouse click fallback at element center.");
+
+                        // Restore cursor after a short delay
+                        System.Threading.Thread.Sleep(60);
+                        SetCursorPos(prevPos.X, prevPos.Y);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError($"Mouse click fallback failed: {ex.Message}");
+                    }
                 }
-                // Close the overlay after clicking/focusing
-                Close();
+                // Close the overlay after clicking/focusing (if not already closed)
+                try { Close(); } catch { }
             }
             catch (Exception ex)
             {
@@ -260,6 +325,37 @@ namespace NaturalCommands
             catch (Exception ex)
             {
                 Logger.LogError($"Error showing overlay: {ex.Message}");
+                MessageBox.Show($"Error showing overlay: {ex.Message}", 
+                    "Show Letters Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// Show overlay for a specific window handle (e.g., the Taskbar). This enumerates elements rooted at the hwnd.
+        /// </summary>
+        public static void ShowOverlayForWindow(IntPtr hwnd)
+        {
+            try
+            {
+                CloseOverlay();
+                var elements = UIAutomationHelper.EnumerateClickableElementsForWindow(hwnd);
+                if (elements.Count == 0)
+                {
+                    Logger.LogError($"No clickable elements found for hwnd {hwnd}.");
+                    MessageBox.Show("No clickable elements found in the target window.", 
+                        "Show Letters", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                _currentInstance = new UIElementOverlayForm(elements);
+                Logger.LogDebug($"Overlay shown for hwnd {hwnd} with {elements.Count} elements.");
+                _currentInstance.ShowDialog();
+                _currentInstance.Dispose();
+                _currentInstance = null;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error showing overlay for hwnd {hwnd}: {ex.Message}");
                 MessageBox.Show($"Error showing overlay: {ex.Message}", 
                     "Show Letters Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
