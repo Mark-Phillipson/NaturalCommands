@@ -96,6 +96,11 @@ dotnet run --framework net10.0-windows -- natural "show letters"
 # Then type letters like "a", "b", "ab", etc. to click the corresponding element
 ```
 
+### Show Desktop
+
+1. Say **"show desktop"** or **"natural show desktop"**
+2. The desktop will be focused (icons exposed) and letter labels will be applied to desktop icons so you can activate them by typing the letters; press **ESC** to cancel.
+
 ### Supported Elements
 
 The feature works with:

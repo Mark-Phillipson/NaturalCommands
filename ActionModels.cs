@@ -22,4 +22,5 @@ namespace NaturalCommands
     public record SendKeysAction(string KeysText) : ActionBase;
     public record ShowLettersAction(bool ScopeToActiveWindow = true) : ActionBase;
     public record ShowTaskbarAction : ActionBase;
+    public record ShowDesktopAction : ActionBase;
 }

@@ -278,7 +278,7 @@ namespace NaturalCommands.Helpers
         private delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
 
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
+        private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string? lpszClass, string? lpszWindow);
 
         public static bool FocusTaskbar()
         {
@@ -388,6 +388,146 @@ namespace NaturalCommands.Helpers
                 return FindWindow("Shell_TrayWnd", null);
             }
             catch { return IntPtr.Zero; }
+        }
+
+        /// <summary>
+        /// Attempts to find the desktop SHELLDLL_DefView hwnd (which hosts desktop icons). If not found, returns the Progman hwnd or IntPtr.Zero.
+        /// </summary>
+        public static IntPtr GetDesktopHwnd()
+        {
+            try
+            {
+                // Try Progman first
+                IntPtr progman = FindWindow("Progman", null);
+                if (progman != IntPtr.Zero)
+                {
+                    IntPtr defView = FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null);
+                    if (defView != IntPtr.Zero)
+                        return defView;
+                }
+
+                // Search WorkerW windows for a SHELLDLL_DefView child
+                IntPtr foundDefView = IntPtr.Zero;
+                EnumWindows((hWnd, lParam) =>
+                {
+                    var className = new System.Text.StringBuilder(256);
+                    GetClassName(hWnd, className, className.Capacity);
+                    if (className.ToString().Equals("WorkerW", StringComparison.OrdinalIgnoreCase))
+                    {
+                        IntPtr child = FindWindowEx(hWnd, IntPtr.Zero, "SHELLDLL_DefView", null);
+                        if (child != IntPtr.Zero)
+                        {
+                            foundDefView = child;
+                            return false; // stop enumeration
+                        }
+                    }
+                    return true;
+                }, IntPtr.Zero);
+
+                if (foundDefView != IntPtr.Zero)
+                    return foundDefView;
+
+                // Fallback to Progman itself
+                if (progman != IntPtr.Zero)
+                    return progman;
+
+                return IntPtr.Zero;
+            }
+            catch { return IntPtr.Zero; }
+        }
+
+        /// <summary>
+        /// Attempts to focus the desktop area by first sending Win+D (which reliably shows desktop icons), then locating
+        /// the desktop list view (SysListView32) and simulating a click inside it to ensure focus. Falls back to additional
+        /// Win+D retries if necessary.
+        /// </summary>
+        public static bool FocusDesktop()
+        {
+            try
+            {
+                // Send Win+D to show desktop (this generally works reliably)
+                keybd_event(0x5B, 0, 0, 0); // Win down
+                keybd_event(0x44, 0, 0, 0); // D down
+                keybd_event(0x44, 0, 2, 0); // D up
+                keybd_event(0x5B, 0, 2, 0); // Win up
+                NaturalCommands.Helpers.Logger.LogDebug("FocusDesktop: Sent Win+D to show desktop.");
+                System.Threading.Thread.Sleep(150);
+
+                IntPtr desktopHwnd = GetDesktopHwnd();
+                IntPtr listView = IntPtr.Zero;
+
+                if (desktopHwnd != IntPtr.Zero)
+                {
+                    // Try to find SHELLDLL_DefView then SysListView32
+                    IntPtr defView = FindWindowEx(desktopHwnd, IntPtr.Zero, "SHELLDLL_DefView", null);
+                    if (defView != IntPtr.Zero)
+                        listView = FindWindowEx(defView, IntPtr.Zero, "SysListView32", null);
+                    else
+                        listView = FindWindowEx(desktopHwnd, IntPtr.Zero, "SysListView32", null);
+                }
+
+                if (listView != IntPtr.Zero)
+                {
+                    // Click the center of the list view to ensure desktop receives focus
+                    RECT rect;
+                    if (GetWindowRect(listView, out rect))
+                    {
+                        int cx = (rect.Left + rect.Right) / 2;
+                        int cy = (rect.Top + rect.Bottom) / 2;
+                        NaturalCommands.Helpers.Logger.LogDebug($"FocusDesktop: Simulating click at ({cx},{cy}) inside SysListView32 hwnd {listView}");
+
+                        SetCursorPos(cx, cy);
+                        mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, cx, cy, 0, 0);
+
+                        System.Threading.Thread.Sleep(120);
+
+                        IntPtr fg = GetForegroundWindow();
+                        if (fg != IntPtr.Zero)
+                        {
+                            var classNameSb = new System.Text.StringBuilder(256);
+                            GetClassName(fg, classNameSb, classNameSb.Capacity);
+                            var cn = classNameSb.ToString();
+                            NaturalCommands.Helpers.Logger.LogDebug($"FocusDesktop: After click foreground class={cn}");
+                            if (cn.Equals("Progman", StringComparison.OrdinalIgnoreCase) || cn.Equals("WorkerW", StringComparison.OrdinalIgnoreCase) || cn.Equals("SHELLDLL_DefView", StringComparison.OrdinalIgnoreCase) || cn.Equals("SysListView32", StringComparison.OrdinalIgnoreCase))
+                                return true;
+                        }
+
+                        // Try to set foreground to desktop window directly
+                        if (desktopHwnd != IntPtr.Zero)
+                        {
+                            bool finalSet = SetForegroundWindow(desktopHwnd);
+                            System.Threading.Thread.Sleep(50);
+                            IntPtr after = GetForegroundWindow();
+                            if (after == desktopHwnd) return true;
+                        }
+
+                        // As a last resort, try setting foreground on the listView itself
+                        var parentSet = SetForegroundWindow(listView);
+                        return parentSet;
+                    }
+                }
+
+                // Final fallback: send Win+D again and consider it successful if foreground becomes Progman/WorkerW
+                keybd_event(0x5B, 0, 0, 0); // Win down
+                keybd_event(0x44, 0, 0, 0); // D down
+                keybd_event(0x44, 0, 2, 0); // D up
+                keybd_event(0x5B, 0, 2, 0); // Win up
+                System.Threading.Thread.Sleep(120);
+                IntPtr fg2 = GetForegroundWindow();
+                if (fg2 != IntPtr.Zero)
+                {
+                    var classNameSb = new System.Text.StringBuilder(256);
+                    GetClassName(fg2, classNameSb, classNameSb.Capacity);
+                    var cn2 = classNameSb.ToString();
+                    if (cn2.Equals("Progman", StringComparison.OrdinalIgnoreCase) || cn2.Equals("WorkerW", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                NaturalCommands.Helpers.Logger.LogError($"FocusDesktop error: {ex.Message}");
+            }
+            return false;
         }
     }
 }

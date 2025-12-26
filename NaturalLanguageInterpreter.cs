@@ -917,6 +917,16 @@ namespace NaturalCommands
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
 
+            var showDesktopPatterns = new[] {
+                "show desktop", "desktop letters", "show desktop letters", "show desktop icons", "desktop icons", "focus desktop"
+            };
+            if (showDesktopPatterns.Any(p => text.Contains(p)))
+            {
+                var action = new ShowDesktopAction();
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (show desktop)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
             // Visual Studio Command Lookup
 
             if (IsVisualStudioActive())
@@ -1303,6 +1313,35 @@ namespace NaturalCommands
                 {
                     AppendLog($"[ERROR] Failed to show taskbar overlay: {ex.Message}\n");
                     return $"Failed to show letters overlay for taskbar: {ex.Message}";
+                }
+            }
+            else if (action is NaturalCommands.ShowDesktopAction)
+            {
+                try
+                {
+                    // First ensure the desktop is shown and focused (Win+D via FocusDesktop)
+                    bool focused = NaturalCommands.Helpers.WindowFocusHelper.FocusDesktop();
+                    // Re-fetch the desktop hwnd after attempting to focus it
+                    IntPtr desktopHwnd = NaturalCommands.Helpers.WindowFocusHelper.GetDesktopHwnd();
+                    if (desktopHwnd != IntPtr.Zero)
+                    {
+                        AppendLog($"[DEBUG] Found Desktop hwnd: {desktopHwnd}\n");
+                        UIElementOverlayForm.ShowOverlayForWindow(desktopHwnd);
+                        AppendLog("[INFO] Show letters overlay displayed for Desktop.\n");
+                        return "Desktop focused and show letters overlay displayed. Type letters to activate icons, or press ESC to cancel.";
+                    }
+                    else
+                    {
+                        if (!focused) AppendLog("[WARN] FocusDesktop returned false; proceeding to default overlay anyway.\n");
+                        UIElementOverlayForm.ShowOverlay(true);
+                        AppendLog("[INFO] Show letters overlay displayed.\n");
+                        return "Show letters overlay displayed. Type letters to click elements, or press ESC to cancel.";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"[ERROR] Failed to show desktop overlay: {ex.Message}\n");
+                    return $"Failed to show letters overlay for desktop: {ex.Message}";
                 }
             }
             else
