@@ -763,6 +763,13 @@ namespace NaturalCommands
                 NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {action.GetType().Name} (right half)");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
+            // Open My Computer / This PC (robust)
+            if (text.Contains("open my computer") || text.Contains("open this pc") || text.Contains("open my pc") || (text.Contains("open") && text.Contains("computer")) || (text.Contains("open") && text.Contains("pc")))
+            {
+                var action = new OpenFolderAction("MyComputer");
+                NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {action.GetType().Name} (my computer)");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
             // Open documents folder (robust)
             if (text.Contains("open documents") || (text.Contains("open") && text.Contains("document")))
             {
@@ -1209,6 +1216,11 @@ namespace NaturalCommands
                     case "documents":
                         path = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                         break;
+                    case "mycomputer":
+                    case "computer":
+                        // Use SH: MyComputerFolder so Explorer shows drives and available space
+                        path = "shell:MyComputerFolder";
+                        break;
                     default:
                         path = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                         break;
@@ -1239,7 +1251,7 @@ namespace NaturalCommands
                 string helpText = "Available commands:\n" +
                     "- Move this window to the left/right\n" +
                     "- Maximize this window\n" +
-                    "- Open downloads/documents\n" +
+                    "- Open downloads/documents/This PC\n" +
                     "- Move window to other screen\n" +
                     "- (More natural commands can be added)";
                 // If the command list was already shown in a dialog, skip the tray notification
