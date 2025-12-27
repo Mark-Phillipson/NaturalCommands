@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Windows.Forms;
 using NaturalCommands.Helpers;
@@ -96,6 +97,9 @@ namespace NaturalCommands
             int virtualScreenX = SystemInformation.VirtualScreen.Left;
             int virtualScreenY = SystemInformation.VirtualScreen.Top;
 
+            // Keep track of label rectangles we've already placed to avoid overlap
+            var placedRects = new List<RectangleF>();
+
             foreach (var kvp in _labelToElementMap)
             {
                 var label = kvp.Key;
@@ -121,21 +125,128 @@ namespace NaturalCommands
                 if (labelRect.Bottom > Bounds.Height)
                     labelRect.Y = Bounds.Height - labelRect.Height;
 
-                // Draw label background
-                graphics.FillRectangle(_labelBackgroundBrush, labelRect);
-                // Draw a blue border for text boxes
-                if (element.ControlType == "TextBox")
+                // Avoid overlapping labels by trying several nearby candidate positions
+                const float gap = 6f;
+                var baseOffsets = new[] {
+                    new PointF(0, 0),
+                    new PointF(0, -(labelRect.Height + gap)),
+                    new PointF(0, labelRect.Height + gap),
+                    new PointF(labelRect.Width + gap, 0),
+                    new PointF(-(labelRect.Width + gap), 0),
+                    new PointF(labelRect.Width + gap, -(labelRect.Height + gap)),
+                    new PointF(-(labelRect.Width + gap), -(labelRect.Height + gap)),
+                    new PointF(labelRect.Width + gap, labelRect.Height + gap),
+                    new PointF(-(labelRect.Width + gap), labelRect.Height + gap)
+                };
+
+                RectangleF chosenRect = labelRect;
+                bool found = false;
+
+                foreach (var off in baseOffsets)
                 {
-                    using (var bluePen = new Pen(Color.Blue, 3)) // Blue border 3px
-                        graphics.DrawRectangle(bluePen, Rectangle.Round(labelRect));
-                }
-                else
-                {
-                    graphics.DrawRectangle(_labelBorderPen, Rectangle.Round(labelRect));
+                    var candidate = new RectangleF(labelRect.X + off.X, labelRect.Y + off.Y, labelRect.Width, labelRect.Height);
+                    // Constrain candidate to screen bounds
+                    if (candidate.X < 0) candidate.X = 0;
+                    if (candidate.Y < 0) candidate.Y = 0;
+                    if (candidate.Right > Bounds.Width) candidate.X = Bounds.Width - candidate.Width;
+                    if (candidate.Bottom > Bounds.Height) candidate.Y = Bounds.Height - candidate.Height;
+
+                    if (!placedRects.Any(r => r.IntersectsWith(candidate)))
+                    {
+                        chosenRect = candidate;
+                        found = true;
+                        break;
+                    }
                 }
 
-                // Draw label text
-                var textPoint = new PointF(labelRect.X + 4, labelRect.Y + 2);
+                // If none of the simple offsets worked, try stacking downward until free (limited attempts)
+                if (!found)
+                {
+                    var candidate = chosenRect;
+                    int attempts = 0;
+                    while (placedRects.Any(r => r.IntersectsWith(candidate)) && attempts < 8)
+                    {
+                        candidate.Y += candidate.Height + gap;
+                        if (candidate.Bottom > Bounds.Height)
+                        {
+                            candidate.Y = 0; // wrap to top if we went off bottom
+                            candidate.X += candidate.Width + gap; // move right
+                        }
+                        // constrain
+                        if (candidate.Right > Bounds.Width) candidate.X = Bounds.Width - candidate.Width;
+                        if (candidate.Bottom > Bounds.Height) candidate.Y = Bounds.Height - candidate.Height;
+                        attempts++;
+                    }
+
+                    if (!placedRects.Any(r => r.IntersectsWith(candidate)))
+                        chosenRect = candidate;
+                }
+
+                // Use chosenRect as the actual label rectangle
+                labelRect = chosenRect;
+
+                // Remember placed rect so subsequent labels avoid it
+                placedRects.Add(labelRect);
+
+                // Draw label background with pointer toward element center
+                // Compute element center relative to virtual screen
+                var elementCenter = new PointF(
+                    element.Bounds.Left + (element.Bounds.Width / 2f) - virtualScreenX,
+                    element.Bounds.Top + (element.Bounds.Height / 2f) - virtualScreenY);
+
+                // Determine attachment point on label rect (closest point on rect to element center)
+                float attachX = Math.Min(Math.Max(elementCenter.X, labelRect.Left), labelRect.Right);
+                float attachY = Math.Min(Math.Max(elementCenter.Y, labelRect.Top), labelRect.Bottom);
+                var attachPoint = new PointF(attachX, attachY);
+
+                // Only draw pointer if element center is outside the label rect
+                using (var path = new GraphicsPath())
+                {
+                    path.AddRectangle(labelRect);
+
+                    if (!labelRect.Contains(elementCenter))
+                    {
+                        // Build a small triangular pointer
+                        var dx = elementCenter.X - attachPoint.X;
+                        var dy = elementCenter.Y - attachPoint.Y;
+                        var len = (float)Math.Sqrt(dx * dx + dy * dy);
+                        if (len < 1) len = 1;
+
+                        // Direction unit vector from attach point toward element center
+                        var dirX = dx / len;
+                        var dirY = dy / len;
+
+                        // Perpendicular unit vector for base of triangle
+                        var ux = -dirY;
+                        var uy = dirX;
+
+                        float baseHalf = 8f; // half width of triangle base
+                        var p1 = new PointF(attachPoint.X + ux * baseHalf, attachPoint.Y + uy * baseHalf);
+                        var p2 = new PointF(attachPoint.X - ux * baseHalf, attachPoint.Y - uy * baseHalf);
+
+                        // Tip is a fixed distance from the attach point pointing toward the element
+                        float pointerLength = 10f; // fixed pointer length in pixels
+                        var tip = new PointF(attachPoint.X + dirX * pointerLength, attachPoint.Y + dirY * pointerLength);
+
+                        path.AddPolygon(new[] { p1, p2, tip });
+                    }
+
+                    // Fill and stroke the combined shape
+                    graphics.FillPath(_labelBackgroundBrush, path);
+
+                    if (element.ControlType == "TextBox")
+                    {
+                        using (var bluePen = new Pen(Color.Blue, 3))
+                            graphics.DrawPath(bluePen, path);
+                    }
+                    else
+                    {
+                        graphics.DrawPath(_labelBorderPen, path);
+                    }
+                }
+
+                // Draw label text with left padding and vertically centered
+                var textPoint = new PointF(labelRect.X + 6, labelRect.Y + (labelRect.Height - labelSize.Height) / 2 - 1);
                 graphics.DrawString(label.ToUpper(), _labelFont, _labelTextBrush, textPoint);
             }
 
