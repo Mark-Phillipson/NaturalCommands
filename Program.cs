@@ -145,6 +145,40 @@ namespace ExecuteCommands_NET
 			}
 			Console.WriteLine(result);
 
+			// If mouse movement is active, keep the app running until it's stopped
+			if (NaturalCommands.Helpers.MouseMoveManager.IsMoving())
+			{
+				NaturalCommands.Helpers.Logger.LogInfo("Mouse movement active - keeping application alive. Press Ctrl+C to exit or use 'stop mouse' command.");
+				
+				// Keep the application running and check for stop signal
+				try
+				{
+					using (var stopSignal = System.Threading.EventWaitHandle.OpenExisting("NaturalCommands_StopMouseMove"))
+					{
+						// Wait for the stop signal with a timeout
+						while (NaturalCommands.Helpers.MouseMoveManager.IsMoving())
+						{
+							if (stopSignal.WaitOne(100))
+							{
+								// Stop signal received
+								NaturalCommands.Helpers.MouseMoveManager.StopMoving(false, false);
+								break;
+							}
+						}
+					}
+				}
+				catch (System.Threading.WaitHandleCannotBeOpenedException)
+				{
+					// Signal doesn't exist, just use simple loop
+					while (NaturalCommands.Helpers.MouseMoveManager.IsMoving())
+					{
+						System.Threading.Thread.Sleep(100);
+					}
+				}
+				
+				NaturalCommands.Helpers.Logger.LogInfo("Mouse movement stopped - application exiting.");
+			}
+
 		}
 
 		private static void RunListenMode()

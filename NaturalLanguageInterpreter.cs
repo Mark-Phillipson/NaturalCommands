@@ -259,7 +259,17 @@ namespace NaturalCommands
             ("show letters", "Display letter labels on clickable UI elements for voice-based navigation"),
             ("emoji set <name> <emoji>", "Set an emoji for a named shortcut (e.g. emoji set happy 😀)"),
             ("emoji <name>", "Insert the configured emoji for the given name"),
-            ("emoji <emoji>", "Insert the given emoji immediately")
+            ("emoji <emoji>", "Insert the given emoji immediately"),
+            ("move <direction>", "Start moving the mouse continuously (e.g. move up, move left, move down right, mouse move left)"),
+            ("mouse move <direction>", "Start moving the mouse continuously (e.g. mouse move up, mouse left)"),
+            ("stop mouse", "Stop mouse movement"),
+            ("stop click", "Stop mouse movement and perform a left click"),
+            ("stop right click", "Stop mouse movement and perform a right click"),
+            ("mouse stop", "Stop mouse movement"),
+            ("faster", "Increase mouse movement speed"),
+            ("slower", "Decrease mouse movement speed"),
+            ("mouse faster", "Increase mouse movement speed"),
+            ("mouse slower", "Decrease mouse movement speed")
         };
 
         // Optional emoji mapping for commands. Map a command phrase to a small emoji
@@ -934,6 +944,57 @@ namespace NaturalCommands
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
 
+            // Mouse movement commands
+            // Support both "move left" and "mouse move left" or "mouse left"
+            string? direction = null;
+            if (text.StartsWith("move "))
+            {
+                direction = text.Substring(5).Trim();
+            }
+            else if (text.StartsWith("mouse move "))
+            {
+                direction = text.Substring(11).Trim();
+            }
+            else if (text.StartsWith("mouse ") && !text.StartsWith("mouse stop") && !text.StartsWith("mouse faster") && !text.StartsWith("mouse slower"))
+            {
+                // "mouse left" -> "left"
+                direction = text.Substring(6).Trim();
+            }
+            
+            if (direction != null)
+            {
+                var action = new StartMouseMoveAction(direction);
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (move mouse {direction})\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            
+            if (text == "stop mouse" || text == "mouse stop")
+            {
+                var action = new StopMouseMoveAction(PerformClick: false);
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (stop mouse)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            if (text == "stop click" || text == "mouse stop click")
+            {
+                var action = new StopMouseMoveAction(PerformClick: true, IsRightClick: false);
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (stop and click)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            if (text == "stop right click" || text == "stop and right click" || text == "mouse stop right click")
+            {
+                var action = new StopMouseMoveAction(PerformClick: true, IsRightClick: true);
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (stop and right click)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            if (text == "faster" || text == "slower" || text == "mouse faster" || text == "mouse slower")
+            {
+                // Extract the actual speed adjustment (faster/slower)
+                string speedAdjustment = text.Replace("mouse ", "").Trim();
+                var action = new AdjustMouseSpeedAction(speedAdjustment);
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (adjust speed {speedAdjustment})\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
             // Visual Studio Command Lookup
 
             if (IsVisualStudioActive())
@@ -1080,6 +1141,19 @@ namespace NaturalCommands
                 {
                     return $"Voice dictation failed: {ex.Message}";
                 }
+            }
+            // Mouse movement actions
+            else if (action is StartMouseMoveAction moveAction)
+            {
+                return NaturalCommands.Helpers.MouseMoveManager.StartMoving(moveAction.Direction);
+            }
+            else if (action is StopMouseMoveAction stopAction)
+            {
+                return NaturalCommands.Helpers.MouseMoveManager.StopMoving(stopAction.PerformClick, stopAction.IsRightClick);
+            }
+            else if (action is AdjustMouseSpeedAction speedAction)
+            {
+                return NaturalCommands.Helpers.MouseMoveManager.AdjustSpeed(speedAction.SpeedChange);
             }
             else if (action is SetWindowAlwaysOnTopAction setTop)
             {

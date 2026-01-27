@@ -23,4 +23,7 @@ namespace NaturalCommands
     public record ShowLettersAction(bool ScopeToActiveWindow = true) : ActionBase;
     public record ShowTaskbarAction : ActionBase;
     public record ShowDesktopAction : ActionBase;
+    public record StartMouseMoveAction(string Direction) : ActionBase;
+    public record StopMouseMoveAction(bool PerformClick = false, bool IsRightClick = false) : ActionBase;
+    public record AdjustMouseSpeedAction(string SpeedChange) : ActionBase;
 }
