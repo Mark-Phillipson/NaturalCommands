@@ -30,6 +30,22 @@ def run_application_csharp_natural(naturalCommand: str):
 	print(naturalCommand)
 	ui.launch(path=commandline, args=arguments, cwd=cwd)
 ```
+
+### Mouse Movement Commands
+
+NaturalCommands includes Talon voice commands for continuous mouse movement. See [talon_mouse_commands.talon](talon_mouse_commands.talon) for the complete command list.
+
+**Features:**
+- Directional movement: left, right, up, down, and diagonals
+- Speed adjustment: "mouse faster" or "mouse slower"
+- Stop commands: "mouse stop", "stop click", "stop right click"
+
+To use these commands, copy the [talon_mouse_commands.talon](talon_mouse_commands.talon) file into your Talon user directory and say commands like:
+- `mouse left` - start moving the mouse left
+- `mouse up right` - move diagonally up and right
+- `mouse faster` - increase movement speed
+- `mouse stop` - stop all mouse movement
+
 # NaturalCommands
 
 Execute Windows and Visual Studio commands using natural language. If a command is not recognized, the AI will infer the most likely intended command, so you are not limited to a single phrase—commands are interpreted by meaning.
