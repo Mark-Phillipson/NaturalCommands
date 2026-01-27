@@ -26,4 +26,6 @@ namespace NaturalCommands
     public record StartMouseMoveAction(string Direction) : ActionBase;
     public record StopMouseMoveAction(bool PerformClick = false, bool IsRightClick = false) : ActionBase;
     public record AdjustMouseSpeedAction(string SpeedChange) : ActionBase;
+    public record StartAutoClickAction(int DelayMs = 0) : ActionBase;
+    public record StopAutoClickAction : ActionBase;
 }

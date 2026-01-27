@@ -6,7 +6,8 @@ dotnet clean NaturalCommands.csproj
 dotnet build NaturalCommands.csproj  
 dotnet build NaturalCommands.csproj  
 dotnet build NaturalCommands.csproj  -c Release
-dotnet run --framework net10.0-windows -- listen
+dotnet run --framework net10.0-windows -- listen -c Release
+
 dotnet publish ./NaturalCommands.csproj -c Release -f net10.0-windows -r win-x64 `
   --self-contained true -p:PublishSingleFile=true `
   -o "./bin/Release/net10.0-windowsdotnet clean NaturalCommands.csproj/win-x64/publish"

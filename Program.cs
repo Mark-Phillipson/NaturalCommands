@@ -15,6 +15,17 @@ namespace ExecuteCommands_NET
 		[STAThread]
 		static void Main()
 		{
+			// Initialize settings at startup
+			try
+			{
+				var settings = NaturalCommands.Models.AppSettings.Instance;
+				NaturalCommands.Helpers.Logger.LogInfo("Settings loaded successfully");
+			}
+			catch (Exception ex)
+			{
+				NaturalCommands.Helpers.Logger.LogError($"Failed to load settings: {ex.Message}");
+			}
+
 			// -------------------------------------------------------------
 			// CLI contract:
 			//   NaturalCommands.exe <mode> <dictation>
@@ -101,8 +112,73 @@ namespace ExecuteCommands_NET
 
 			NaturalCommands.Helpers.Logger.LogDebug($"Args: {string.Join(", ", args)}");
 			NaturalCommands.Helpers.Logger.LogDebug($"ModeRaw: {modeRaw}, TextRaw: {textRaw}");
-			NaturalCommands.Helpers.Logger.LogDebug($"Normalized Mode: {mode}, Text: {text}");
-			switch (mode)
+			NaturalCommands.Helpers.Logger.LogDebug($"Normalized Mode: {mode}, Text: {text}");		
+		// Check if this command might start auto-click (BEFORE executing it)
+		bool mightStartAutoClick = text.Contains("auto click", StringComparison.OrdinalIgnoreCase) ||
+		                           text.Contains("auto-click", StringComparison.OrdinalIgnoreCase);
+		
+		// If this might start auto-click, initialize Windows Forms FIRST
+		if (mightStartAutoClick)
+		{
+			NaturalCommands.Helpers.Logger.LogDebug("Command may start auto-click - initializing Windows Forms BEFORE execution");
+			Application.EnableVisualStyles();
+			Application.SetCompatibleTextRenderingDefault(false);
+			System.Threading.SynchronizationContext.SetSynchronizationContext(
+				new System.Windows.Forms.WindowsFormsSynchronizationContext());
+			NaturalCommands.AutoClickOverlayForm.InitializeUIContext();
+			
+			// Execute the command on the UI thread using a timer
+			string? commandResult = null;
+			var context = new ApplicationContext();
+			var executeTimer = new System.Windows.Forms.Timer { Interval = 10 };
+			executeTimer.Tick += (s, e) =>
+			{
+				executeTimer.Stop();
+				
+				try
+				{
+					// Execute the command
+					commandResult = commands.HandleNaturalAsync(text);
+					Console.WriteLine(commandResult);
+					
+					// Check if auto-click is now active
+					if (NaturalCommands.Helpers.AutoClickManager.IsActive())
+					{
+						NaturalCommands.Helpers.Logger.LogInfo("Auto-click active - keeping application alive with message pump.");
+						
+						// Set up a check timer to exit when auto-click stops
+						var checkTimer = new System.Windows.Forms.Timer { Interval = 500 };
+						checkTimer.Tick += (s2, e2) =>
+						{
+							if (!NaturalCommands.Helpers.AutoClickManager.IsActive())
+							{
+								checkTimer.Stop();
+								NaturalCommands.Helpers.Logger.LogInfo("Auto-click stopped - exiting application.");
+								Application.Exit();
+							}
+						};
+						checkTimer.Start();
+					}
+					else
+					{
+						// Command didn't start auto-click, exit the message pump
+						Application.Exit();
+					}
+				}
+				catch (Exception ex)
+				{
+					NaturalCommands.Helpers.Logger.LogError($"Error executing command: {ex.Message}");
+					Console.WriteLine($"Error: {ex.Message}");
+					Application.Exit();
+				}
+			};
+			executeTimer.Start();
+			
+			// Run the message pump
+			Application.Run(context);
+			return;
+		}
+					switch (mode)
 			{
 				case "natural":
 					NaturalCommands.Helpers.Logger.LogDebug($"Program.cs: Passing to HandleNaturalAsync: '{text}'");
@@ -143,10 +219,15 @@ namespace ExecuteCommands_NET
 					NaturalCommands.Helpers.Logger.Log(substr);
 				}
 			}
-			Console.WriteLine(result);
+			
 
+			if (NaturalCommands.Helpers.AutoClickManager.IsActive())
+			{
+				NaturalCommands.Helpers.Logger.LogError("Auto-click was started but Windows Forms was not initialized. This should not happen.");
+				Console.WriteLine("ERROR: Auto-click started without proper initialization. Please use listen mode.");
+			}
 			// If mouse movement is active, keep the app running until it's stopped
-			if (NaturalCommands.Helpers.MouseMoveManager.IsMoving())
+			else if (NaturalCommands.Helpers.MouseMoveManager.IsMoving())
 			{
 				NaturalCommands.Helpers.Logger.LogInfo("Mouse movement active - keeping application alive. Press Ctrl+C to exit or use 'stop mouse' command.");
 				
@@ -185,8 +266,17 @@ namespace ExecuteCommands_NET
 		{
 			try
 			{
+				NaturalCommands.Helpers.Logger.LogInfo("Starting in listen mode (resident with tray icon).");
 				Application.EnableVisualStyles();
 				Application.SetCompatibleTextRenderingDefault(false);
+				
+				// Initialize Windows Forms synchronization context for thread-safe UI updates
+				System.Threading.SynchronizationContext.SetSynchronizationContext(
+					new System.Windows.Forms.WindowsFormsSynchronizationContext());
+				
+				// Initialize the overlay's UI context
+				NaturalCommands.AutoClickOverlayForm.InitializeUIContext();
+				
 				Application.Run(new NaturalCommands.ListenModeApplicationContext());
 			}
 			catch (Exception ex)

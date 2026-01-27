@@ -15,7 +15,8 @@ namespace NaturalCommands
             if (_notifyIcon != null) return;
 
             _notifyIcon = new NotifyIcon();
-            _appIcon = SystemIcons.Information;
+            // Use custom icon by default
+            _appIcon = AppIconGenerator.CreateAppIcon();
             _notifyIcon.Icon = _appIcon;
             _notifyIcon.Visible = true;
             _notifyIcon.Text = "NaturalCommands.NET";
@@ -56,6 +57,42 @@ namespace NaturalCommands
                 ni.Text = tooltip;
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Updates the tray icon to indicate auto-click mode status.
+        /// </summary>
+        public static void SetAutoClickActive(bool isActive)
+        {
+            EnsureNotifyIcon();
+            try
+            {
+                // Dispose old icon
+                var oldIcon = _appIcon;
+                
+                // Create new icon with appropriate color
+                _appIcon = AppIconGenerator.CreateAppIcon(isActive);
+                if (_notifyIcon != null)
+                {
+                    _notifyIcon.Icon = _appIcon;
+                    
+                    // Update tooltip to show status
+                    string status = isActive ? "[Auto-Click ON]" : "";
+                    string baseText = "NaturalCommands";
+                    _notifyIcon.Text = string.IsNullOrEmpty(status) ? baseText : $"{baseText} {status}";
+                }
+                
+                // Dispose old icon after setting new one
+                if (oldIcon != null && oldIcon != _appIcon)
+                {
+                    oldIcon.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log but don't crash
+                System.Diagnostics.Debug.WriteLine($"Failed to update tray icon: {ex.Message}");
+            }
         }
 
         public static void ShowNotification(string title, string message, int timeout = 5000)

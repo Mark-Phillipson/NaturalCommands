@@ -269,7 +269,9 @@ namespace NaturalCommands
             ("faster", "Increase mouse movement speed"),
             ("slower", "Decrease mouse movement speed"),
             ("mouse faster", "Increase mouse movement speed"),
-            ("mouse slower", "Decrease mouse movement speed")
+            ("mouse slower", "Decrease mouse movement speed"),
+            ("auto click", "Enable auto-click when mouse is idle (default 2000ms delay)"),
+            ("stop auto click", "Disable auto-click mode")
         };
 
         // Optional emoji mapping for commands. Map a command phrase to a small emoji
@@ -995,6 +997,20 @@ namespace NaturalCommands
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
 
+            // Auto-click commands
+            if (text == "auto click" || text == "enable auto click" || text == "start auto click")
+            {
+                var action = new StartAutoClickAction(DelayMs: 0); // 0 = use default from settings
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (enable auto-click)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            if (text == "stop auto click" || text == "disable auto click" || text == "auto click off")
+            {
+                var action = new StopAutoClickAction();
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (disable auto-click)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
             // Visual Studio Command Lookup
 
             if (IsVisualStudioActive())
@@ -1154,6 +1170,20 @@ namespace NaturalCommands
             else if (action is AdjustMouseSpeedAction speedAction)
             {
                 return NaturalCommands.Helpers.MouseMoveManager.AdjustSpeed(speedAction.SpeedChange);
+            }
+            // Auto-click actions
+            else if (action is StartAutoClickAction autoClickAction)
+            {
+                AppendLog($"[DEBUG] ExecuteActionAsync: Executing StartAutoClickAction\n");
+                return NaturalCommands.Helpers.AutoClickManager.Start(autoClickAction.DelayMs);
+            }
+            else if (action is StopAutoClickAction)
+            {
+                AppendLog($"[DEBUG] ExecuteActionAsync: Executing StopAutoClickAction\n");
+                NaturalCommands.Helpers.Logger.LogDebug("ExecuteActionAsync: About to call AutoClickManager.Stop()");
+                var result = NaturalCommands.Helpers.AutoClickManager.Stop();
+                NaturalCommands.Helpers.Logger.LogDebug($"ExecuteActionAsync: AutoClickManager.Stop() returned: {result}");
+                return result;
             }
             else if (action is SetWindowAlwaysOnTopAction setTop)
             {

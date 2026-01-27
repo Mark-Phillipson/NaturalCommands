@@ -11,6 +11,7 @@ namespace NaturalCommands
         private readonly HotkeyRegistrar _hotkeyRegistrar;
         private readonly Commands _commands;
         private bool _dictationOpen;
+        private SettingsForm? _settingsForm;
 
         public ListenModeApplicationContext()
         {
@@ -20,14 +21,24 @@ namespace NaturalCommands
             var openItem = new ToolStripMenuItem($"Open Voice Dictation ({HotkeyText})");
             openItem.Click += (_, __) => OpenVoiceDictation();
 
+            var stopAutoClickItem = new ToolStripMenuItem("Stop Auto-Click");
+            stopAutoClickItem.Click += (_, __) => StopAutoClick();
+
+            var settingsItem = new ToolStripMenuItem("Settings...");
+            settingsItem.Click += (_, __) => OpenSettingsForm();
+
             var exitItem = new ToolStripMenuItem("Exit");
             exitItem.Click += (_, __) => ExitThread();
 
             menu.Items.Add(openItem);
+            menu.Items.Add(stopAutoClickItem);
+            menu.Items.Add(settingsItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(exitItem);
 
-            TrayNotificationHelper.InitializeResidentTray($"NaturalCommands ({HotkeyText})", menu, SystemIcons.Application);
+            // Use custom application icon
+            var appIcon = AppIconGenerator.CreateAppIcon();
+            TrayNotificationHelper.InitializeResidentTray($"NaturalCommands ({HotkeyText})", menu, appIcon);
 
             _hotkeyRegistrar = new HotkeyRegistrar();
             _hotkeyRegistrar.Activated += (_, __) => OpenVoiceDictation();
@@ -67,10 +78,54 @@ namespace NaturalCommands
             }
         }
 
+        private void StopAutoClick()
+        {
+            try
+            {
+                var result = Helpers.AutoClickManager.Stop();
+                TrayNotificationHelper.ShowNotification("Auto-Click", result, 2000);
+            }
+            catch (Exception ex)
+            {
+                TrayNotificationHelper.ShowNotification("Error", $"Failed to stop auto-click: {ex.Message}", 3000);
+            }
+        }
+
+        private void OpenSettingsForm()
+        {
+            // Use single instance pattern - only one settings form at a time
+            if (_settingsForm == null || _settingsForm.IsDisposed)
+            {
+                _settingsForm = new SettingsForm();
+                _settingsForm.ShowDialog();
+            }
+            else
+            {
+                _settingsForm.BringToFront();
+                _settingsForm.Activate();
+            }
+        }
+
         protected override void ExitThreadCore()
         {
             try { _hotkeyRegistrar.Dispose(); } catch { }
             try { TrayNotificationHelper.Dispose(); } catch { }
+            
+            // Kill all NaturalCommands processes to ensure clean shutdown
+            try
+            {
+                var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+                var allProcesses = System.Diagnostics.Process.GetProcessesByName("NaturalCommands");
+                foreach (var process in allProcesses)
+                {
+                    if (process.Id != currentProcess.Id)
+                    {
+                        try { process.Kill(); } catch { }
+                    }
+                }
+            }
+            catch { }
+            
             base.ExitThreadCore();
         }
     }

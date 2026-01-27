@@ -1,9 +1,7 @@
-# New Mouse Move Voice Commands
+I would like to add the ability to create a mode that, when activated, would automatically left click the mouse if it is held still for half a second. However, this countdown would reset if the mouse is moved.
 
-I would like to add functionality so that I can move the mouse by voice. I want to say "move down," "left," "right," or "up," and the mouse would start moving in that direction. I would then like to be able to say "stop mouse" for it to stop moving and also "stop click" to perform a left click action.
+This feature would enhance the experience of playing games by voice, allowing users to enjoy music while playing without the need to click the mouse at the right time. For example, this would be beneficial when playing a card game.
 
-Additionally, I would like to say "faster" or "slower" to increase or decrease the speed of the mouse movement.
+It would be advantageous to have a user interface to indicate when the mode is set, along with a countdown timer to show when the click will occur. The interface should be non-intrusive and disappear when the mouse is moved again.
 
-Currently, Talon does not support these commands. Are they possible in this project?
-
-I would prefer it to work in all applications using Windows 11 and not just in Windows Forms applications.
+ We should be able to have a default of half a second but have a setting to adjust this when required.
