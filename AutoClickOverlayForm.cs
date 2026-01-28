@@ -18,6 +18,8 @@ namespace NaturalCommands
         
         private float _percentage = 0;
         private int _remainingMs = 0;
+        // Track whether we've hidden the system cursor so we can restore it later
+        private bool _cursorHidden = false;
 
         // Win32 API to make form click-through
         [DllImport("user32.dll", SetLastError = true)]
@@ -40,9 +42,9 @@ namespace NaturalCommands
             TransparencyKey = Color.Lime;
             StartPosition = FormStartPosition.Manual;
             
-            // Small circular overlay
-            Width = 80;
-            Height = 80;
+            // Small circular overlay sized to replace the system cursor while counting down
+            Width = 48;
+            Height = 48;
             
             // Double buffering for smooth rendering
             DoubleBuffered = true;
@@ -80,7 +82,7 @@ namespace NaturalCommands
             // Draw darker progress arc (more visible from periphery)
             if (_percentage > 0)
             {
-                using (var progressPen = new Pen(Color.FromArgb(220, 180, 60, 0), 8))
+                using (var progressPen = new Pen(Color.FromArgb(220, 180, 60, 0), 6))
                 {
                     // Start at top (-90 degrees) and sweep clockwise
                     float sweepAngle = (_percentage / 100f) * 360f;
@@ -91,6 +93,13 @@ namespace NaturalCommands
                         (radius - 3) * 2,
                         -90, // Start at top
                         sweepAngle);
+                }
+
+                // Draw a small center dot to give a clear 'cursor hotspot' visual when replacing the cursor
+                using (var dotBrush = new SolidBrush(Color.White))
+                {
+                    int dotRadius = Math.Max(2, radius / 6);
+                    g.FillEllipse(dotBrush, centerX - dotRadius, centerY - dotRadius, dotRadius * 2, dotRadius * 2);
                 }
             }
         }
@@ -133,10 +142,30 @@ namespace NaturalCommands
                         NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] New form shown - Visible: {_instance.Visible}, Handle: {_instance.Handle}");
                     }
 
-                    // Update position and values
-                    _instance.Location = new Point(cursorPos.X + 20, cursorPos.Y + 20);
+                    // Update position and values - center overlay on the cursor to visually replace it
+                    _instance.Location = new Point(cursorPos.X - _instance.Width / 2, cursorPos.Y - _instance.Height / 2);
                     _instance._remainingMs = remainingMs;
                     _instance._percentage = percentage;
+
+                    // Replace the system cursor while countdown is active
+                    if (_instance._percentage > 0)
+                    {
+                        if (!_instance._cursorHidden)
+                        {
+                            Cursor.Hide();
+                            _instance._cursorHidden = true;
+                            NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Cursor hidden to replace system cursor during countdown");
+                        }
+                    }
+                    else
+                    {
+                        if (_instance._cursorHidden)
+                        {
+                            Cursor.Show();
+                            _instance._cursorHidden = false;
+                            NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Cursor restored");
+                        }
+                    }
                     
                     NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Updated - Location: ({_instance.Location.X}, {_instance.Location.Y}), Visible: {_instance.Visible}, TopMost: {_instance.TopMost}");
                     
@@ -181,6 +210,14 @@ namespace NaturalCommands
                 {
                     try
                     {
+                        // Restore cursor if we had hidden it
+                        if (_instance._cursorHidden)
+                        {
+                            Cursor.Show();
+                            _instance._cursorHidden = false;
+                            NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Cursor restored during HideOverlay");
+                        }
+
                         _instance.Hide();
                     }
                     catch (Exception ex)
@@ -209,6 +246,14 @@ namespace NaturalCommands
                 {
                     try
                     {
+                        // Ensure cursor is restored
+                        if (_instance._cursorHidden)
+                        {
+                            Cursor.Show();
+                            _instance._cursorHidden = false;
+                            NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Cursor restored during CloseOverlay");
+                        }
+
                         _instance.Close();
                         _instance.Dispose();
                     }
