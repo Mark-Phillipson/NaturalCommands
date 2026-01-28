@@ -18,6 +18,8 @@ namespace NaturalCommands
             _commands = new Commands(new HandleProcesses());
 
             var menu = new ContextMenuStrip();
+            menu.ShowImageMargin = true;
+
             var openItem = new ToolStripMenuItem($"Open Voice Dictation ({HotkeyText})");
             openItem.Click += (_, __) => OpenVoiceDictation();
 
@@ -30,11 +32,39 @@ namespace NaturalCommands
             var exitItem = new ToolStripMenuItem("Exit");
             exitItem.Click += (_, __) => ExitThread();
 
+            // Generate and attach small icons for clarity in the tray menu
+            Image? openIcon = null;
+            Image? stopIcon = null;
+            Image? settingsIcon = null;
+            Image? exitIcon = null;
+            try
+            {
+                openIcon = MenuIconGenerator.CreateMicrophoneImage();
+                stopIcon = MenuIconGenerator.CreateStopImage();
+                settingsIcon = MenuIconGenerator.CreateSettingsImage();
+                exitIcon = MenuIconGenerator.CreateExitImage();
+
+                openItem.Image = openIcon;
+                stopAutoClickItem.Image = stopIcon;
+                settingsItem.Image = settingsIcon;
+                exitItem.Image = exitIcon;
+            }
+            catch { }
+
             menu.Items.Add(openItem);
             menu.Items.Add(stopAutoClickItem);
             menu.Items.Add(settingsItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(exitItem);
+
+            // Dispose the generated images when the menu is disposed
+            menu.Disposed += (_, __) =>
+            {
+                try { openIcon?.Dispose(); } catch { }
+                try { stopIcon?.Dispose(); } catch { }
+                try { settingsIcon?.Dispose(); } catch { }
+                try { exitIcon?.Dispose(); } catch { }
+            };
 
             // Use custom application icon
             var appIcon = AppIconGenerator.CreateAppIcon();
