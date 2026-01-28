@@ -134,6 +134,21 @@ The feature works with:
 - **Desktop applications** (Windows native apps)
 - Any application that supports Windows UI Automation API
 
+## Auto-Click (countdown overlay)
+
+Auto-Click provides a configurable delayed-click feature that displays a small countdown overlay centered on the cursor during the delay. While the countdown is active the overlay temporarily hides the system cursor and shows a progress arc and a small hotspot dot so the user can clearly see where the click will occur.
+
+**Key points:**
+- The auto-click delay is configurable via **Settings → Auto-Click** (milliseconds).
+- The **Show countdown overlay** setting toggles whether the overlay is shown during the delay.
+- When shown, the overlay replaces (hides) the system cursor during the countdown and restores it when the countdown finishes or is cancelled.
+- There is a **Stop Auto-Click** tray menu option to cancel the countdown, and the auto-click will also automatically stop if the mouse is moved to the taskbar/system tray to prevent accidental clicks.
+
+**Usage:**
+1. Open **Settings → Auto-Click** to enable/set the delay and toggle the overlay.
+2. Trigger a delayed click using your preferred command; the overlay will appear centered on the pointer and display progress.
+3. Cancel with the **Stop Auto-Click** tray menu item or by moving the pointer to the taskbar.
+
 ## Contributing
 
 Contributions are welcome — please open issues and pull requests on GitHub.
