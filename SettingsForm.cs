@@ -220,6 +220,8 @@ namespace NaturalCommands
             panel.Controls.Add(CreateLabel("Voice Commands:", ref yPos, true));
             panel.Controls.Add(CreateLabel("• 'auto click' - Enable auto-click mode", ref yPos, false, 9));
             panel.Controls.Add(CreateLabel("• 'stop auto click' - Disable auto-click mode", ref yPos, false, 9));
+            panel.Controls.Add(CreateLabel("• 'auto click faster' / 'auto click speed up' - Increase auto-click speed (shorten delay)", ref yPos, false, 9));
+            panel.Controls.Add(CreateLabel("• 'auto click slower' / 'auto click slow down' - Decrease auto-click speed (lengthen delay)", ref yPos, false, 9));
             
             tab.Controls.Add(panel);
             return tab;

@@ -248,6 +248,7 @@ namespace NaturalCommands
             ("move window to other monitor", "Move the active window to the next monitor"),
             ("open downloads", "Open the Downloads folder"),
             ("open documents", "Open the Documents folder"),
+            ("open settings", "Open the application settings"),
             ("close tab", "Close the current tab in supported applications"),
             ("send keys", "Send a key sequence to the active window"),
             ("launch app", "Launch a specified application"),
@@ -271,7 +272,17 @@ namespace NaturalCommands
             ("mouse faster", "Increase mouse movement speed"),
             ("mouse slower", "Decrease mouse movement speed"),
             ("auto click", "Enable auto-click when mouse is idle (default 2000ms delay)"),
-            ("stop auto click", "Disable auto-click mode")
+            ("enable auto click", "Enable auto-click mode"),
+            ("start auto click", "Enable auto-click mode"),
+            ("stop auto click", "Disable auto-click mode"),
+            ("disable auto click", "Disable auto-click mode"),
+            ("auto click off", "Disable auto-click mode"),
+            ("auto click faster", "Increase auto-click speed (shorten delay)"),
+            ("auto click speed up", "Increase auto-click speed (shorten delay)"),
+            ("auto click speedup", "Increase auto-click speed (shorten delay)"),
+            ("auto click slower", "Decrease auto-click speed (lengthen delay)"),
+            ("auto click slow down", "Decrease auto-click speed (lengthen delay)"),
+            ("auto click slowdown", "Decrease auto-click speed (lengthen delay)")
         };
 
         // Optional emoji mapping for commands. Map a command phrase to a small emoji
@@ -796,7 +807,18 @@ namespace NaturalCommands
                 NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {action.GetType().Name} (downloads)");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
-            // Open mapped applications (expanded)
+
+            // Open settings explicitly: "open settings", "settings", "show settings"
+            if (text.Equals("open settings", StringComparison.InvariantCultureIgnoreCase)
+                || text.Equals("settings", StringComparison.InvariantCultureIgnoreCase)
+                || text.Equals("show settings", StringComparison.InvariantCultureIgnoreCase))
+            {
+                var action = new OpenSettingsAction();
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (settings)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
+            // Open mapped applications (expanded) 
             // Use WebsiteNavigator for website navigation commands
             if (WebsiteNavigator.TryParseWebsiteCommand(text, out var url))
             {
@@ -1170,6 +1192,21 @@ namespace NaturalCommands
                 catch (Exception ex)
                 {
                     return $"Voice dictation failed: {ex.Message}";
+                }
+            }
+            else if (action is OpenSettingsAction)
+            {
+                try
+                {
+                    // Show modal settings dialog. If this fails, return a descriptive error.
+                    var settingsForm = new SettingsForm();
+                    settingsForm.ShowDialog();
+                    return "Settings displayed.";
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"[ERROR] Failed to open settings form: {ex.Message}\n");
+                    return $"Failed to open settings: {ex.Message}";
                 }
             }
             // Mouse movement actions

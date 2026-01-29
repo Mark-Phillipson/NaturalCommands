@@ -48,8 +48,13 @@ Once the application is running in listen mode, you can enable auto-click in two
 ### Disabling Auto-Click
 
 #### Voice Command:
-- **"stop auto click"** or **"disable auto click"**
+- **"stop auto click"**, **"disable auto click"**, or **"auto click off"**
 
+#### Adjusting Auto-Click Speed (voice)
+- **"auto click faster"** or **"auto click speed up"** — decrease the delay between idle and click (makes clicks occur sooner)
+- **"auto click slower"** or **"auto click slow down"** — increase the delay between idle and click (makes clicks occur later)
+
+Notes: Speed adjustments are applied in steps (see settings for allowed range).
 ### Configuring Auto-Click
 
 1. Right-click the **system tray icon**

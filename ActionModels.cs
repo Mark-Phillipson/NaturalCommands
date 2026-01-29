@@ -10,6 +10,7 @@ namespace NaturalCommands
     // Default TimeoutMs = 0 disables auto-submit while allowing auto-start
     // (the form only auto-submits when TimeoutMs > 0).
     public record OpenVoiceDictationFormAction(int TimeoutMs = 0) : ActionBase;
+    public record OpenSettingsAction : ActionBase;
     public record CloseTabAction : ActionBase { }
     public record SetWindowAlwaysOnTopAction(string? Application) : ActionBase;
     public record ExecuteVSCommandAction(string CommandName, string? Arguments = null) : ActionBase;

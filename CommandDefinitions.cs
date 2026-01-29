@@ -13,6 +13,7 @@ namespace NaturalCommands
             ("move window to other monitor", "Move the active window to the next monitor"),
             ("open downloads", "Open the Downloads folder"),
             ("open documents", "Open the Documents folder"),
+            ("open settings", "Open the application settings"),
             ("open my computer", "Open This PC / show drives and available space"),
             ("open this pc", "Open This PC / show drives and available space"),
             ("close tab", "Close the current tab in supported applications"),
