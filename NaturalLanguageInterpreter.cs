@@ -1011,6 +1011,20 @@ namespace NaturalCommands
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
 
+            // Adjust auto-click delay via voice: "auto click faster" / "auto click slower"
+            if (text == "auto click faster" || text == "auto click speed up" || text == "auto click speedup")
+            {
+                var action = new AdjustAutoClickDelayAction("faster");
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (auto-click faster)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+            if (text == "auto click slower" || text == "auto click slow down" || text == "auto click slowdown")
+            {
+                var action = new AdjustAutoClickDelayAction("slower");
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (auto-click slower)\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
             // Visual Studio Command Lookup
 
             if (IsVisualStudioActive())
@@ -1184,6 +1198,22 @@ namespace NaturalCommands
                 var result = NaturalCommands.Helpers.AutoClickManager.Stop();
                 NaturalCommands.Helpers.Logger.LogDebug($"ExecuteActionAsync: AutoClickManager.Stop() returned: {result}");
                 return result;
+            }
+            else if (action is AdjustAutoClickDelayAction adj)
+            {
+                AppendLog($"[DEBUG] ExecuteActionAsync: Executing AdjustAutoClickDelayAction (change={adj.Change})\n");
+                if (string.Equals(adj.Change, "faster", StringComparison.OrdinalIgnoreCase))
+                {
+                    return NaturalCommands.Helpers.AutoClickManager.Faster();
+                }
+                else if (string.Equals(adj.Change, "slower", StringComparison.OrdinalIgnoreCase))
+                {
+                    return NaturalCommands.Helpers.AutoClickManager.Slower();
+                }
+                else
+                {
+                    return "Unknown auto-click adjustment command.";
+                }
             }
             else if (action is SetWindowAlwaysOnTopAction setTop)
             {

@@ -126,7 +126,7 @@ namespace NaturalCommands.Models
         /// <summary>
         /// Delay in milliseconds before auto-click triggers (100-5000ms).
         /// </summary>
-        public int DelayMs { get; set; } = 2000;
+        public int DelayMs { get; set; } = 500;
 
         /// <summary>
         /// Whether auto-click mode is currently enabled.

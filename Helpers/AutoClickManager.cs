@@ -404,5 +404,51 @@ namespace NaturalCommands.Helpers
                 return $"Failed to save delay: {ex.Message}";
             }
         }
+
+        /// <summary>
+        /// Decrease the delay to be faster (reduce by 500ms, min 100ms).
+        /// </summary>
+        public static string Faster()
+        {
+            try
+            {
+                int current = GetDelayMs();
+                int newDelay = Math.Max(100, current - 500);
+                if (newDelay == current)
+                {
+                    Logger.LogInfo($"Auto-click delay already at minimum ({current}ms)");
+                    return $"Auto-click delay already at minimum ({current}ms)";
+                }
+                return SetDelay(newDelay);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error adjusting auto-click speed faster: {ex.Message}");
+                return $"Failed to adjust auto-click speed: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// Increase the delay to be slower (increase by 500ms, max 2000ms).
+        /// </summary>
+        public static string Slower()
+        {
+            try
+            {
+                int current = GetDelayMs();
+                int newDelay = Math.Min(2000, current + 500);
+                if (newDelay == current)
+                {
+                    Logger.LogInfo($"Auto-click delay already at maximum ({current}ms)");
+                    return $"Auto-click delay already at maximum ({current}ms)";
+                }
+                return SetDelay(newDelay);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error adjusting auto-click speed slower: {ex.Message}");
+                return $"Failed to adjust auto-click delay: {ex.Message}";
+            }
+        }
     }
 }

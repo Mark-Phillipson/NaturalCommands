@@ -1,3 +1,3 @@
 
 
-Regarding the auto click functionality please can we change it so the auto click functionality continues as long as the mouse is in the circle of the notification and can we make the notification green part in the centre transparent while leaving the green circle animation solid so we can still see it but see through it in the middle also can we keep the mouse pointer above it so it can move independently?
+Regarding the auto click functionality please can we Add the ability to change the wait time by voice so we need a voice command auto click faster and another one auto click slower that would change the speed in five hundred millisecond chunks until it reaches the minimum or maximum allowed

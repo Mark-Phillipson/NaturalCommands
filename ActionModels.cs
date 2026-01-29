@@ -26,6 +26,8 @@ namespace NaturalCommands
     public record StartMouseMoveAction(string Direction) : ActionBase;
     public record StopMouseMoveAction(bool PerformClick = false, bool IsRightClick = false) : ActionBase;
     public record AdjustMouseSpeedAction(string SpeedChange) : ActionBase;
+    // Adjust auto-click delay by spoken commands such as "auto click faster" / "auto click slower"
+    public record AdjustAutoClickDelayAction(string Change) : ActionBase;
     public record StartAutoClickAction(int DelayMs = 0) : ActionBase;
     public record StopAutoClickAction : ActionBase;
 }
