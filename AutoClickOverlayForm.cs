@@ -18,8 +18,26 @@ namespace NaturalCommands
         
         private float _percentage = 0;
         private int _remainingMs = 0;
-        // Track whether we've hidden the system cursor so we can restore it later
-        private bool _cursorHidden = false;
+
+        // Track last-painted state to avoid unnecessary repaints and reduce flicker
+        private float _lastPaintedPercentage = -1f;
+        private System.Drawing.Point _lastLocation = System.Drawing.Point.Empty;
+        private const float _minUpdateDelta = 1f; // percent
+
+        // Cycle/animation state: switch progress color each countdown cycle and alternate a background color when a cycle completes
+        private static int _cycleIndex = 0;
+        private Color _currentProgressColor = Color.FromArgb(230, 0, 200, 0); // default bright green
+        private Color _currentBackgroundFill = Color.FromArgb(0, 0, 0, 0); // transparent by default
+        private static readonly Color[] _progressColors = new[] {
+            Color.FromArgb(230, 0, 200, 0),    // green
+            Color.FromArgb(230, 255, 165, 0),  // orange
+            Color.FromArgb(230, 0, 120, 215)   // blue
+        };
+        private static readonly Color[] _backgroundCycleColors = new[] {
+            Color.FromArgb(120, 0, 200, 0),    // semi-transparent green
+            Color.FromArgb(120, 255, 165, 0),  // semi-transparent orange
+            Color.FromArgb(120, 0, 120, 215)   // semi-transparent blue
+        };
 
         // Win32 API to make form click-through
         [DllImport("user32.dll", SetLastError = true)]
@@ -64,43 +82,56 @@ namespace NaturalCommands
         {
             base.OnPaint(e);
 
-            var g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-
-            // Calculate center and radius
-            int centerX = Width / 2;
-            int centerY = Height / 2;
-            int radius = Math.Min(Width, Height) / 2 - 5;
-
-            // Draw semi-transparent background circle
-            using (var bgBrush = new SolidBrush(Color.FromArgb(160, 20, 20, 20)))
+            // Use BufferedGraphics to reduce flicker
+            var context = BufferedGraphicsManager.Current;
+            using (var buffer = context.Allocate(e.Graphics, this.ClientRectangle))
             {
-                g.FillEllipse(bgBrush, centerX - radius, centerY - radius, radius * 2, radius * 2);
-            }
+                var bg = buffer.Graphics;
+                bg.SmoothingMode = SmoothingMode.AntiAlias;
+                bg.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
 
-            // Draw darker progress arc (more visible from periphery)
-            if (_percentage > 0)
-            {
-                using (var progressPen = new Pen(Color.FromArgb(220, 180, 60, 0), 6))
+                // Clear buffer with the form BackColor (the transparency key) to ensure per-pixel transparency
+                // This avoids leftover black pixels when using BufferedGraphics + TransparencyKey.
+                bg.Clear(this.BackColor);
+                bg.CompositingMode = CompositingMode.SourceOver;
+
+                // Calculate center and radius
+                int centerX = Width / 2;
+                int centerY = Height / 2;
+                int radius = Math.Min(Width, Height) / 2 - 5;
+
+                // Draw outer ring (transparent center) with a neutral dim color so progress stands out
+                using (var ringPen = new Pen(Color.FromArgb(140, 40, 40, 40), 3))
                 {
-                    // Start at top (-90 degrees) and sweep clockwise
-                    float sweepAngle = (_percentage / 100f) * 360f;
-                    g.DrawArc(progressPen,
-                        centerX - radius + 3,
-                        centerY - radius + 3,
-                        (radius - 3) * 2,
-                        (radius - 3) * 2,
-                        -90, // Start at top
-                        sweepAngle);
+                    bg.DrawEllipse(ringPen, centerX - radius + 3, centerY - radius + 3, (radius - 3) * 2, (radius - 3) * 2);
                 }
 
-                // Draw a small center dot to give a clear 'cursor hotspot' visual when replacing the cursor
-                using (var dotBrush = new SolidBrush(Color.White))
+                // If the cycle has completed (full) draw a subtle filled background to indicate completion
+                if (_percentage >= 100 && _currentBackgroundFill.A > 0)
                 {
-                    int dotRadius = Math.Max(2, radius / 6);
-                    g.FillEllipse(dotBrush, centerX - dotRadius, centerY - dotRadius, dotRadius * 2, dotRadius * 2);
+                    using (var fillBrush = new SolidBrush(_currentBackgroundFill))
+                    {
+                        bg.FillEllipse(fillBrush, centerX - radius + 6, centerY - radius + 6, (radius - 6) * 2, (radius - 6) * 2);
+                    }
                 }
+
+                // Draw progress arc (bright accent) to clearly highlight progress
+                if (_percentage > 0)
+                {
+                    using (var progressPen = new Pen(_currentProgressColor, 4))
+                    {
+                        float sweepAngle = (_percentage / 100f) * 360f;
+                        bg.DrawArc(progressPen,
+                            centerX - radius + 3,
+                            centerY - radius + 3,
+                            (radius - 3) * 2,
+                            (radius - 3) * 2,
+                            -90,
+                            sweepAngle);
+                    }
+                }
+
+                buffer.Render(e.Graphics);
             }
         }
 
@@ -142,30 +173,21 @@ namespace NaturalCommands
                         NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] New form shown - Visible: {_instance.Visible}, Handle: {_instance.Handle}");
                     }
 
-                    // Update position and values - center overlay on the cursor to visually replace it
+                    // Update position and values - overlay is anchored at the specified point
                     _instance.Location = new Point(cursorPos.X - _instance.Width / 2, cursorPos.Y - _instance.Height / 2);
                     _instance._remainingMs = remainingMs;
+
+                    // Detect start of a new countdown cycle (percentage has moved from 0 to >0)
+                    bool startingCycle = _instance._percentage <= 0 && percentage > 0;
                     _instance._percentage = percentage;
 
-                    // Replace the system cursor while countdown is active
-                    if (_instance._percentage > 0)
+                    if (startingCycle)
                     {
-                        if (!_instance._cursorHidden)
-                        {
-                            Cursor.Hide();
-                            _instance._cursorHidden = true;
-                            NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Cursor hidden to replace system cursor during countdown");
-                        }
+                        _instance.StartNewCycle();
                     }
-                    else
-                    {
-                        if (_instance._cursorHidden)
-                        {
-                            Cursor.Show();
-                            _instance._cursorHidden = false;
-                            NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Cursor restored");
-                        }
-                    }
+
+                    // Keep system cursor visible so it can move independently of the overlay
+                    NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Cursor left visible while overlay is shown");
                     
                     NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Updated - Location: ({_instance.Location.X}, {_instance.Location.Y}), Visible: {_instance.Visible}, TopMost: {_instance.TopMost}");
                     
@@ -181,14 +203,42 @@ namespace NaturalCommands
                         _instance.TopMost = true;
                     }
                     
-                    // Force a refresh
-                    _instance.Invalidate();
-                    NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Invalidate called");
+                    // Only invalidate if percentage or location changed enough to avoid excess repaints (reduces flicker)
+                    if (Math.Abs(_instance._percentage - _instance._lastPaintedPercentage) < _minUpdateDelta && _instance.Location == _instance._lastLocation)
+                    {
+                        NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Skipping Invalidate - no significant visual change");
+                    }
+                    else
+                    {
+                        _instance.Invalidate();
+                        _instance._lastPaintedPercentage = _instance._percentage;
+                        _instance._lastLocation = _instance.Location;
+                        NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Invalidate called (pct: {_instance._percentage:F1}%, cycle: {_cycleIndex})");
+                    }
                 }
                 catch (Exception ex)
                 {
                     NaturalCommands.Helpers.Logger.LogError($"[Overlay] ERROR updating overlay: {ex.Message}\n{ex.StackTrace}");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Called when a new countdown cycle starts so the overlay can change colors between cycles.
+        /// </summary>
+        private void StartNewCycle()
+        {
+            try
+            {
+                _cycleIndex = (_cycleIndex + 1) % _progressColors.Length;
+                _currentProgressColor = _progressColors[_cycleIndex];
+                // Choose the background color for when this cycle completes
+                _currentBackgroundFill = _backgroundCycleColors[_cycleIndex];
+                NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Starting new color cycle {_cycleIndex} - progress color: {_currentProgressColor}, bg fill: {_currentBackgroundFill}");
+            }
+            catch (Exception ex)
+            {
+                NaturalCommands.Helpers.Logger.LogError($"[Overlay] StartNewCycle error: {ex.Message}");
             }
         }
 
@@ -210,13 +260,6 @@ namespace NaturalCommands
                 {
                     try
                     {
-                        // Restore cursor if we had hidden it
-                        if (_instance._cursorHidden)
-                        {
-                            Cursor.Show();
-                            _instance._cursorHidden = false;
-                            NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Cursor restored during HideOverlay");
-                        }
 
                         _instance.Hide();
                     }
@@ -246,13 +289,6 @@ namespace NaturalCommands
                 {
                     try
                     {
-                        // Ensure cursor is restored
-                        if (_instance._cursorHidden)
-                        {
-                            Cursor.Show();
-                            _instance._cursorHidden = false;
-                            NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Cursor restored during CloseOverlay");
-                        }
 
                         _instance.Close();
                         _instance.Dispose();
