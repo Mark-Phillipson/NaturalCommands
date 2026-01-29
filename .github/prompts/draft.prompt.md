@@ -1,3 +1,2 @@
 
-
-Regarding the auto click functionality please can we Add the ability to change the wait time by voice so we need a voice command auto click faster and another one auto click slower that would change the speed in five hundred millisecond chunks until it reaches the minimum or maximum allowed
+ please can we add a skill to this project for copilot to useThe skill should include all the ways to run this application build the application and run in listen mode and should be located in the Github directory along with copilot instructions in the default folder structure for skills in copilot

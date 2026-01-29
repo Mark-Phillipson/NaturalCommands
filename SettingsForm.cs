@@ -79,6 +79,9 @@ namespace NaturalCommands
         private Button btnReloadConfigs = null!;
         private Button btnOpenSettingsFolder = null!;
 
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        private static extern bool DestroyIcon(IntPtr handle);
+
         public SettingsForm()
         {
             InitializeForm();
@@ -105,9 +108,11 @@ namespace NaturalCommands
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 2,
+                RowCount = 3,
                 Padding = new Padding(10)
             };
+            // Header row (absolute), content row (percent), footer row (absolute)
+            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 60F));
             mainPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
             
@@ -119,6 +124,48 @@ namespace NaturalCommands
                 BackColor = DisplayMessage.SharedBackColor,
                 ForeColor = DisplayMessage.SharedForeColor
             };
+            
+            // Create header panel with settings icon and title
+            var headerPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Height = 60,
+                BackColor = DisplayMessage.SharedBackColor
+            };
+
+            var iconImg = MenuIconGenerator.CreateSettingsImage(48);
+            var pic = new PictureBox
+            {
+                Image = iconImg,
+                SizeMode = PictureBoxSizeMode.CenterImage,
+                Size = new Size(48, 48),
+                Location = new Point(10, 6),
+                BackColor = Color.Transparent
+            };
+            headerPanel.Controls.Add(pic);
+
+            var titleLabel = new Label
+            {
+                Text = "Settings",
+                Font = new Font(DisplayMessage.SharedFont.FontFamily, 16, FontStyle.Bold),
+                AutoSize = true,
+                Location = new Point(70, 18),
+                ForeColor = DisplayMessage.SharedForeColor,
+                BackColor = Color.Transparent
+            };
+            headerPanel.Controls.Add(titleLabel);
+
+            // Set window icon from the settings image
+            try
+            {
+                using (var bmp = new Bitmap(MenuIconGenerator.CreateSettingsImage(32)))
+                {
+                    IntPtr hIcon = bmp.GetHicon();
+                    Icon = (Icon)Icon.FromHandle(hIcon).Clone();
+                    DestroyIcon(hIcon);
+                }
+            }
+            catch { }
             
             // Create button panel
             var buttonPanel = new FlowLayoutPanel
@@ -137,8 +184,10 @@ namespace NaturalCommands
             buttonPanel.Controls.Add(btnApply);
             buttonPanel.Controls.Add(btnSave);
             
-            mainPanel.Controls.Add(tabControl, 0, 0);
-            mainPanel.Controls.Add(buttonPanel, 0, 1);
+            // Add header, main content, and footer to main panel
+            mainPanel.Controls.Add(headerPanel, 0, 0);
+            mainPanel.Controls.Add(tabControl, 0, 1);
+            mainPanel.Controls.Add(buttonPanel, 0, 2);
             
             Controls.Add(mainPanel);
         }
