@@ -1,35 +1,162 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 namespace NaturalCommands.Helpers
 {
     // Handles window management actions (maximize, move, always on top, etc.)
     public class WindowManager
     {
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WINDOWPLACEMENT
+        {
+            public int length;
+            public int flags;
+            public int showCmd;
+            public System.Drawing.Point ptMinPosition;
+            public System.Drawing.Point ptMaxPosition;
+            public System.Drawing.Rectangle rcNormalPosition;
+        }
+
+        private const int SW_MAXIMIZE = 3;
+        private const int SW_SHOWNORMAL = 1;
+        private const int WS_MAXIMIZE = 0x01000000;
+
         public static string ExecuteMoveWindow(MoveWindowAction move)
         {
             // Get active window handle
             IntPtr hWnd = NaturalCommands.Commands.GetForegroundWindow();
+            
+            // Log the window handle info for debugging
+            var className = new System.Text.StringBuilder(256);
+            Win32ApiHelper.GetClassName(hWnd, className, className.Capacity);
+            Logger.LogDebug($"WindowManager: hWnd={hWnd}, ClassName={className}");
+            
             // Maximize logic
             if ((move.Position == "center" || move.Position == null) && move.WidthPercent == 100 && move.HeightPercent == 100 && move.Monitor != "next")
             {
+                // Check if this is our own process window (console) - if so, skip maximizing it
+                uint processId = 0;
+                GetWindowThreadProcessId(hWnd, out processId);
+                uint currentProcessId = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                Logger.LogDebug($"WindowManager: Window ProcessId={processId}, CurrentProcessId={currentProcessId}");
+                
+                if (processId == currentProcessId)
+                {
+                    Logger.LogWarning("WindowManager: Attempted to maximize own process window - this is likely incorrect");
+                    return "Cannot maximize: the foreground window is the NaturalCommands process itself.";
+                }
+                
                 Win32ApiHelper.SetForegroundWindow(hWnd);
                 int style = Win32ApiHelper.GetWindowLong(hWnd, Win32ApiHelper.GWL_STYLE);
                 bool canMaximize = (style & Win32ApiHelper.WS_MAXIMIZEBOX) != 0;
-                var className = new System.Text.StringBuilder(256);
-                Win32ApiHelper.GetClassName(hWnd, className, className.Capacity);
+                Logger.LogDebug($"WindowManager: style={style:X8}, canMaximize={canMaximize}");
+                
                 if (!canMaximize)
                 {
                     return "Window cannot be maximized (missing maximize button).";
                 }
-                const int SW_MAXIMIZE = 3;
-                bool success = Win32ApiHelper.ShowWindow(hWnd, SW_MAXIMIZE);
-                if (!success)
+                
+                // Get monitor working area - use Screen class as fallback since GetMonitorInfo can fail
+                Win32ApiHelper.RECT windowRect = new Win32ApiHelper.RECT();
+                Win32ApiHelper.GetWindowRect(hWnd, ref windowRect);
+                
+                System.Drawing.Rectangle workArea;
+                try
                 {
-                    int error = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
-                    return $"Failed to maximize window. Win32 error: {error}";
+                    var screen = Screen.FromHandle(hWnd);
+                    workArea = screen.WorkingArea;
                 }
-                return "Window maximized.";
+                catch
+                {
+                    // Fallback to primary screen
+                    workArea = Screen.PrimaryScreen?.WorkingArea ?? new System.Drawing.Rectangle(0, 0, 1920, 1080);
+                }
+                
+                Logger.LogDebug($"WindowManager: Window rect=({windowRect.Left},{windowRect.Top},{windowRect.Right},{windowRect.Bottom})");
+                Logger.LogDebug($"WindowManager: Work area=({workArea.Left},{workArea.Top},{workArea.Right},{workArea.Bottom})");
+                
+                // A window is truly maximized if it covers (or exceeds) the working area
+                // Allow a few pixels tolerance for window borders
+                const int tolerance = 20;
+                bool isVisuallyMaximized = 
+                    windowRect.Left <= workArea.Left + tolerance &&
+                    windowRect.Top <= workArea.Top + tolerance &&
+                    windowRect.Right >= workArea.Right - tolerance &&
+                    windowRect.Bottom >= workArea.Bottom - tolerance;
+                
+                Logger.LogDebug($"WindowManager: isVisuallyMaximized={isVisuallyMaximized}");
+                
+                if (isVisuallyMaximized)
+                {
+                    return "Window is already maximized.";
+                }
+                
+                // Try ShowWindow first
+                Win32ApiHelper.ShowWindow(hWnd, SW_MAXIMIZE);
+                
+                // Give the window a moment to process
+                System.Threading.Thread.Sleep(50);
+                
+                // Verify the window was actually maximized by checking rect again
+                Win32ApiHelper.RECT windowRectAfter = new Win32ApiHelper.RECT();
+                Win32ApiHelper.GetWindowRect(hWnd, ref windowRectAfter);
+                bool isMaximizedAfter = 
+                    windowRectAfter.Left <= workArea.Left + tolerance &&
+                    windowRectAfter.Top <= workArea.Top + tolerance &&
+                    windowRectAfter.Right >= workArea.Right - tolerance &&
+                    windowRectAfter.Bottom >= workArea.Bottom - tolerance;
+                Logger.LogDebug($"WindowManager: After ShowWindow rect=({windowRectAfter.Left},{windowRectAfter.Top},{windowRectAfter.Right},{windowRectAfter.Bottom}), isMaximizedAfter={isMaximizedAfter}");
+                
+                if (isMaximizedAfter)
+                {
+                    return "Window maximized.";
+                }
+                
+                // ShowWindow didn't work (common with modern apps like Windows Terminal)
+                // Fall back to keyboard shortcut: Win+Up (may need to press twice for snap->maximize)
+                Logger.LogDebug("WindowManager: ShowWindow failed, trying Win+Up keyboard shortcut");
+                try
+                {
+                    var sim = new WindowsInput.InputSimulator();
+                    
+                    // Press Win+Up up to 2 times (first may snap to top, second maximizes)
+                    for (int attempt = 0; attempt < 2; attempt++)
+                    {
+                        sim.Keyboard.ModifiedKeyStroke(
+                            WindowsInput.Native.VirtualKeyCode.LWIN,
+                            WindowsInput.Native.VirtualKeyCode.UP);
+                        
+                        // Give it a moment to process
+                        System.Threading.Thread.Sleep(150);
+                        
+                        // Check if maximized
+                        Win32ApiHelper.GetWindowRect(hWnd, ref windowRectAfter);
+                        isMaximizedAfter = 
+                            windowRectAfter.Left <= workArea.Left + tolerance &&
+                            windowRectAfter.Top <= workArea.Top + tolerance &&
+                            windowRectAfter.Right >= workArea.Right - tolerance &&
+                            windowRectAfter.Bottom >= workArea.Bottom - tolerance;
+                        Logger.LogDebug($"WindowManager: After Win+Up (attempt {attempt + 1}) rect=({windowRectAfter.Left},{windowRectAfter.Top},{windowRectAfter.Right},{windowRectAfter.Bottom}), isMaximizedAfter={isMaximizedAfter}");
+                        
+                        if (isMaximizedAfter)
+                        {
+                            return "Window maximized.";
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"WindowManager: Win+Up keyboard shortcut failed: {ex.Message}");
+                }
+                
+                return "Failed to maximize window.";
             }
             // Move window to left half
             if (move.Position == "left" && move.WidthPercent == 50 && move.HeightPercent == 100)
