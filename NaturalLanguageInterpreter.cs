@@ -857,6 +857,18 @@ namespace NaturalCommands
                 }
             }
 
+            // Windows Explorer specific commands
+            if (wtProcName == "explorer")
+            {
+                // Check for Windows Explorer shortcuts (includes UI Automation commands with "uia:" prefix)
+                if (CommandDefinitions.WindowsExplorerShortcuts.TryGetValue(text, out var explorerShortcut))
+                {
+                    var action = new WindowsExplorerShortcutAction(explorerShortcut, text);
+                    NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched Windows Explorer command: '{text}' -> '{explorerShortcut}'");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                }
+            }
+
             // Open mapped applications (expanded) 
             // Use WebsiteNavigator for website navigation commands
             if (WebsiteNavigator.TryParseWebsiteCommand(text, out var url))
@@ -1296,6 +1308,64 @@ namespace NaturalCommands
                 NaturalCommands.Helpers.Logger.LogDebug($"ExecuteActionAsync: Windows Terminal shortcut: '{wtAction.CommandText}' -> '{wtAction.Shortcut}'");
                 var result = NaturalCommands.Helpers.KeySender.SendShortcut(wtAction.Shortcut);
                 return $"Windows Terminal: {wtAction.CommandText} ({result})";
+            }
+            // Windows Explorer shortcut action
+            else if (action is WindowsExplorerShortcutAction explorerAction)
+            {
+                AppendLog($"[DEBUG] ExecuteActionAsync: Executing WindowsExplorerShortcutAction ('{explorerAction.CommandText}' -> '{explorerAction.Shortcut}')\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"ExecuteActionAsync: Windows Explorer shortcut: '{explorerAction.CommandText}' -> '{explorerAction.Shortcut}'");
+                
+                // Small delay to ensure Explorer window has focus before sending shortcut
+                System.Threading.Thread.Sleep(100);
+                
+                // Check if this is a UI Automation command (prefix "uia:")
+                if (explorerAction.Shortcut.StartsWith("uia:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var uiaCommand = explorerAction.Shortcut.Substring(4).ToLowerInvariant();
+                    bool success = false;
+                    
+                    switch (uiaCommand)
+                    {
+                        case "view":
+                            success = NaturalCommands.Helpers.UIAutomationHelper.ClickExplorerViewButton();
+                            break;
+                        case "sort":
+                            success = NaturalCommands.Helpers.UIAutomationHelper.ClickExplorerSortButton();
+                            break;
+                        case "new":
+                            success = NaturalCommands.Helpers.UIAutomationHelper.ClickExplorerNewButton();
+                            break;
+                        default:
+                            NaturalCommands.Helpers.Logger.LogError($"Unknown UI Automation command: {uiaCommand}");
+                            break;
+                    }
+                    
+                    if (success)
+                    {
+                        return $"Windows Explorer: Opened {uiaCommand} menu";
+                    }
+                    else
+                    {
+                        return $"Windows Explorer: Failed to open {uiaCommand} menu - element not found";
+                    }
+                }
+                // Check if shortcut contains commas (menu sequence like "shift+f10,v,x")
+                else if (explorerAction.Shortcut.Contains(','))
+                {
+                    // This is a menu sequence - send each key separately with delays
+                    var keys = explorerAction.Shortcut.Split(',').Select(k => k.Trim()).ToArray();
+                    foreach (var key in keys)
+                    {
+                        NaturalCommands.Helpers.KeySender.SendShortcut(key);
+                        System.Threading.Thread.Sleep(200); // Wait for menu to open
+                    }
+                    return $"Windows Explorer: {explorerAction.CommandText} (menu sequence)";
+                }
+                else
+                {
+                    var result = NaturalCommands.Helpers.KeySender.SendShortcut(explorerAction.Shortcut);
+                    return $"Windows Explorer: {explorerAction.CommandText} ({result})";
+                }
             }
             // Run terminal command action (types command and presses Enter)
             else if (action is RunTerminalCommandAction terminalCmd)

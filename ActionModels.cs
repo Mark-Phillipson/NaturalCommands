@@ -35,4 +35,6 @@ namespace NaturalCommands
     public record WindowsTerminalShortcutAction(string Shortcut, string CommandText) : ActionBase;
     // Run a terminal command (types command text and presses Enter)
     public record RunTerminalCommandAction(string Command, string Description) : ActionBase;
+    // Windows Explorer specific shortcut action
+    public record WindowsExplorerShortcutAction(string Shortcut, string CommandText) : ActionBase;
 }

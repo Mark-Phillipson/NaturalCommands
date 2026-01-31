@@ -271,6 +271,174 @@ namespace NaturalCommands
             { "stop running", "ctrl+c" },
         };
 
+        // Windows Explorer specific commands - maps natural language to keyboard shortcuts
+        public static readonly List<(string Command, string Description)> WindowsExplorerCommands = new()
+        {
+            // UI Automation commands - open menus for manual navigation
+            ("view menu", "Open the View dropdown (use arrows to navigate)"),
+            ("sort menu", "Open the Sort dropdown (use arrows to navigate)"),
+            ("new menu", "Open the New dropdown (use arrows to navigate)"),
+            
+            // Navigation
+            ("go back", "Navigate back (Alt+Left)"),
+            ("go forward", "Navigate forward (Alt+Right)"),
+            ("go up", "Navigate to parent folder (Alt+Up)"),
+            ("home", "Go to Quick Access/Home (Alt+Home)"),
+            
+            // Panes
+            ("preview pane", "Toggle preview pane (Alt+P)"),
+            ("details pane", "Toggle details pane (Alt+Shift+P)"),
+            
+            // Selection
+            ("select all", "Select all items (Ctrl+A)"),
+            
+            // File operations
+            ("new folder", "Create new folder (Ctrl+Shift+N)"),
+            ("rename", "Rename selected item (F2)"),
+            ("delete", "Delete selected items (Delete)"),
+            ("permanent delete", "Permanently delete (Shift+Delete)"),
+            ("properties", "Show properties (Alt+Enter)"),
+            ("copy path", "Copy path (Ctrl+Shift+C)"),
+            ("copy", "Copy (Ctrl+C)"),
+            ("cut", "Cut (Ctrl+X)"),
+            ("paste", "Paste (Ctrl+V)"),
+            
+            // Address bar
+            ("address bar", "Focus the address bar (Alt+D)"),
+            
+            // Search
+            ("search", "Focus search box (Ctrl+E)"),
+            
+            // Other
+            ("refresh", "Refresh the current view (F5)"),
+            ("new window", "Open new window (Ctrl+N)"),
+            ("new tab", "Open new tab (Ctrl+T)"),
+            ("close tab", "Close current tab (Ctrl+W)"),
+            ("undo", "Undo (Ctrl+Z)"),
+            ("redo", "Redo (Ctrl+Y)"),
+            ("full screen", "Toggle full screen (F11)"),
+            ("show hidden files", "Toggle hidden files (Ctrl+H)"),
+        };
+
+        // Maps natural language commands to Windows Explorer shortcuts
+        // Windows 11 - uses UI Automation for View/Sort buttons, keyboard for other commands
+        public static readonly Dictionary<string, string> WindowsExplorerShortcuts = new(StringComparer.OrdinalIgnoreCase)
+        {
+            // UI Automation commands - special prefix "uia:" indicates to use UI Automation
+            { "view menu", "uia:view" },
+            { "open view menu", "uia:view" },
+            { "show view menu", "uia:view" },
+            { "view options", "uia:view" },
+            { "view", "uia:view" },
+            
+            { "sort menu", "uia:sort" },
+            { "open sort menu", "uia:sort" },
+            { "sort options", "uia:sort" },
+            { "sort", "uia:sort" },
+            
+            { "new menu", "uia:new" },
+            { "open new menu", "uia:new" },
+            { "new options", "uia:new" },
+            { "show new menu", "uia:new" },
+            
+            // Navigation - these work directly
+            { "go back", "alt+left" },
+            { "back", "alt+left" },
+            { "navigate back", "alt+left" },
+            { "previous folder", "alt+left" },
+            
+            { "go forward", "alt+right" },
+            { "forward", "alt+right" },
+            { "navigate forward", "alt+right" },
+            { "next folder", "alt+right" },
+            
+            { "go up", "alt+up" },
+            { "parent folder", "alt+up" },
+            { "go to parent", "alt+up" },
+            { "navigate up", "alt+up" },
+            { "up one level", "alt+up" },
+            
+            // Panes - these work
+            { "preview pane", "alt+p" },
+            { "show preview pane", "alt+p" },
+            { "toggle preview pane", "alt+p" },
+            { "preview", "alt+p" },
+            
+            { "details pane", "alt+shift+p" },
+            { "show details pane", "alt+shift+p" },
+            { "toggle details pane", "alt+shift+p" },
+            
+            // Selection
+            { "select all", "ctrl+a" },
+            { "select everything", "ctrl+a" },
+            
+            // File operations
+            { "new folder", "ctrl+shift+n" },
+            { "create folder", "ctrl+shift+n" },
+            { "create new folder", "ctrl+shift+n" },
+            
+            { "rename", "f2" },
+            { "rename file", "f2" },
+            { "rename item", "f2" },
+            
+            { "delete", "delete" },
+            { "delete file", "delete" },
+            { "delete item", "delete" },
+            
+            { "permanent delete", "shift+delete" },
+            { "permanently delete", "shift+delete" },
+            
+            { "properties", "alt+enter" },
+            { "show properties", "alt+enter" },
+            { "file properties", "alt+enter" },
+            
+            { "copy path", "ctrl+shift+c" },
+            { "copy file path", "ctrl+shift+c" },
+            { "copy as path", "ctrl+shift+c" },
+            
+            { "copy", "ctrl+c" },
+            { "cut", "ctrl+x" },
+            { "paste", "ctrl+v" },
+            
+            // Address bar
+            { "address bar", "alt+d" },
+            { "focus address bar", "alt+d" },
+            { "go to address", "alt+d" },
+            { "edit path", "alt+d" },
+            
+            // Search
+            { "search", "ctrl+e" },
+            { "find", "ctrl+f" },
+            { "search files", "ctrl+e" },
+            
+            // Refresh
+            { "refresh", "f5" },
+            { "reload", "f5" },
+            
+            // New window/tab
+            { "new window", "ctrl+n" },
+            { "new tab", "ctrl+t" },
+            { "close tab", "ctrl+w" },
+            
+            // Undo/Redo
+            { "undo", "ctrl+z" },
+            { "redo", "ctrl+y" },
+            
+            // Full screen
+            { "full screen", "f11" },
+            { "fullscreen", "f11" },
+            
+            // Quick access/Home
+            { "home", "alt+home" },
+            { "go home", "alt+home" },
+            { "quick access", "alt+home" },
+            
+            // Hidden files toggle
+            { "show hidden files", "ctrl+h" },
+            { "hidden files", "ctrl+h" },
+            { "toggle hidden files", "ctrl+h" },
+        };
+
         // .NET CLI commands that can be run in Windows Terminal
         public static readonly List<(string Command, string TerminalCommand, string Description)> DotNetCommands = new()
         {

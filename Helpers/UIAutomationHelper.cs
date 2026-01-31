@@ -354,5 +354,180 @@ namespace NaturalCommands.Helpers
                 return false;
             }
         }
+
+        /// <summary>
+        /// Finds and clicks the View button/dropdown in Windows Explorer command bar.
+        /// Returns true if successful.
+        /// </summary>
+        public static bool ClickExplorerViewButton()
+        {
+            try
+            {
+                IntPtr hwnd = GetForegroundWindow();
+                if (hwnd == IntPtr.Zero)
+                {
+                    Logger.LogError("ClickExplorerViewButton: Could not get foreground window.");
+                    return false;
+                }
+
+                var rootElement = AutomationElement.FromHandle(hwnd);
+                if (rootElement == null)
+                {
+                    Logger.LogError("ClickExplorerViewButton: Could not get root element.");
+                    return false;
+                }
+
+                // Search for the View button - it's typically a SplitButton or Button with name "View"
+                var viewButton = FindElementByName(rootElement, "View", 0, 15);
+                if (viewButton != null)
+                {
+                    Logger.LogDebug($"Found View button: {viewButton.Current.Name}, ControlType: {viewButton.Current.ControlType.ProgrammaticName}");
+                    
+                    // For SplitButton, we need to expand it (click the dropdown part)
+                    if (TryExpandElement(viewButton))
+                    {
+                        Logger.LogDebug("Successfully expanded View button.");
+                        return true;
+                    }
+                    
+                    // Fallback: try clicking it
+                    if (ClickElement(viewButton))
+                    {
+                        Logger.LogDebug("Successfully clicked View button.");
+                        return true;
+                    }
+                }
+
+                Logger.LogError("ClickExplorerViewButton: Could not find View button.");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"ClickExplorerViewButton error: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Finds and clicks the Sort button/dropdown in Windows Explorer command bar.
+        /// </summary>
+        public static bool ClickExplorerSortButton()
+        {
+            try
+            {
+                IntPtr hwnd = GetForegroundWindow();
+                if (hwnd == IntPtr.Zero) return false;
+
+                var rootElement = AutomationElement.FromHandle(hwnd);
+                if (rootElement == null) return false;
+
+                var sortButton = FindElementByName(rootElement, "Sort", 0, 15);
+                if (sortButton != null)
+                {
+                    Logger.LogDebug($"Found Sort button: {sortButton.Current.Name}");
+                    if (TryExpandElement(sortButton) || ClickElement(sortButton))
+                    {
+                        return true;
+                    }
+                }
+
+                Logger.LogError("ClickExplorerSortButton: Could not find Sort button.");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"ClickExplorerSortButton error: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Finds and clicks the New button/dropdown in Windows Explorer command bar.
+        /// </summary>
+        public static bool ClickExplorerNewButton()
+        {
+            try
+            {
+                IntPtr hwnd = GetForegroundWindow();
+                if (hwnd == IntPtr.Zero) return false;
+
+                var rootElement = AutomationElement.FromHandle(hwnd);
+                if (rootElement == null) return false;
+
+                var newButton = FindElementByName(rootElement, "New", 0, 15);
+                if (newButton != null)
+                {
+                    Logger.LogDebug($"Found New button: {newButton.Current.Name}");
+                    if (TryExpandElement(newButton) || ClickElement(newButton))
+                    {
+                        return true;
+                    }
+                }
+
+                Logger.LogError("ClickExplorerNewButton: Could not find New button.");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"ClickExplorerNewButton error: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Tries to expand an element using ExpandCollapse pattern (for dropdowns/split buttons).
+        /// </summary>
+        private static bool TryExpandElement(AutomationElement element)
+        {
+            try
+            {
+                var expandPattern = element.GetCurrentPattern(ExpandCollapsePattern.Pattern) as ExpandCollapsePattern;
+                if (expandPattern != null)
+                {
+                    expandPattern.Expand();
+                    return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Recursively searches for an element by name (case-insensitive partial match).
+        /// </summary>
+        private static AutomationElement? FindElementByName(AutomationElement root, string name, int depth, int maxDepth)
+        {
+            if (root == null || depth > maxDepth) return null;
+
+            try
+            {
+                string elementName = root.Current.Name ?? "";
+                if (elementName.Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Check if it's likely a button/clickable
+                    var ct = root.Current.ControlType;
+                    if (ct == ControlType.Button || ct == ControlType.SplitButton || 
+                        ct == ControlType.MenuItem || ct == ControlType.ComboBox)
+                    {
+                        return root;
+                    }
+                }
+
+                // Walk children
+                var walker = TreeWalker.ControlViewWalker;
+                var child = walker.GetFirstChild(root);
+                while (child != null)
+                {
+                    var found = FindElementByName(child, name, depth + 1, maxDepth);
+                    if (found != null) return found;
+                    
+                    try { child = walker.GetNextSibling(child); }
+                    catch { child = null; }
+                }
+            }
+            catch { }
+
+            return null;
+        }
     }
 }

@@ -125,6 +125,8 @@ namespace DictationBoxMSP
                 try { items.AddRange(NaturalCommands.NaturalLanguageInterpreter.AvailableCommands); } catch { }
                 try { items.AddRange(NaturalCommands.NaturalLanguageInterpreter.VisualStudioCommands); } catch { }
                 try { items.AddRange(NaturalCommands.NaturalLanguageInterpreter.VSCodeCommands); } catch { }
+                try { items.AddRange(NaturalCommands.CommandDefinitions.WindowsTerminalCommands); } catch { }
+                try { items.AddRange(NaturalCommands.CommandDefinitions.WindowsExplorerCommands); } catch { }
 
                 // Deduplicate by Command+Description
                 var distinct = items
@@ -189,6 +191,16 @@ namespace DictationBoxMSP
             try
             {
                 items.AddRange(NaturalCommands.NaturalLanguageInterpreter.VSCodeCommands);
+            }
+            catch { }
+            try
+            {
+                items.AddRange(NaturalCommands.CommandDefinitions.WindowsTerminalCommands);
+            }
+            catch { }
+            try
+            {
+                items.AddRange(NaturalCommands.CommandDefinitions.WindowsExplorerCommands);
             }
             catch { }
             // Diagnostic logging: write combined items count and presence of 'natural dictate'
