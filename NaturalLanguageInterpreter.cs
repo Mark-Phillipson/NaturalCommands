@@ -998,7 +998,7 @@ namespace NaturalCommands
             }
 
             var showDesktopPatterns = new[] {
-                "show desktop", "desktop letters", "show desktop letters", "show desktop icons", "desktop icons", "focus desktop"
+                "show desktop", "show the desktop", "desktop letters", "show desktop letters", "show desktop icons", "desktop icons", "focus desktop"
             };
             if (showDesktopPatterns.Any(p => text.Contains(p)))
             {

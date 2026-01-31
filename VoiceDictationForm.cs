@@ -43,6 +43,11 @@ namespace DictationBoxMSP
         private Color savedBottomPanelBackColor;
         private double savedOpacity = 1.0;
 
+        // Command history for terminal-like up/down navigation
+        private List<string> commandHistory = new List<string>();
+        private int historyIndex = -1;
+        private string currentInput = string.Empty; // Saves current input when navigating history
+
         public string ResultText => txtInput.Text ?? string.Empty;
 
         /// <summary>
@@ -327,6 +332,7 @@ namespace DictationBoxMSP
             this.KeyDown += VoiceDictationForm_KeyDown;
 
             txtInput.TextChanged += TxtInput_TextChanged;
+            txtInput.KeyDown += TxtInput_KeyDown;
         }
 
         private void ApplySharedStyles()
@@ -463,6 +469,15 @@ namespace DictationBoxMSP
 
             try
             {
+                // Add to command history (avoid duplicating the last command)
+                if (commandHistory.Count == 0 || commandHistory[commandHistory.Count - 1] != commandText)
+                {
+                    commandHistory.Add(commandText);
+                }
+                // Reset history navigation
+                historyIndex = -1;
+                currentInput = string.Empty;
+
                 // Show visual feedback that command is being processed
                 btnSendCommand.Enabled = false;
                 var originalText = btnSendCommand.Text;
@@ -736,6 +751,59 @@ namespace DictationBoxMSP
                 this.DialogResult = DialogResult.Cancel;
                 this.Close();
             }
+        }
+
+        private void TxtInput_KeyDown(object? sender, KeyEventArgs e)
+        {
+            try
+            {
+                // Handle Up arrow - go back in history
+                if (e.KeyCode == Keys.Up && !e.Alt && !e.Control)
+                {
+                    if (commandHistory.Count == 0) return;
+
+                    // If we're at the end (not browsing history yet), save current input
+                    if (historyIndex == -1)
+                    {
+                        currentInput = txtInput.Text ?? string.Empty;
+                        historyIndex = commandHistory.Count - 1;
+                    }
+                    else if (historyIndex > 0)
+                    {
+                        historyIndex--;
+                    }
+
+                    if (historyIndex >= 0 && historyIndex < commandHistory.Count)
+                    {
+                        txtInput.Text = commandHistory[historyIndex];
+                        txtInput.SelectionStart = txtInput.Text.Length;
+                    }
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+                // Handle Down arrow - go forward in history
+                else if (e.KeyCode == Keys.Down && !e.Alt && !e.Control)
+                {
+                    if (commandHistory.Count == 0 || historyIndex == -1) return;
+
+                    if (historyIndex < commandHistory.Count - 1)
+                    {
+                        historyIndex++;
+                        txtInput.Text = commandHistory[historyIndex];
+                        txtInput.SelectionStart = txtInput.Text.Length;
+                    }
+                    else
+                    {
+                        // We've gone past the end, restore the current input
+                        historyIndex = -1;
+                        txtInput.Text = currentInput;
+                        txtInput.SelectionStart = txtInput.Text.Length;
+                    }
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+            }
+            catch { }
         }
 
         private List<string> LoadMarqueeItems()
