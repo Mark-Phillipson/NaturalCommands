@@ -1213,20 +1213,34 @@ namespace NaturalCommands
                     return $"Current app '{procName}' is not supported for 'close tab'.";
                 }
             }
-            // Open voice dictation form action: show form, then interpret & execute returned text
+            // Open voice dictation form action: show form, process commands as they're sent
             else if (action is OpenVoiceDictationFormAction dictAction)
             {
                 try
                 {
-                    var text = NaturalCommands.Helpers.VoiceDictationHelper.ShowVoiceDictation(dictAction.TimeoutMs);
-                    if (string.IsNullOrWhiteSpace(text))
-                        return "Dictation cancelled or empty.";
-                    // Interpret the dictated text and execute resulting action(s)
-                    var interpretedTask = InterpretAsync(text);
-                    var interpreted = interpretedTask?.Result;
-                    if (interpreted == null)
-                        return "No action interpreted from dictated text.";
-                    return ExecuteActionAsync(interpreted);
+                    string lastResult = "Voice dictation form opened.";
+                    NaturalCommands.Helpers.VoiceDictationHelper.ShowVoiceDictation(dictAction.TimeoutMs, (text) =>
+                    {
+                        try
+                        {
+                            if (string.IsNullOrWhiteSpace(text))
+                                return;
+                            // Apply word replacements
+                            text = NaturalCommands.Helpers.WordReplacementHelper.ApplyWordReplacements(text);
+                            // Interpret the dictated text and execute resulting action(s)
+                            var interpretedTask = InterpretAsync(text);
+                            var interpreted = interpretedTask?.Result;
+                            if (interpreted != null)
+                            {
+                                lastResult = ExecuteActionAsync(interpreted);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            AppendLog($"[ERROR] Command execution failed: {ex.Message}\n");
+                        }
+                    });
+                    return lastResult;
                 }
                 catch (Exception ex)
                 {

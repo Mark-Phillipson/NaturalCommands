@@ -11,6 +11,7 @@ using System.Media;
 using WindowsInput;
 using WindowsInput.Native;
 using NaturalCommands.Helpers;
+using NaturalCommands.Models;
 
 namespace DictationBoxMSP
 {
@@ -44,6 +45,11 @@ namespace DictationBoxMSP
 
         public string ResultText => txtInput.Text ?? string.Empty;
 
+        /// <summary>
+        /// Event fired when user sends a command. The form stays open for additional commands.
+        /// </summary>
+        public event EventHandler<string>? CommandSent;
+
         public VoiceDictationForm(int timeoutMs = -1, bool autoStartDictation = true, bool autoDetectStop = false)
         {
             this.timeoutMs = timeoutMs;
@@ -52,7 +58,7 @@ namespace DictationBoxMSP
             InitializeComponents();
             ApplySharedStyles();
 
-            // Default to opaque (non-transparent) window. Preserve current state so Toggle can restore later.
+            // Apply transparent setting from AppSettings if enabled
             try
             {
                 // Preserve values so Toggle can restore them later
@@ -60,9 +66,25 @@ namespace DictationBoxMSP
                 savedTxtInputBackColor = txtInput.BackColor;
                 savedBottomPanelBackColor = bottomPanel.BackColor;
 
-                // Start opaque by default
-                isBackgroundTransparent = false;
-                try { btnToggleTransparent.Text = "Toggle Trans&parent"; } catch { }
+                // Check if user wants to start in transparent mode
+                bool startTransparent = false;
+                try { startTransparent = AppSettings.Instance.VoiceDictation.StartTransparent; } catch { }
+
+                if (startTransparent)
+                {
+                    // Apply transparency immediately
+                    this.Opacity = 0.65;
+                    txtInput.BackColor = DisplayMessage.SharedBackColor;
+                    bottomPanel.BackColor = DisplayMessage.SharedBackColor;
+                    isBackgroundTransparent = true;
+                    try { btnToggleTransparent.Text = "Disable Trans&parent"; } catch { }
+                }
+                else
+                {
+                    // Start opaque by default
+                    isBackgroundTransparent = false;
+                    try { btnToggleTransparent.Text = "Toggle Trans&parent"; } catch { }
+                }
             }
             catch { }
 
@@ -430,11 +452,67 @@ namespace DictationBoxMSP
             this.Close();
         }
 
-        private void BtnSendCommand_Click(object? sender, EventArgs e)
+        private async void BtnSendCommand_Click(object? sender, EventArgs e)
         {
-            // Explicit send command - behaves like Submit but kept as a distinct action
-            this.DialogResult = DialogResult.OK;
-            this.Close();
+            var commandText = txtInput.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(commandText))
+            {
+                txtInput.Focus();
+                return;
+            }
+
+            try
+            {
+                // Show visual feedback that command is being processed
+                btnSendCommand.Enabled = false;
+                var originalText = btnSendCommand.Text;
+                btnSendCommand.Text = "Sending...";
+                btnSendCommand.Refresh();
+
+                // Show transient feedback
+                if (lblTransient != null)
+                {
+                    lblTransient.Text = $"Sending: {(commandText.Length > 50 ? commandText.Substring(0, 50) + "..." : commandText)}";
+                    lblTransient.BackColor = Color.DodgerBlue;
+                    lblTransient.ForeColor = Color.White;
+                    lblTransient.Visible = true;
+                    lblTransient.BringToFront();
+                }
+
+                // Fire the event so the caller can process the command
+                CommandSent?.Invoke(this, commandText);
+
+                // Clear the text and refocus for the next command
+                txtInput.Clear();
+                txtInput.Focus();
+
+                // Brief delay to show feedback
+                await Task.Delay(300);
+
+                // Update feedback to show command was sent
+                if (lblTransient != null)
+                {
+                    lblTransient.Text = "Command sent! Ready for next command.";
+                    lblTransient.BackColor = Color.LimeGreen;
+                    lblTransient.ForeColor = Color.Black;
+                }
+
+                // Restore button
+                btnSendCommand.Text = originalText;
+                btnSendCommand.Enabled = true;
+
+                // Hide feedback after a moment
+                await Task.Delay(1500);
+                if (lblTransient != null)
+                    lblTransient.Visible = false;
+            }
+            catch
+            {
+                // On error, restore button state
+                btnSendCommand.Text = "&Send Command";
+                btnSendCommand.Enabled = true;
+                txtInput.Focus();
+            }
         }
 
         public void ShowTemporaryMarquee(string message, int durationMs)

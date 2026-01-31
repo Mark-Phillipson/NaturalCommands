@@ -89,17 +89,21 @@ namespace NaturalCommands
             LoadSettings();
         }
 
+        // Larger font for better readability
+        private static readonly Font LargerFont = new Font(DisplayMessage.SharedFont.FontFamily, 12f);
+        private static readonly Font LargerBoldFont = new Font(DisplayMessage.SharedFont.FontFamily, 13f, FontStyle.Bold);
+
         private void InitializeForm()
         {
             Text = "NaturalCommands Settings";
-            Size = new Size(700, 600);
+            Size = new Size(900, 800);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
             
-            // Apply shared styling
-            Font = DisplayMessage.SharedFont;
+            // Apply shared styling with larger font
+            Font = LargerFont;
             BackColor = DisplayMessage.SharedBackColor;
             ForeColor = DisplayMessage.SharedForeColor;
             
@@ -109,18 +113,18 @@ namespace NaturalCommands
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 3,
-                Padding = new Padding(10)
+                Padding = new Padding(15)
             };
             // Header row (absolute), content row (percent), footer row (absolute)
-            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 60F));
+            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 70F));
             mainPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
+            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 60F));
             
             // Create tab control
             tabControl = new TabControl
             {
                 Dock = DockStyle.Fill,
-                Font = DisplayMessage.SharedFont,
+                Font = LargerFont,
                 BackColor = DisplayMessage.SharedBackColor,
                 ForeColor = DisplayMessage.SharedForeColor
             };
@@ -147,7 +151,7 @@ namespace NaturalCommands
             var titleLabel = new Label
             {
                 Text = "Settings",
-                Font = new Font(DisplayMessage.SharedFont.FontFamily, 16, FontStyle.Bold),
+                Font = new Font(DisplayMessage.SharedFont.FontFamily, 20, FontStyle.Bold),
                 AutoSize = true,
                 Location = new Point(70, 18),
                 ForeColor = DisplayMessage.SharedForeColor,
@@ -197,9 +201,9 @@ namespace NaturalCommands
             var btn = new Button
             {
                 Text = text,
-                Size = new Size(80, 30),
+                Size = new Size(100, 38),
                 FlatStyle = FlatStyle.Flat,
-                Font = DisplayMessage.SharedFont
+                Font = LargerFont
             };
             btn.FlatAppearance.BorderSize = 1;
             btn.Click += clickHandler;
@@ -362,16 +366,16 @@ namespace NaturalCommands
             panel.Controls.Add(CreateLabel("Colors", ref yPos, true));
             
             btnBackgroundColor = CreateButton("Select Background Color", (s, e) => PickColor(ref btnBackgroundColor));
-            btnBackgroundColor.Location = new Point(20, yPos);
-            btnBackgroundColor.Width = 200;
+            btnBackgroundColor.Location = new Point(25, yPos);
+            btnBackgroundColor.Width = 250;
             panel.Controls.Add(btnBackgroundColor);
-            yPos += 35;
+            yPos += 45;
             
             btnForegroundColor = CreateButton("Select Text Color", (s, e) => PickColor(ref btnForegroundColor));
-            btnForegroundColor.Location = new Point(20, yPos);
-            btnForegroundColor.Width = 200;
+            btnForegroundColor.Location = new Point(25, yPos);
+            btnForegroundColor.Width = 250;
             panel.Controls.Add(btnForegroundColor);
-            yPos += 45;
+            yPos += 55;
             
             panel.Controls.Add(CreateLabel("Fonts", ref yPos, true));
             panel.Controls.Add(CreateLabel("Font family:", ref yPos));
@@ -412,10 +416,10 @@ namespace NaturalCommands
             lblApiKeyStatus.ForeColor = Color.Orange;
             
             btnConfigureApiKey = CreateButton("Configure API Key", (s, e) => ConfigureApiKey());
-            btnConfigureApiKey.Location = new Point(20, yPos);
-            btnConfigureApiKey.Width = 180;
+            btnConfigureApiKey.Location = new Point(25, yPos);
+            btnConfigureApiKey.Width = 220;
             panel.Controls.Add(btnConfigureApiKey);
-            yPos += 45;
+            yPos += 55;
             
             panel.Controls.Add(CreateLabel("Model name:", ref yPos));
             txtModelName = CreateTextBox(ref yPos);
@@ -430,8 +434,8 @@ namespace NaturalCommands
             panel.Controls.Add(txtPromptFile);
             
             btnBrowsePromptFile = CreateButton("Browse...", (s, e) => BrowsePromptFile());
-            btnBrowsePromptFile.Location = new Point(420, yPos - 30);
-            btnBrowsePromptFile.Width = 80;
+            btnBrowsePromptFile.Location = new Point(520, yPos - 35);
+            btnBrowsePromptFile.Width = 100;
             panel.Controls.Add(btnBrowsePromptFile);
             
             tab.Controls.Add(panel);
@@ -495,41 +499,41 @@ namespace NaturalCommands
             panel.Controls.Add(CreateLabel("Configuration Files", ref yPos, true));
             panel.Controls.Add(CreateLabel("Quick access to edit configuration files:", ref yPos));
             
-            yPos += 10;
+            yPos += 15;
             
             btnOpenWordReplacements = CreateButton("Edit Word Replacements", (s, e) => OpenConfigFile("word_replacements.json"));
-            btnOpenWordReplacements.Location = new Point(20, yPos);
-            btnOpenWordReplacements.Width = 200;
+            btnOpenWordReplacements.Location = new Point(25, yPos);
+            btnOpenWordReplacements.Width = 250;
             panel.Controls.Add(btnOpenWordReplacements);
-            yPos += 40;
-            
-            btnOpenMultiActions = CreateButton("Edit Multi-Actions", (s, e) => OpenConfigFile("multi_actions.json"));
-            btnOpenMultiActions.Location = new Point(20, yPos);
-            btnOpenMultiActions.Width = 200;
-            panel.Controls.Add(btnOpenMultiActions);
-            yPos += 40;
-            
-            btnOpenEmojiMappings = CreateButton("Edit Emoji Mappings", (s, e) => OpenConfigFile("emoji_mappings.json"));
-            btnOpenEmojiMappings.Location = new Point(20, yPos);
-            btnOpenEmojiMappings.Width = 200;
-            panel.Controls.Add(btnOpenEmojiMappings);
-            yPos += 40;
-            
-            btnOpenVSCommands = CreateButton("Edit VS Commands", (s, e) => OpenConfigFile("vs_commands.json"));
-            btnOpenVSCommands.Location = new Point(20, yPos);
-            btnOpenVSCommands.Width = 200;
-            panel.Controls.Add(btnOpenVSCommands);
             yPos += 50;
             
+            btnOpenMultiActions = CreateButton("Edit Multi-Actions", (s, e) => OpenConfigFile("multi_actions.json"));
+            btnOpenMultiActions.Location = new Point(25, yPos);
+            btnOpenMultiActions.Width = 250;
+            panel.Controls.Add(btnOpenMultiActions);
+            yPos += 50;
+            
+            btnOpenEmojiMappings = CreateButton("Edit Emoji Mappings", (s, e) => OpenConfigFile("emoji_mappings.json"));
+            btnOpenEmojiMappings.Location = new Point(25, yPos);
+            btnOpenEmojiMappings.Width = 250;
+            panel.Controls.Add(btnOpenEmojiMappings);
+            yPos += 50;
+            
+            btnOpenVSCommands = CreateButton("Edit VS Commands", (s, e) => OpenConfigFile("vs_commands.json"));
+            btnOpenVSCommands.Location = new Point(25, yPos);
+            btnOpenVSCommands.Width = 250;
+            panel.Controls.Add(btnOpenVSCommands);
+            yPos += 60;
+            
             btnReloadConfigs = CreateButton("Reload All Configs", (s, e) => ReloadConfigs());
-            btnReloadConfigs.Location = new Point(20, yPos);
-            btnReloadConfigs.Width = 200;
+            btnReloadConfigs.Location = new Point(25, yPos);
+            btnReloadConfigs.Width = 250;
             panel.Controls.Add(btnReloadConfigs);
-            yPos += 40;
+            yPos += 50;
             
             btnOpenSettingsFolder = CreateButton("Open Settings Folder", (s, e) => OpenSettingsFolder());
-            btnOpenSettingsFolder.Location = new Point(20, yPos);
-            btnOpenSettingsFolder.Width = 200;
+            btnOpenSettingsFolder.Location = new Point(25, yPos);
+            btnOpenSettingsFolder.Width = 250;
             panel.Controls.Add(btnOpenSettingsFolder);
             
             tab.Controls.Add(panel);
@@ -542,7 +546,7 @@ namespace NaturalCommands
             {
                 Dock = DockStyle.Fill,
                 AutoScroll = true,
-                Padding = new Padding(10),
+                Padding = new Padding(15),
                 BackColor = DisplayMessage.SharedBackColor,
                 ForeColor = DisplayMessage.SharedForeColor
             };
@@ -554,16 +558,16 @@ namespace NaturalCommands
             var label = new Label
             {
                 Text = text,
-                Location = new Point(20, yPos),
+                Location = new Point(25, yPos),
                 AutoSize = true,
                 Font = isHeader 
-                    ? new Font(DisplayMessage.SharedFont.FontFamily, fontSize > 0 ? fontSize : 10, FontStyle.Bold)
+                    ? new Font(DisplayMessage.SharedFont.FontFamily, fontSize > 0 ? fontSize : 13, FontStyle.Bold)
                     : fontSize > 0 
-                        ? new Font(DisplayMessage.SharedFont.FontFamily, fontSize)
-                        : DisplayMessage.SharedFont,
+                        ? new Font(DisplayMessage.SharedFont.FontFamily, fontSize + 2)
+                        : LargerFont,
                 ForeColor = DisplayMessage.SharedForeColor
             };
-            yPos += isHeader ? 30 : 25;
+            yPos += isHeader ? 38 : 32;
             return label;
         }
 
@@ -572,13 +576,13 @@ namespace NaturalCommands
             var checkBox = new CheckBox
             {
                 Text = text,
-                Location = new Point(20, yPos),
+                Location = new Point(25, yPos),
                 AutoSize = true,
-                Font = DisplayMessage.SharedFont,
+                Font = LargerFont,
                 ForeColor = DisplayMessage.SharedForeColor,
                 BackColor = DisplayMessage.SharedBackColor
             };
-            yPos += 30;
+            yPos += 38;
             return checkBox;
         }
 
@@ -586,17 +590,17 @@ namespace NaturalCommands
         {
             var numericUpDown = new NumericUpDown
             {
-                Location = new Point(20, yPos),
-                Width = 120,
+                Location = new Point(25, yPos),
+                Width = 150,
                 Minimum = min,
                 Maximum = max,
                 DecimalPlaces = allowDecimals ? 2 : 0,
                 Increment = increment,
-                Font = DisplayMessage.SharedFont,
+                Font = LargerFont,
                 BackColor = Color.FromArgb(45, 45, 48),
                 ForeColor = DisplayMessage.SharedForeColor
             };
-            yPos += 35;
+            yPos += 42;
             return numericUpDown;
         }
 
@@ -604,13 +608,13 @@ namespace NaturalCommands
         {
             var textBox = new TextBox
             {
-                Location = new Point(20, yPos),
-                Width = 380,
-                Font = DisplayMessage.SharedFont,
+                Location = new Point(25, yPos),
+                Width = 480,
+                Font = LargerFont,
                 BackColor = Color.FromArgb(45, 45, 48),
                 ForeColor = DisplayMessage.SharedForeColor
             };
-            yPos += 35;
+            yPos += 42;
             return textBox;
         }
 
@@ -618,15 +622,15 @@ namespace NaturalCommands
         {
             var comboBox = new ComboBox
             {
-                Location = new Point(20, yPos),
-                Width = 200,
+                Location = new Point(25, yPos),
+                Width = 250,
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                Font = DisplayMessage.SharedFont,
+                Font = LargerFont,
                 BackColor = Color.FromArgb(45, 45, 48),
                 ForeColor = DisplayMessage.SharedForeColor
             };
             comboBox.Items.AddRange(items);
-            yPos += 35;
+            yPos += 42;
             return comboBox;
         }
 
@@ -634,10 +638,10 @@ namespace NaturalCommands
         {
             var comboBox = new ComboBox
             {
-                Location = new Point(20, yPos),
-                Width = 200,
+                Location = new Point(25, yPos),
+                Width = 280,
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                Font = DisplayMessage.SharedFont,
+                Font = LargerFont,
                 BackColor = Color.FromArgb(45, 45, 48),
                 ForeColor = DisplayMessage.SharedForeColor
             };

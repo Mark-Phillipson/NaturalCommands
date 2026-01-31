@@ -91,12 +91,22 @@ namespace NaturalCommands
 
             try
             {
-                var text = Helpers.VoiceDictationHelper.ShowVoiceDictation(0);
-                if (!string.IsNullOrWhiteSpace(text))
+                // Use the event-based approach - form stays open for multiple commands
+                Helpers.VoiceDictationHelper.ShowVoiceDictation(0, (commandText) =>
                 {
-                    text = Helpers.WordReplacementHelper.ApplyWordReplacements(text);
-                    _commands.HandleNaturalAsync(text);
-                }
+                    try
+                    {
+                        if (!string.IsNullOrWhiteSpace(commandText))
+                        {
+                            var processedText = Helpers.WordReplacementHelper.ApplyWordReplacements(commandText);
+                            _commands.HandleNaturalAsync(processedText);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        try { TrayNotificationHelper.ShowNotification("Command failed", ex.Message, 3500); } catch { }
+                    }
+                });
             }
             catch (Exception ex)
             {
