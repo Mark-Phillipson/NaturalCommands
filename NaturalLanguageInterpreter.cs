@@ -482,7 +482,11 @@ namespace NaturalCommands
             }
             else if (procName == "windowsterminal" || procName == "WindowsTerminal")
             {
-                commands = CommandDefinitions.WindowsTerminalCommands;
+                // Combine Windows Terminal shortcuts with dotnet CLI commands
+                commands = new List<(string Command, string Description)>(CommandDefinitions.WindowsTerminalCommands);
+                // Add a section header for dotnet commands
+                commands.Add(("--- .NET CLI Commands ---", ""));
+                commands.AddRange(CommandDefinitions.DotNetCommands.Select(c => (c.Command, c.Description)));
                 appLabel = "Windows Terminal";
             }
             else
@@ -827,10 +831,28 @@ namespace NaturalCommands
             string? wtProcName = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName();
             if (wtProcName == "windowsterminal" || wtProcName == "WindowsTerminal")
             {
+                // First check for Windows Terminal keyboard shortcuts
                 if (CommandDefinitions.WindowsTerminalShortcuts.TryGetValue(text, out var shortcut))
                 {
                     var action = new WindowsTerminalShortcutAction(shortcut, text);
                     NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched Windows Terminal command: '{text}' -> '{shortcut}'");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                }
+
+                // Normalize text for dotnet commands - speech recognition often transcribes "dotnet" as "dot net" or "don't net"
+                string normalizedDotnetText = text
+                    .Replace("dot net", "dotnet")
+                    .Replace("don't net", "dotnet")
+                    .Replace("dont net", "dotnet")
+                    .Replace("dot-net", "dotnet")
+                    .Replace("dot_net", "dotnet");
+
+                // Check for dotnet CLI commands (try both original and normalized text)
+                if (CommandDefinitions.DotNetCommandMappings.TryGetValue(text, out var dotnetCmd) ||
+                    CommandDefinitions.DotNetCommandMappings.TryGetValue(normalizedDotnetText, out dotnetCmd))
+                {
+                    var action = new RunTerminalCommandAction(dotnetCmd.TerminalCommand, dotnetCmd.Description);
+                    NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched dotnet command: '{text}' (normalized: '{normalizedDotnetText}') -> '{dotnetCmd.TerminalCommand}'");
                     return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
                 }
             }
@@ -1260,6 +1282,29 @@ namespace NaturalCommands
                 NaturalCommands.Helpers.Logger.LogDebug($"ExecuteActionAsync: Windows Terminal shortcut: '{wtAction.CommandText}' -> '{wtAction.Shortcut}'");
                 var result = NaturalCommands.Helpers.KeySender.SendShortcut(wtAction.Shortcut);
                 return $"Windows Terminal: {wtAction.CommandText} ({result})";
+            }
+            // Run terminal command action (types command and presses Enter)
+            else if (action is RunTerminalCommandAction terminalCmd)
+            {
+                AppendLog($"[DEBUG] ExecuteActionAsync: Executing RunTerminalCommandAction ('{terminalCmd.Command}')\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"ExecuteActionAsync: Running terminal command: '{terminalCmd.Command}' - {terminalCmd.Description}");
+                try
+                {
+                    var sim = new WindowsInput.InputSimulator();
+                    // Type the command
+                    sim.Keyboard.TextEntry(terminalCmd.Command);
+                    // Small delay before pressing Enter
+                    System.Threading.Thread.Sleep(50);
+                    // Press Enter to execute
+                    sim.Keyboard.KeyPress(WindowsInput.Native.VirtualKeyCode.RETURN);
+                    NaturalCommands.Helpers.Logger.LogDebug($"ExecuteActionAsync: Typed and executed terminal command: '{terminalCmd.Command}'");
+                    return $"Terminal: {terminalCmd.Description} ({terminalCmd.Command})";
+                }
+                catch (Exception ex)
+                {
+                    NaturalCommands.Helpers.Logger.LogError($"Failed to execute terminal command: {ex.Message}");
+                    return $"Failed to execute terminal command: {ex.Message}";
+                }
             }
             else if (action is AdjustAutoClickDelayAction adj)
             {

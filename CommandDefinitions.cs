@@ -250,5 +250,255 @@ namespace NaturalCommands
             { "new window", "ctrl+shift+n" },
             { "open new window", "ctrl+shift+n" },
         };
+
+        // .NET CLI commands that can be run in Windows Terminal
+        public static readonly List<(string Command, string TerminalCommand, string Description)> DotNetCommands = new()
+        {
+            // Build commands
+            ("dotnet build", "dotnet build", "Build a .NET project"),
+            ("build", "dotnet build", "Build a .NET project"),
+            ("build project", "dotnet build", "Build a .NET project"),
+            ("build solution", "dotnet build", "Build a .NET project/solution"),
+            ("dotnet build release", "dotnet build -c Release", "Build in Release configuration"),
+            ("build release", "dotnet build -c Release", "Build in Release configuration"),
+            
+            // Clean commands
+            ("dotnet clean", "dotnet clean", "Clean build outputs of a .NET project"),
+            ("clean", "dotnet clean", "Clean build outputs of a .NET project"),
+            ("clean project", "dotnet clean", "Clean build outputs of a .NET project"),
+            ("clean solution", "dotnet clean", "Clean build outputs of a .NET project/solution"),
+            
+            // Run commands
+            ("dotnet run", "dotnet run", "Build and run a .NET project"),
+            ("run", "dotnet run", "Build and run a .NET project"),
+            ("run project", "dotnet run", "Build and run a .NET project"),
+            ("run application", "dotnet run", "Build and run a .NET project"),
+            ("dotnet run release", "dotnet run -c Release", "Run in Release configuration"),
+            ("run release", "dotnet run -c Release", "Run in Release configuration"),
+            
+            // Test commands
+            ("dotnet test", "dotnet test", "Run unit tests"),
+            ("test", "dotnet test", "Run unit tests"),
+            ("run tests", "dotnet test", "Run unit tests"),
+            ("run unit tests", "dotnet test", "Run unit tests"),
+            ("dotnet test verbose", "dotnet test -v n", "Run unit tests with normal verbosity"),
+            ("test verbose", "dotnet test -v n", "Run unit tests with normal verbosity"),
+            
+            // Restore commands
+            ("dotnet restore", "dotnet restore", "Restore dependencies"),
+            ("restore", "dotnet restore", "Restore dependencies"),
+            ("restore packages", "dotnet restore", "Restore NuGet packages"),
+            ("restore dependencies", "dotnet restore", "Restore dependencies"),
+            
+            // Publish commands
+            ("dotnet publish", "dotnet publish", "Publish a .NET project for deployment"),
+            ("publish", "dotnet publish", "Publish a .NET project for deployment"),
+            ("publish project", "dotnet publish", "Publish a .NET project for deployment"),
+            ("dotnet publish release", "dotnet publish -c Release", "Publish in Release configuration"),
+            ("publish release", "dotnet publish -c Release", "Publish in Release configuration"),
+            
+            // Pack commands
+            ("dotnet pack", "dotnet pack", "Create a NuGet package"),
+            ("pack", "dotnet pack", "Create a NuGet package"),
+            ("create package", "dotnet pack", "Create a NuGet package"),
+            ("dotnet pack release", "dotnet pack -c Release", "Create a NuGet package in Release configuration"),
+            ("pack release", "dotnet pack -c Release", "Create a NuGet package in Release configuration"),
+            
+            // Watch commands
+            ("dotnet watch", "dotnet watch", "Start a file watcher that runs a command when files change"),
+            ("watch", "dotnet watch", "Start a file watcher that runs a command when files change"),
+            ("dotnet watch run", "dotnet watch run", "Watch and run on file changes"),
+            ("watch run", "dotnet watch run", "Watch and run on file changes"),
+            ("dotnet watch test", "dotnet watch test", "Watch and run tests on file changes"),
+            ("watch test", "dotnet watch test", "Watch and run tests on file changes"),
+            
+            // Format commands
+            ("dotnet format", "dotnet format", "Apply style preferences to a project or solution"),
+            ("format", "dotnet format", "Apply style preferences to a project or solution"),
+            ("format code", "dotnet format", "Apply style preferences to a project or solution"),
+            
+            // New project commands
+            ("dotnet new console", "dotnet new console", "Create a new console application"),
+            ("new console", "dotnet new console", "Create a new console application"),
+            ("dotnet new classlib", "dotnet new classlib", "Create a new class library"),
+            ("new class library", "dotnet new classlib", "Create a new class library"),
+            ("dotnet new webapi", "dotnet new webapi", "Create a new Web API project"),
+            ("new web api", "dotnet new webapi", "Create a new Web API project"),
+            ("dotnet new mvc", "dotnet new mvc", "Create a new MVC web application"),
+            ("new mvc", "dotnet new mvc", "Create a new MVC web application"),
+            ("dotnet new blazor", "dotnet new blazor", "Create a new Blazor web application"),
+            ("new blazor", "dotnet new blazor", "Create a new Blazor web application"),
+            ("dotnet new list", "dotnet new list", "List available project templates"),
+            ("new list", "dotnet new list", "List available project templates"),
+            ("list templates", "dotnet new list", "List available project templates"),
+            
+            // Solution commands
+            ("dotnet solution list", "dotnet sln list", "List projects in a solution"),
+            ("solution list", "dotnet sln list", "List projects in a solution"),
+            ("list projects", "dotnet sln list", "List projects in a solution"),
+            
+            // Package commands
+            ("dotnet add package", "dotnet add package ", "Add a NuGet package (prompts for name)"),
+            ("add package", "dotnet add package ", "Add a NuGet package (prompts for name)"),
+            ("dotnet list package", "dotnet list package", "List NuGet packages"),
+            ("list packages", "dotnet list package", "List NuGet packages"),
+            ("list nuget packages", "dotnet list package", "List NuGet packages"),
+            ("dotnet remove package", "dotnet remove package ", "Remove a NuGet package (prompts for name)"),
+            ("remove package", "dotnet remove package ", "Remove a NuGet package (prompts for name)"),
+            
+            // Tool commands
+            ("dotnet tool list", "dotnet tool list", "List installed .NET tools"),
+            ("list tools", "dotnet tool list", "List installed .NET tools"),
+            ("dotnet tool install", "dotnet tool install ", "Install a .NET tool (prompts for name)"),
+            ("install tool", "dotnet tool install ", "Install a .NET tool (prompts for name)"),
+            ("dotnet tool update", "dotnet tool update ", "Update a .NET tool (prompts for name)"),
+            ("update tool", "dotnet tool update ", "Update a .NET tool (prompts for name)"),
+            
+            // Info commands
+            ("dotnet info", "dotnet --info", "Display .NET information"),
+            ("dotnet version", "dotnet --version", "Display .NET SDK version"),
+            ("dotnet list sdks", "dotnet --list-sdks", "Display installed SDKs"),
+            ("list sdks", "dotnet --list-sdks", "Display installed SDKs"),
+            ("dotnet list runtimes", "dotnet --list-runtimes", "Display installed runtimes"),
+            ("list runtimes", "dotnet --list-runtimes", "Display installed runtimes"),
+            
+            // EF Core commands (common if EF tools installed)
+            ("dotnet ef migrations add", "dotnet ef migrations add ", "Add a new EF Core migration (prompts for name)"),
+            ("add migration", "dotnet ef migrations add ", "Add a new EF Core migration (prompts for name)"),
+            ("dotnet ef migrations list", "dotnet ef migrations list", "List EF Core migrations"),
+            ("list migrations", "dotnet ef migrations list", "List EF Core migrations"),
+            ("dotnet ef database update", "dotnet ef database update", "Update database to latest migration"),
+            ("update database", "dotnet ef database update", "Update database to latest migration"),
+            ("dotnet ef database drop", "dotnet ef database drop", "Drop the database"),
+            ("drop database", "dotnet ef database drop", "Drop the database"),
+            
+            // User secrets
+            ("dotnet user-secrets init", "dotnet user-secrets init", "Initialize user secrets for the project"),
+            ("init user secrets", "dotnet user-secrets init", "Initialize user secrets for the project"),
+            ("dotnet user-secrets list", "dotnet user-secrets list", "List user secrets"),
+            ("list user secrets", "dotnet user-secrets list", "List user secrets"),
+            ("list secrets", "dotnet user-secrets list", "List user secrets"),
+            
+            // Dev certs
+            ("dotnet dev-certs https trust", "dotnet dev-certs https --trust", "Trust the HTTPS development certificate"),
+            ("trust dev cert", "dotnet dev-certs https --trust", "Trust the HTTPS development certificate"),
+            ("trust https certificate", "dotnet dev-certs https --trust", "Trust the HTTPS development certificate"),
+        };
+
+        // Maps natural language to dotnet commands (for fuzzy matching)
+        public static readonly Dictionary<string, (string TerminalCommand, string Description)> DotNetCommandMappings = new(StringComparer.OrdinalIgnoreCase)
+        {
+            // Build
+            { "dotnet build", ("dotnet build", "Build a .NET project") },
+            { "build", ("dotnet build", "Build a .NET project") },
+            { "build project", ("dotnet build", "Build a .NET project") },
+            { "build solution", ("dotnet build", "Build a .NET project/solution") },
+            { "build the project", ("dotnet build", "Build a .NET project") },
+            { "build the solution", ("dotnet build", "Build a .NET project/solution") },
+            { "dotnet build release", ("dotnet build -c Release", "Build in Release configuration") },
+            { "build release", ("dotnet build -c Release", "Build in Release configuration") },
+            { "build in release", ("dotnet build -c Release", "Build in Release configuration") },
+            
+            // Clean
+            { "dotnet clean", ("dotnet clean", "Clean build outputs") },
+            { "clean", ("dotnet clean", "Clean build outputs") },
+            { "clean project", ("dotnet clean", "Clean build outputs") },
+            { "clean solution", ("dotnet clean", "Clean build outputs") },
+            { "clean the project", ("dotnet clean", "Clean build outputs") },
+            { "clean the solution", ("dotnet clean", "Clean build outputs") },
+            
+            // Run
+            { "dotnet run", ("dotnet run", "Build and run a .NET project") },
+            { "run", ("dotnet run", "Build and run a .NET project") },
+            { "run project", ("dotnet run", "Build and run a .NET project") },
+            { "run application", ("dotnet run", "Build and run a .NET project") },
+            { "run the project", ("dotnet run", "Build and run a .NET project") },
+            { "run the application", ("dotnet run", "Build and run a .NET project") },
+            { "dotnet run release", ("dotnet run -c Release", "Run in Release configuration") },
+            { "run release", ("dotnet run -c Release", "Run in Release configuration") },
+            { "run in release", ("dotnet run -c Release", "Run in Release configuration") },
+            
+            // Test
+            { "dotnet test", ("dotnet test", "Run unit tests") },
+            { "test", ("dotnet test", "Run unit tests") },
+            { "run tests", ("dotnet test", "Run unit tests") },
+            { "run unit tests", ("dotnet test", "Run unit tests") },
+            { "run the tests", ("dotnet test", "Run unit tests") },
+            { "execute tests", ("dotnet test", "Run unit tests") },
+            
+            // Restore
+            { "dotnet restore", ("dotnet restore", "Restore dependencies") },
+            { "restore", ("dotnet restore", "Restore dependencies") },
+            { "restore packages", ("dotnet restore", "Restore NuGet packages") },
+            { "restore dependencies", ("dotnet restore", "Restore dependencies") },
+            { "restore nuget", ("dotnet restore", "Restore NuGet packages") },
+            
+            // Publish
+            { "dotnet publish", ("dotnet publish", "Publish for deployment") },
+            { "publish", ("dotnet publish", "Publish for deployment") },
+            { "publish project", ("dotnet publish", "Publish for deployment") },
+            { "publish application", ("dotnet publish", "Publish for deployment") },
+            
+            // Pack
+            { "dotnet pack", ("dotnet pack", "Create a NuGet package") },
+            { "pack", ("dotnet pack", "Create a NuGet package") },
+            { "create package", ("dotnet pack", "Create a NuGet package") },
+            { "create nuget package", ("dotnet pack", "Create a NuGet package") },
+            
+            // Watch
+            { "dotnet watch", ("dotnet watch", "Watch for file changes") },
+            { "watch", ("dotnet watch", "Watch for file changes") },
+            { "dotnet watch run", ("dotnet watch run", "Watch and run on changes") },
+            { "watch run", ("dotnet watch run", "Watch and run on changes") },
+            { "watch and run", ("dotnet watch run", "Watch and run on changes") },
+            { "dotnet watch test", ("dotnet watch test", "Watch and test on changes") },
+            { "watch test", ("dotnet watch test", "Watch and test on changes") },
+            { "watch tests", ("dotnet watch test", "Watch and test on changes") },
+            
+            // Format
+            { "dotnet format", ("dotnet format", "Format code") },
+            { "format", ("dotnet format", "Format code") },
+            { "format code", ("dotnet format", "Format code") },
+            { "format the code", ("dotnet format", "Format code") },
+            
+            // Info
+            { "dotnet info", ("dotnet --info", "Display .NET information") },
+            { "dotnet version", ("dotnet --version", "Display .NET SDK version") },
+            { "version", ("dotnet --version", "Display .NET SDK version") },
+            { "dotnet list sdks", ("dotnet --list-sdks", "Display installed SDKs") },
+            { "list sdks", ("dotnet --list-sdks", "Display installed SDKs") },
+            { "dotnet list runtimes", ("dotnet --list-runtimes", "Display installed runtimes") },
+            { "list runtimes", ("dotnet --list-runtimes", "Display installed runtimes") },
+            
+            // Common new project templates
+            { "new console", ("dotnet new console", "Create a new console application") },
+            { "new class library", ("dotnet new classlib", "Create a new class library") },
+            { "new web api", ("dotnet new webapi", "Create a new Web API project") },
+            { "new mvc", ("dotnet new mvc", "Create a new MVC web application") },
+            { "new blazor", ("dotnet new blazor", "Create a new Blazor web application") },
+            { "list templates", ("dotnet new list", "List available project templates") },
+            
+            // Solution and package commands
+            { "solution list", ("dotnet sln list", "List projects in a solution") },
+            { "list projects", ("dotnet sln list", "List projects in a solution") },
+            { "list packages", ("dotnet list package", "List NuGet packages") },
+            { "list nuget packages", ("dotnet list package", "List NuGet packages") },
+            { "list tools", ("dotnet tool list", "List installed .NET tools") },
+            
+            // EF Core
+            { "add migration", ("dotnet ef migrations add ", "Add a new EF Core migration") },
+            { "list migrations", ("dotnet ef migrations list", "List EF Core migrations") },
+            { "update database", ("dotnet ef database update", "Update database to latest migration") },
+            { "drop database", ("dotnet ef database drop", "Drop the database") },
+            
+            // User secrets
+            { "init user secrets", ("dotnet user-secrets init", "Initialize user secrets") },
+            { "list user secrets", ("dotnet user-secrets list", "List user secrets") },
+            { "list secrets", ("dotnet user-secrets list", "List user secrets") },
+            
+            // Dev certs
+            { "trust dev cert", ("dotnet dev-certs https --trust", "Trust HTTPS dev certificate") },
+            { "trust https certificate", ("dotnet dev-certs https --trust", "Trust HTTPS dev certificate") },
+        };
     }
 }
