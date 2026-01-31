@@ -125,6 +125,11 @@ namespace NaturalCommands
             ("switch to tab 3", "Switch to tab 3 (Ctrl+Alt+3)"),
             ("switch to tab 4", "Switch to tab 4 (Ctrl+Alt+4)"),
             ("switch to tab 5", "Switch to tab 5 (Ctrl+Alt+5)"),
+            ("shutdown", "Stop/interrupt the current running process (Ctrl+C)"),
+            ("stop", "Stop/interrupt the current running process (Ctrl+C)"),
+            ("stop process", "Stop/interrupt the current running process (Ctrl+C)"),
+            ("kill process", "Kill/interrupt the current running process (Ctrl+C)"),
+            ("cancel", "Cancel/interrupt the current running process (Ctrl+C)"),
         };
 
         // Maps natural language commands to Windows Terminal shortcuts
@@ -249,6 +254,21 @@ namespace NaturalCommands
             { "clear screen", "ctrl+shift+k" },
             { "new window", "ctrl+shift+n" },
             { "open new window", "ctrl+shift+n" },
+
+            // Process control - Ctrl+C to interrupt/stop running process
+            { "shutdown", "ctrl+c" },
+            { "stop", "ctrl+c" },
+            { "stop process", "ctrl+c" },
+            { "kill", "ctrl+c" },
+            { "kill process", "ctrl+c" },
+            { "terminate", "ctrl+c" },
+            { "cancel", "ctrl+c" },
+            { "interrupt", "ctrl+c" },
+            { "abort", "ctrl+c" },
+            { "break", "ctrl+c" },
+            { "stop server", "ctrl+c" },
+            { "stop application", "ctrl+c" },
+            { "stop running", "ctrl+c" },
         };
 
         // .NET CLI commands that can be run in Windows Terminal
