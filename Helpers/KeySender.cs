@@ -70,21 +70,46 @@ namespace NaturalCommands.Helpers
                 }
                 else
                 {
-                    // simple punctuation, NumPad keys and other special cases
+                    // simple punctuation, NumPad keys, arrow keys and other special cases
                     switch (p)
                     {
                         case "enter": mainKey = 0x0D; break;
                         case "esc": case "escape": mainKey = 0x1B; break;
                         case "tab": mainKey = 0x09; break;
                         case "space": mainKey = 0x20; break;
-                        case ",": mainKey = 0xBC; break; // VK_OEM_COMMA
-                        case ".": mainKey = 0xBE; break; // VK_OEM_PERIOD
-                        case "comma": mainKey = 0xBC; break;
-                        case "period": case "dot": mainKey = 0xBE; break;
+                        case ",": case "comma": mainKey = 0xBC; break; // VK_OEM_COMMA
+                        case ".": case "period": case "dot": mainKey = 0xBE; break; // VK_OEM_PERIOD
                         case "backspace": mainKey = 0x08; break;
+                        case "delete": case "del": mainKey = 0x2E; break; // VK_DELETE
+                        case "insert": case "ins": mainKey = 0x2D; break; // VK_INSERT
+                        case "home": mainKey = 0x24; break; // VK_HOME
+                        case "end": mainKey = 0x23; break; // VK_END
+                        case "pageup": case "pgup": mainKey = 0x21; break; // VK_PRIOR
+                        case "pagedown": case "pgdn": mainKey = 0x22; break; // VK_NEXT
+                        
+                        // Arrow keys
+                        case "up": case "uparrow": mainKey = 0x26; break; // VK_UP
+                        case "down": case "downarrow": mainKey = 0x28; break; // VK_DOWN
+                        case "left": case "leftarrow": mainKey = 0x25; break; // VK_LEFT
+                        case "right": case "rightarrow": mainKey = 0x27; break; // VK_RIGHT
+                        
                         // NumPad add/subtract (common Talon toggle keys)
-                        case "add": case "numpadadd": case "plus": mainKey = 0x6B; break; // VK_ADD
-                        case "subtract": case "numpadsubtract": case "minus": mainKey = 0x6D; break; // VK_SUBTRACT
+                        case "add": case "numpadadd": mainKey = 0x6B; break; // VK_ADD
+                        case "subtract": case "numpadsubtract": mainKey = 0x6D; break; // VK_SUBTRACT
+                        
+                        // Plus and Minus (OEM keys, not numpad)
+                        case "plus": case "=": case "equals": mainKey = 0xBB; break; // VK_OEM_PLUS (=+ key)
+                        case "minus": case "-": mainKey = 0xBD; break; // VK_OEM_MINUS (-_ key)
+                        
+                        // Additional punctuation
+                        case "[": case "openbracket": mainKey = 0xDB; break; // VK_OEM_4
+                        case "]": case "closebracket": mainKey = 0xDD; break; // VK_OEM_6
+                        case ";": case "semicolon": mainKey = 0xBA; break; // VK_OEM_1
+                        case "'": case "quote": mainKey = 0xDE; break; // VK_OEM_7
+                        case "/": case "slash": mainKey = 0xBF; break; // VK_OEM_2
+                        case "\\": case "backslash": mainKey = 0xDC; break; // VK_OEM_5
+                        case "`": case "backtick": case "grave": mainKey = 0xC0; break; // VK_OEM_3
+                        
                         default:
                             // unknown token
                             NaturalCommands.Helpers.Logger.LogDebug($"SendShortcut: unknown token '{p}' in '{shortcut}'");

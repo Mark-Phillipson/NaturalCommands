@@ -480,6 +480,11 @@ namespace NaturalCommands
                 commands = VSCodeCommands;
                 appLabel = "VS Code";
             }
+            else if (procName == "windowsterminal" || procName == "WindowsTerminal")
+            {
+                commands = CommandDefinitions.WindowsTerminalCommands;
+                appLabel = "Windows Terminal";
+            }
             else
             {
                 commands = AvailableCommands;
@@ -816,6 +821,18 @@ namespace NaturalCommands
                 var action = new OpenSettingsAction();
                 AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (settings)\n");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
+            // Windows Terminal specific commands
+            string? wtProcName = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName();
+            if (wtProcName == "windowsterminal" || wtProcName == "WindowsTerminal")
+            {
+                if (CommandDefinitions.WindowsTerminalShortcuts.TryGetValue(text, out var shortcut))
+                {
+                    var action = new WindowsTerminalShortcutAction(shortcut, text);
+                    NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched Windows Terminal command: '{text}' -> '{shortcut}'");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                }
             }
 
             // Open mapped applications (expanded) 
@@ -1235,6 +1252,14 @@ namespace NaturalCommands
                 var result = NaturalCommands.Helpers.AutoClickManager.Stop();
                 NaturalCommands.Helpers.Logger.LogDebug($"ExecuteActionAsync: AutoClickManager.Stop() returned: {result}");
                 return result;
+            }
+            // Windows Terminal shortcut action
+            else if (action is WindowsTerminalShortcutAction wtAction)
+            {
+                AppendLog($"[DEBUG] ExecuteActionAsync: Executing WindowsTerminalShortcutAction ('{wtAction.CommandText}' -> '{wtAction.Shortcut}')\n");
+                NaturalCommands.Helpers.Logger.LogDebug($"ExecuteActionAsync: Windows Terminal shortcut: '{wtAction.CommandText}' -> '{wtAction.Shortcut}'");
+                var result = NaturalCommands.Helpers.KeySender.SendShortcut(wtAction.Shortcut);
+                return $"Windows Terminal: {wtAction.CommandText} ({result})";
             }
             else if (action is AdjustAutoClickDelayAction adj)
             {

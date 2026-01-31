@@ -31,4 +31,6 @@ namespace NaturalCommands
     public record AdjustAutoClickDelayAction(string Change) : ActionBase;
     public record StartAutoClickAction(int DelayMs = 0) : ActionBase;
     public record StopAutoClickAction : ActionBase;
+    // Windows Terminal specific shortcut action
+    public record WindowsTerminalShortcutAction(string Shortcut, string CommandText) : ActionBase;
 }
