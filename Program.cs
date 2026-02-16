@@ -113,19 +113,22 @@ namespace ExecuteCommands_NET
 			NaturalCommands.Helpers.Logger.LogDebug($"Args: {string.Join(", ", args)}");
 			NaturalCommands.Helpers.Logger.LogDebug($"ModeRaw: {modeRaw}, TextRaw: {textRaw}");
 			NaturalCommands.Helpers.Logger.LogDebug($"Normalized Mode: {mode}, Text: {text}");		
-		// Check if this command might start auto-click (BEFORE executing it)
+		// Check if this command might start auto-click or quick clicks (BEFORE executing it)
 		bool mightStartAutoClick = text.Contains("auto click", StringComparison.OrdinalIgnoreCase) ||
 		                           text.Contains("auto-click", StringComparison.OrdinalIgnoreCase);
+		bool mightStartQuickClicks = text.Contains("quick click", StringComparison.OrdinalIgnoreCase) ||
+		                             text.Contains("quick-click", StringComparison.OrdinalIgnoreCase);
 		
-		// If this might start auto-click, initialize Windows Forms FIRST
-		if (mightStartAutoClick)
+		// If this might start auto-click or quick clicks, initialize Windows Forms FIRST
+		if (mightStartAutoClick || mightStartQuickClicks)
 		{
-			NaturalCommands.Helpers.Logger.LogDebug("Command may start auto-click - initializing Windows Forms BEFORE execution");
+			NaturalCommands.Helpers.Logger.LogDebug("Command may start auto-click or quick clicks - initializing Windows Forms BEFORE execution");
 			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);
 			System.Threading.SynchronizationContext.SetSynchronizationContext(
 				new System.Windows.Forms.WindowsFormsSynchronizationContext());
 			NaturalCommands.AutoClickOverlayForm.InitializeUIContext();
+			NaturalCommands.QuickClickOverlayForm.InitializeUIContext();
 			
 			// Execute the command on the UI thread using a timer
 			string? commandResult = null;
@@ -141,19 +144,19 @@ namespace ExecuteCommands_NET
 					commandResult = commands.HandleNaturalAsync(text);
 					Console.WriteLine(commandResult);
 					
-					// Check if auto-click is now active
-					if (NaturalCommands.Helpers.AutoClickManager.IsActive())
+					// Check if auto-click is now active or quick clicks overlay is visible
+					if (NaturalCommands.Helpers.AutoClickManager.IsActive() || NaturalCommands.QuickClickOverlayForm.IsVisible)
 					{
-						NaturalCommands.Helpers.Logger.LogInfo("Auto-click active - keeping application alive with message pump.");
+						NaturalCommands.Helpers.Logger.LogInfo("Auto-click active or quick clicks visible - keeping application alive with message pump.");
 						
-						// Set up a check timer to exit when auto-click stops
+						// Set up a check timer to exit when both auto-click stops and quick clicks overlay is hidden
 						var checkTimer = new System.Windows.Forms.Timer { Interval = 500 };
 						checkTimer.Tick += (s2, e2) =>
 						{
-							if (!NaturalCommands.Helpers.AutoClickManager.IsActive())
+							if (!NaturalCommands.Helpers.AutoClickManager.IsActive() && !NaturalCommands.QuickClickOverlayForm.IsVisible)
 							{
 								checkTimer.Stop();
-								NaturalCommands.Helpers.Logger.LogInfo("Auto-click stopped - exiting application.");
+								NaturalCommands.Helpers.Logger.LogInfo("Auto-click stopped and quick clicks hidden - exiting application.");
 								Application.Exit();
 							}
 						};
@@ -161,7 +164,7 @@ namespace ExecuteCommands_NET
 					}
 					else
 					{
-						// Command didn't start auto-click, exit the message pump
+						// Command didn't start auto-click or quick clicks, exit the message pump
 						Application.Exit();
 					}
 				}

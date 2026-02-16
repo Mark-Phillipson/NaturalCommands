@@ -11,4 +11,4 @@ echo   - Settings
 echo   - Exit
 echo.
 
-start "" "%~dp0NaturalCommands.exe" /listen
+start "" "%~dp0bin\Release\net10.0-windows\NaturalCommands.exe" /listen

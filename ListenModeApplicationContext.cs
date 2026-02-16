@@ -15,6 +15,7 @@ namespace NaturalCommands
         private readonly Commands _commands;
         private bool _dictationOpen;
         private SettingsForm? _settingsForm;
+        private System.Windows.Forms.Timer? _manualHideCheckTimer;
 
         public ListenModeApplicationContext()
         {
@@ -113,6 +114,18 @@ namespace NaturalCommands
                 {
                     Helpers.ForegroundMonitor.ForegroundChanged += ForegroundMonitor_ForegroundChanged;
                     Helpers.ForegroundMonitor.Start();
+                    
+                    // Start timer to check for manual hide flag (created by voice commands in separate processes)
+                    _manualHideCheckTimer = new System.Windows.Forms.Timer { Interval = 500 }; // Check every 500ms
+                    _manualHideCheckTimer.Tick += (s, e) =>
+                    {
+                        if (QuickClickOverlayForm.IsManuallyHidden && QuickClickOverlayForm.IsVisible)
+                        {
+                            Helpers.Logger.LogDebug("ListenMode: Manual hide flag detected, hiding overlay");
+                            QuickClickOverlayForm.HideOverlay();
+                        }
+                    };
+                    _manualHideCheckTimer.Start();
                 }
             }
             catch { }
@@ -220,6 +233,13 @@ namespace NaturalCommands
         {
             try
             {
+                // Don't auto-show if user manually hid the overlay
+                if (QuickClickOverlayForm.IsManuallyHidden)
+                {
+                    Helpers.Logger.LogDebug($"ForegroundMonitor: Skipping auto-show because overlay was manually hidden");
+                    return;
+                }
+
                 if (!AppSettings.Instance.QuickClicks.Enabled || !AppSettings.Instance.QuickClicks.AutoShowOnFocus)
                 {
                     QuickClickOverlayForm.HideOverlay();
@@ -273,6 +293,17 @@ namespace NaturalCommands
             // Ensure ForegroundMonitor is unsubscribed and stopped on shutdown
             try { Helpers.ForegroundMonitor.ForegroundChanged -= ForegroundMonitor_ForegroundChanged; } catch { }
             try { Helpers.ForegroundMonitor.Stop(); } catch { }
+            
+            // Stop and dispose manual hide check timer
+            try 
+            { 
+                if (_manualHideCheckTimer != null)
+                {
+                    _manualHideCheckTimer.Stop();
+                    _manualHideCheckTimer.Dispose();
+                }
+            } 
+            catch { }
             
             // Kill all NaturalCommands processes to ensure clean shutdown
             try

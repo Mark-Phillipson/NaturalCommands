@@ -20,6 +20,9 @@ namespace NaturalCommands
         private static QuickClickOverlayForm? _instance;
         private static readonly object _lock = new object();
         private static System.Threading.SynchronizationContext? _uiContext;
+        
+        // Path to file that tracks manual hide state (persists across processes)
+        private static readonly string _manualHideFlagFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".quick_clicks_manually_hidden");
 
         private QuickClickProfile? _profile;
         private IntPtr _targetWindow = IntPtr.Zero;
@@ -121,6 +124,8 @@ namespace NaturalCommands
 
             lock (_lock)
             {
+                SetManuallyHidden(false); // Clear manual hide flag when showing
+                Logger.LogDebug($"QuickClickOverlayForm.ShowOverlay: Manual hide flag cleared, showing overlay");
                 if (_instance == null || _instance.IsDisposed)
                 {
                     _instance = new QuickClickOverlayForm();
@@ -140,14 +145,50 @@ namespace NaturalCommands
 
             lock (_lock)
             {
+                SetManuallyHidden(true); // Set manual hide flag (persists across processes via file)
+                Logger.LogDebug($"QuickClickOverlayForm.HideOverlay: Manual hide flag set");
                 if (_instance != null && !_instance.IsDisposed)
                 {
                     _instance.InternalHide();
+                    Logger.LogDebug($"QuickClickOverlayForm.HideOverlay: Overlay hidden");
                 }
             }
         }
 
         public static bool IsVisible => _instance != null && !_instance.IsDisposed && _instance.Visible;
+        
+        public static bool IsManuallyHidden 
+        {
+            get
+            {
+                try { return System.IO.File.Exists(_manualHideFlagFile); }
+                catch { return false; }
+            }
+        }
+        
+        private static void SetManuallyHidden(bool hidden)
+        {
+            try
+            {
+                if (hidden)
+                {
+                    System.IO.File.WriteAllText(_manualHideFlagFile, DateTime.Now.ToString());
+                    Logger.LogDebug($"QuickClickOverlayForm: Manual hide flag file CREATED");
+                }
+                else
+                {
+                    if (System.IO.File.Exists(_manualHideFlagFile))
+                    {
+                        System.IO.File.Delete(_manualHideFlagFile);
+                        Logger.LogDebug($"QuickClickOverlayForm: Manual hide flag file DELETED");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"QuickClickOverlayForm: Error setting manual hide flag: {ex.Message}");
+            }
+        }
 
         public static void EnterEditMode()
         {
@@ -159,6 +200,7 @@ namespace NaturalCommands
 
             lock (_lock)
             {
+                SetManuallyHidden(false); // Clear manual hide flag when entering edit mode
                 if (_instance != null && !_instance.IsDisposed)
                 {
                     _instance.ToggleEditMode(true);
@@ -181,6 +223,7 @@ namespace NaturalCommands
 
             lock (_lock)
             {
+                SetManuallyHidden(false); // Clear manual hide flag when creating new region
                 if (_instance == null || _instance.IsDisposed)
                 {
                     _instance = new QuickClickOverlayForm();

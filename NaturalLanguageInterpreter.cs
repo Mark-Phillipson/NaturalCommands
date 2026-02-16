@@ -606,9 +606,11 @@ namespace NaturalCommands
             text = WordReplacementLoader.Apply(text);
             text = text.Replace("  ", " ").Replace(".", "").Replace(",", "").Trim();
 
-            // Common synonym / misrecognition: accept "quick clips" as "quick clicks"
+            // Common synonym / misrecognition: accept "quick clips" and "quick links" as "quick clicks"
             if (text.IndexOf("quick clips", StringComparison.InvariantCultureIgnoreCase) >= 0)
                 text = System.Text.RegularExpressions.Regex.Replace(text, @"quick\s+clips", "quick clicks", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (text.IndexOf("quick links", StringComparison.InvariantCultureIgnoreCase) >= 0)
+                text = System.Text.RegularExpressions.Regex.Replace(text, @"quick\s+links", "quick clicks", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
             // Remove extra words that often appear in these commands
             var extraWords = new[] { "of this", "of others", "of other windows", "on top of others", "on top of this" };
