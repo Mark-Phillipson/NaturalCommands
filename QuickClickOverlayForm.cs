@@ -342,24 +342,54 @@ namespace NaturalCommands
             if (!_editMode)
                 return;
 
-            // If in placement mode, create new region at click point
+            // If in placement mode, prompt for name/click-type and create the region at the clicked point
             if (_placementMode)
             {
                 var wp = ScreenToWindowClient(e.Location);
                 var size = AppSettings.Instance.QuickClicks.DefaultRegionSize;
-                var region = new QuickClickRegion
+
+                // Default click type from settings
+                var defaultClick = Enum.TryParse<QuickClickClickType>(AppSettings.Instance.QuickClicks.DefaultClickType, true, out var dct) ? dct : QuickClickClickType.Left;
+
+                if (CreateQuickClickForm.ShowDialog(out var regionName, out var chosenClickType, out var applyToMonitorOnly, e.Location, "New Region", defaultClick, true))
                 {
-                    Name = "New Region",
-                    X = wp.X - size / 2,
-                    Y = wp.Y - size / 2,
-                    Width = size,
-                    Height = size,
-                    ClickType = Enum.TryParse<QuickClickClickType>(AppSettings.Instance.QuickClicks.DefaultClickType, true, out var ct) ? ct : QuickClickClickType.Left
-                };
-                _profile!.Regions.Add(region);
-                _placementMode = false;
-                _selectedRegion = region;
-                Invalidate();
+                    var region = new QuickClickRegion
+                    {
+                        Name = string.IsNullOrWhiteSpace(regionName) ? "New Region" : regionName,
+                        X = wp.X - size / 2,
+                        Y = wp.Y - size / 2,
+                        Width = size,
+                        Height = size,
+                        ClickType = chosenClickType
+                    };
+
+                    // If the profile doesn't have monitor info and user requested monitor-scoped, capture current monitor size
+                    if (applyToMonitorOnly && (_profile?.MonitorWidth == null || _profile?.MonitorHeight == null))
+                    {
+                        try
+                        {
+                            var scr = Screen.FromPoint(e.Location).Bounds;
+                            if (_profile != null)
+                            {
+                                _profile.MonitorWidth = scr.Width;
+                                _profile.MonitorHeight = scr.Height;
+                            }
+                        }
+                        catch { }
+                    }
+
+                    _profile!.Regions.Add(region);
+                    _placementMode = false;
+                    _selectedRegion = region;
+                    Invalidate();
+                }
+                else
+                {
+                    // cancelled — leave placement mode
+                    _placementMode = false;
+                    Invalidate();
+                }
+
                 return;
             }
 
