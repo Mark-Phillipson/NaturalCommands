@@ -307,6 +307,8 @@ namespace NaturalCommands
             WordReplacementLoader.Load();
             // Load user-defined multi-action commands (multi_actions.json)
             try { NaturalCommands.Helpers.MultiActionLoader.Load(); } catch { }
+            // Load quick-click profiles (quick_clicks.json)
+            try { NaturalCommands.Helpers.QuickClickLoader.Load(); } catch { }
         }
 
         // Emoji mapping API now provided by EmojiManager.cs

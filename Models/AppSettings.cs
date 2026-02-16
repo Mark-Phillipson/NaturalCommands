@@ -43,6 +43,9 @@ namespace NaturalCommands.Models
         // Hotkey Settings
         public HotkeySettings Hotkeys { get; set; } = new HotkeySettings();
 
+        // Quick Clicks settings
+        public QuickClickSettings QuickClicks { get; set; } = new QuickClickSettings();
+
         /// <summary>
         /// Gets the singleton instance of AppSettings.
         /// </summary>
@@ -370,5 +373,35 @@ namespace NaturalCommands.Models
         /// Enable voice dictation hotkey registration.
         /// </summary>
         public bool EnableVoiceDictationHotkey { get; set; } = true;
+    }
+
+    // Quick Clicks specific application settings
+    public class QuickClickSettings
+    {
+        /// <summary>Enable Quick Clicks feature.</summary>
+        public bool Enabled { get; set; } = true;
+
+        /// <summary>Auto-show overlay when an associated app gains focus.</summary>
+        public bool AutoShowOnFocus { get; set; } = true;
+
+        /// <summary>Overlay opacity (0.0 - 1.0).</summary>
+        public float OverlayOpacity { get; set; } = 0.5f;
+
+        /// <summary>Default size (square) for new regions in pixels.</summary>
+        public int DefaultRegionSize { get; set; } = 100;
+
+        /// <summary>Default click type for newly created regions.</summary>
+        public string DefaultClickType { get; set; } = "Left";
+
+        /// <summary>
+        /// When true, profiles recorded for a specific monitor resolution will only apply on monitors
+        /// with that exact resolution. When false, resolution-matching is relaxed.
+        /// </summary>
+        public bool MatchOverlayByResolution { get; set; } = true;
+
+        /// <summary>
+        /// Optional Talon output directory. When null/empty the app directory `talon_output/` is used.
+        /// </summary>
+        public string? TalonOutputDirectory { get; set; }
     }
 }

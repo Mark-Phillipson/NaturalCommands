@@ -38,7 +38,7 @@
 ### 4. Foreground Window Monitor — `Helpers/ForegroundMonitor.cs` (new file)
 - Use `SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, callback, 0, 0, WINEVENT_OUTOFCONTEXT)` to detect focus changes.
 - Add required P/Invoke signatures: `SetWinEventHook`, `UnhookWinEvent`, and public `GetForegroundWindow` / `GetWindowText` to `Helpers/Win32ApiHelper.cs`.
-- On each focus change: get process name via `CurrentApplicationHelper.GetCurrentProcessName()`, get window title via new `CurrentApplicationHelper.GetCurrentWindowTitle()`, determine the monitor resolution that contains the focused window (use `MonitorFromWindow` + `GetMonitorInfo` or `Screen.FromHandle`). Call `QuickClickLoader.GetProfilesForApp(processName, windowTitle, monitorWidth, monitorHeight)` to locate profiles recorded for that monitor resolution. If an exact-resolution profile exists → show `QuickClickOverlayForm` for that profile. If no exact-resolution profile exists but there are profiles for the same process on other resolutions → show a small non-interactive warning overlay explaining the mismatch and offer actions to create/apply a profile for the current monitor or open the editor; do **not** apply a mismatched profile. If no profiles at all → hide the overlay.
+- On each focus change: get process name via `CurrentApplicationHelper.GetCurrentProcessName( pilot checked)`, get window title via new `CurrentApplicationHelper.GetCurrentWindowTitle()`, determine the monitor resolution that contains the focused window (use `MonitorFromWindow` + `GetMonitorInfo` or `Screen.FromHandle`). Call `QuickClickLoader.GetProfilesForApp(processName, windowTitle, monitorWidth, monitorHeight)` to locate profiles recorded for that monitor resolution. If an exact-resolution profile exists → show `QuickClickOverlayForm` for that profile. If no exact-resolution profile exists but there are profiles for the same process on other resolutions → show a small non-interactive warning overlay explaining the mismatch and offer actions to create/apply a profile for the current monitor or open the editor; do **not** apply a mismatched profile. If no profiles at all → hide the overlay.
 - Debounce rapid focus changes (100-200ms) using `DebounceGate` from `Helpers/DebounceGate.cs` or a simple timer.
 - **Critical**: The overlay itself must NOT steal focus (use `WS_EX_NOACTIVATE` + `WS_EX_TOOLWINDOW` extended styles), otherwise it will trigger its own focus-change event in an infinite loop.
 - Initialize in `ListenModeApplicationContext` constructor after hotkey registration (~line 87). Unhook in `ExitThreadCore()`.
@@ -185,10 +185,10 @@ Use this checklist to track engineering progress. Update the `Status` column her
 | ID | Task | Files involved | Status | Notes |
 |---:|---|---|---|---|
 | 1 | Update plan (spec) | `plan-quickClicks.prompt.md` | completed | Plan updated with click-type & resolution support ✅ |
-| 2 | Add data model | `Models/QuickClickRegion.cs` | not-started | Profile + Region + `QuickClickClickType` enum |
-| 3 | Implement loader | `Helpers/QuickClickLoader.cs` | not-started | JSON load/save + GetProfilesForApp(...) |
-| 4 | Talon generator | `Helpers/QuickClickTalonGenerator.cs` | not-started | `.talon` file generation per process |
-| 5 | Overlay UI scaffold | `QuickClickOverlayForm.cs` | not-started | display + edit modes, warning banner |
+| 2 | Add data model | `Models/QuickClickRegion.cs` | completed | Profile + Region + `QuickClickClickType` enum |
+| 3 | Implement loader | `Helpers/QuickClickLoader.cs` | completed | JSON load/save + GetProfilesForApp(...) |
+| 4 | Talon generator | `Helpers/QuickClickTalonGenerator.cs` | completed | `.talon` file generation per process (auto-run on save) |
+| 5 | Overlay UI scaffold | `QuickClickOverlayForm.cs` | completed | display + edit modes, selection, drag, basic editor UI |
 | 6 | Create dialog | `CreateQuickClickForm.cs` | not-started | name, click-type, monitor-scope option |
 | 7 | Foreground monitor | `Helpers/ForegroundMonitor.cs` | not-started | `SetWinEventHook` + debounce logic |
 | 8 | Win32 P/Invokes | `Helpers/Win32ApiHelper.cs` | not-started | `SetWinEventHook`, `MonitorFromWindow`, `GetWindowText` |

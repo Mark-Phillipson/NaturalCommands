@@ -274,8 +274,9 @@ namespace ExecuteCommands_NET
 				System.Threading.SynchronizationContext.SetSynchronizationContext(
 					new System.Windows.Forms.WindowsFormsSynchronizationContext());
 				
-				// Initialize the overlay's UI context
-				NaturalCommands.AutoClickOverlayForm.InitializeUIContext();
+// Initialize the overlays' UI contexts
+			NaturalCommands.AutoClickOverlayForm.InitializeUIContext();
+			NaturalCommands.QuickClickOverlayForm.InitializeUIContext();
 				
 				Application.Run(new NaturalCommands.ListenModeApplicationContext());
 			}
