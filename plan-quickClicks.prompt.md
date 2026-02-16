@@ -190,7 +190,7 @@ Use this checklist to track engineering progress. Update the `Status` column her
 | 4 | Talon generator | `Helpers/QuickClickTalonGenerator.cs` | completed ✅ | `.talon` file generation per process (auto-run on save) |
 | 5 | Overlay UI scaffold | `QuickClickOverlayForm.cs` | completed ✅ | display + edit modes, selection, drag, basic editor UI |
 | 6 | Create dialog | `CreateQuickClickForm.cs` | completed ✅ | name, click-type, monitor-scope option |
-| 7 | Foreground monitor | `Helpers/ForegroundMonitor.cs` | not-started | `SetWinEventHook` + debounce logic |
+| 7 | Foreground monitor | `Helpers/ForegroundMonitor.cs` | completed ✅ | `SetWinEventHook` + debounce logic |
 | 8 | Win32 P/Invokes | `Helpers/Win32ApiHelper.cs` | not-started | `SetWinEventHook`, `MonitorFromWindow`, `GetWindowText` |
 | 9 | Current app helper | `CurrentApplicationHelper.cs` | not-started | `GetCurrentWindowTitle()` |
 | 10 | Action model | `ActionModels.cs` | not-started | `ClickQuickClickAction`, `QuickClickClickType` |

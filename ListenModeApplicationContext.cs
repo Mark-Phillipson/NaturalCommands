@@ -269,6 +269,10 @@ namespace NaturalCommands
         {
             try { _hotkeyRegistrar.Dispose(); } catch { }
             try { TrayNotificationHelper.Dispose(); } catch { }
+
+            // Ensure ForegroundMonitor is unsubscribed and stopped on shutdown
+            try { Helpers.ForegroundMonitor.ForegroundChanged -= ForegroundMonitor_ForegroundChanged; } catch { }
+            try { Helpers.ForegroundMonitor.Stop(); } catch { }
             
             // Kill all NaturalCommands processes to ensure clean shutdown
             try
