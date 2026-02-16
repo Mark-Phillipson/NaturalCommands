@@ -382,7 +382,7 @@ namespace NaturalCommands.Models
         public bool Enabled { get; set; } = true;
 
         /// <summary>Auto-show overlay when an associated app gains focus.</summary>
-        public bool AutoShowOnFocus { get; set; } = true;
+        public bool AutoShowOnFocus { get; set; } = false;
 
         /// <summary>Overlay opacity (0.0 - 1.0).</summary>
         public float OverlayOpacity { get; set; } = 0.5f;

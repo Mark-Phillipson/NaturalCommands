@@ -29,6 +29,7 @@ namespace NaturalCommands
         private Rectangle _targetWindowRect = Rectangle.Empty;
 
         private System.Windows.Forms.Timer _repositionTimer;
+        private System.Windows.Forms.Timer _hideCheckTimer;
         private bool _editMode = false;
 
         // Interaction state
@@ -68,6 +69,10 @@ namespace NaturalCommands
             // Timer to poll window location so overlay follows the target window
             _repositionTimer = new System.Windows.Forms.Timer { Interval = 200 };
             _repositionTimer.Tick += (s, e) => RefreshPositionAndInvalidate();
+
+            // Timer to periodically check if another process set the manual hide flag
+            _hideCheckTimer = new System.Windows.Forms.Timer { Interval = 200 };
+            _hideCheckTimer.Tick += (s, e) => CheckManualHideFlag();
 
             // Mouse handlers for edit interactions
             MouseDown += QuickClickOverlayForm_MouseDown;
@@ -149,8 +154,13 @@ namespace NaturalCommands
                 Logger.LogDebug($"QuickClickOverlayForm.HideOverlay: Manual hide flag set");
                 if (_instance != null && !_instance.IsDisposed)
                 {
+                    Logger.LogDebug($"QuickClickOverlayForm.HideOverlay: Instance exists, calling InternalHide (Visible={_instance.Visible})");
                     _instance.InternalHide();
-                    Logger.LogDebug($"QuickClickOverlayForm.HideOverlay: Overlay hidden");
+                    Logger.LogDebug($"QuickClickOverlayForm.HideOverlay: Overlay hidden (Visible={_instance.Visible})");
+                }
+                else
+                {
+                    Logger.LogDebug($"QuickClickOverlayForm.HideOverlay: No instance to hide (_instance null={_instance == null}, disposed={_instance?.IsDisposed})");
                 }
             }
         }
@@ -265,6 +275,13 @@ namespace NaturalCommands
         #region Internal lifecycle
         private void InternalShow(QuickClickProfile? profile, IntPtr windowHandle)
         {
+            // Don't show if manually hidden (defensive check)
+            if (IsManuallyHidden)
+            {
+                Logger.LogDebug($"QuickClickOverlayForm.InternalShow: Skipping show because manually hidden");
+                return;
+            }
+
             _profile = profile;
             _targetWindow = windowHandle;
             RefreshPositionAndInvalidate();
@@ -276,20 +293,34 @@ namespace NaturalCommands
             _isDragging = false;
 
             _repositionTimer.Start();
+            _hideCheckTimer.Start();
 
             if (!Visible)
                 Show();
             BringToFront();
+            Logger.LogDebug($"QuickClickOverlayForm.InternalShow: Overlay shown (Visible={Visible})");
         }
 
         private void InternalHide()
         {
             _repositionTimer.Stop();
+            _hideCheckTimer.Stop();
             _placementMode = false;
             _isDragging = false;
             _selectedRegion = null;
             ToggleEditMode(false);
-            Hide();
+            
+            // Force hide with both methods to ensure it actually hides
+            if (Visible)
+            {
+                Logger.LogDebug($"QuickClickOverlayForm.InternalHide: Hiding visible overlay");
+                Visible = false;
+                Hide();
+            }
+            else
+            {
+                Logger.LogDebug($"QuickClickOverlayForm.InternalHide: Overlay already not visible");
+            }
         }
         #endregion
 
@@ -632,6 +663,16 @@ namespace NaturalCommands
             // keep overlay covering virtual screen so mapping remains consistent
             Bounds = SystemInformation.VirtualScreen;
             Invalidate();
+        }
+
+        private void CheckManualHideFlag()
+        {
+            // Check if another process has set the manual hide flag
+            if (IsManuallyHidden && Visible)
+            {
+                Logger.LogDebug("QuickClickOverlayForm.CheckManualHideFlag: Manual hide flag detected from another process - hiding overlay");
+                InternalHide();
+            }
         }
 
         private void ToggleEditMode(bool enable)
