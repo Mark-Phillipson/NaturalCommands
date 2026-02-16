@@ -19,6 +19,21 @@ namespace NaturalCommands
 
         public ListenModeApplicationContext()
         {
+            // Clean up any leftover command file from previous run to prevent auto-triggering on startup
+            try
+            {
+                var commandFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".quick_clicks_command");
+                if (System.IO.File.Exists(commandFile))
+                {
+                    System.IO.File.Delete(commandFile);
+                    Helpers.Logger.LogDebug("ListenMode: Deleted leftover .quick_clicks_command file on startup");
+                }
+            }
+            catch (Exception ex)
+            {
+                Helpers.Logger.LogWarning($"ListenMode: Failed to delete leftover command file: {ex.Message}");
+            }
+
             _commands = new Commands(new HandleProcesses());
 
             var menu = new ContextMenuStrip();
@@ -64,7 +79,7 @@ namespace NaturalCommands
             var qcShow = new ToolStripMenuItem("Show Quick Clicks");
             qcShow.Click += (_, __) => ShowQuickClicksForForegroundWindow();
             var qcEdit = new ToolStripMenuItem("Edit Quick Clicks");
-            qcEdit.Click += (_, __) => { ShowQuickClicksForForegroundWindow(); QuickClickOverlayForm.EnterEditMode(); };
+            qcEdit.Click += (_, __) => EditQuickClicksForForegroundWindow();
             var qcCreateAtMouse = new ToolStripMenuItem("Create Quick Click at Mouse");
             qcCreateAtMouse.Click += (_, __) => { QuickClickOverlayForm.BeginPlacementAtCursorForForegroundWindow(); };
             var qcOpenJson = new ToolStripMenuItem("Open quick_clicks.json");
@@ -115,15 +130,19 @@ namespace NaturalCommands
                     Helpers.ForegroundMonitor.ForegroundChanged += ForegroundMonitor_ForegroundChanged;
                     Helpers.ForegroundMonitor.Start();
                     
-                    // Start timer to check for manual hide flag (created by voice commands in separate processes)
-                    _manualHideCheckTimer = new System.Windows.Forms.Timer { Interval = 500 }; // Check every 500ms
+                    // Start timer to check for voice commands (sent via .quick_clicks_command file)
+                    _manualHideCheckTimer = new System.Windows.Forms.Timer { Interval = 200 }; // Check every 200ms
                     _manualHideCheckTimer.Tick += (s, e) =>
                     {
+                        // Check for manual hide flag
                         if (QuickClickOverlayForm.IsManuallyHidden && QuickClickOverlayForm.IsVisible)
                         {
                             Helpers.Logger.LogDebug("ListenMode: Manual hide flag detected, hiding overlay");
                             QuickClickOverlayForm.HideOverlay();
                         }
+                        
+                        // Check for voice commands
+                        CheckForQuickClicksCommand();
                     };
                     _manualHideCheckTimer.Start();
                 }
@@ -199,32 +218,127 @@ namespace NaturalCommands
         {
             try
             {
+                // Clear manual hide flag when explicitly showing
+                QuickClickOverlayForm.ClearManualHideFlag();
+                
                 var hwnd = Helpers.Win32ApiHelper.GetForegroundWindow();
                 var proc = CurrentApplicationHelper.GetCurrentProcessName();
                 var title = CurrentApplicationHelper.GetCurrentWindowTitle();
 
                 int? mw = null, mh = null;
-                try
-                {
-                    var monitor = Helpers.Win32ApiHelper.MonitorFromWindow(hwnd, 2);
-                    if (monitor != IntPtr.Zero)
-                    {
-                        var info = new Helpers.Win32ApiHelper.MONITORINFOEX();
-                        info.cbSize = Marshal.SizeOf(typeof(Helpers.Win32ApiHelper.MONITORINFOEX));
-                        if (Helpers.Win32ApiHelper.GetMonitorInfo(monitor, ref info))
-                        {
-                            mw = info.rcMonitor.Right - info.rcMonitor.Left;
-                            mh = info.rcMonitor.Bottom - info.rcMonitor.Top;
-                        }
-                    }
-                }
-                catch { }
+                Helpers.Win32ApiHelper.TryGetMonitorResolutionForWindow(hwnd, out var w, out var h);
+                if (w > 0 && h > 0) { mw = w; mh = h; }
 
-                ForegroundMonitor_ForegroundChanged(hwnd, proc, title, mw, mh);
+                var profilesForMonitor = Helpers.QuickClickLoader.GetProfilesForApp(proc ?? string.Empty, title, mw, mh).ToList();
+
+                Models.QuickClickProfile? profileToShow = null;
+                if (profilesForMonitor.Count > 0)
+                {
+                    profileToShow = profilesForMonitor.First();
+                }
+                else
+                {
+                    // Show null profile (warning banner) if no matching profile exists
+                    profileToShow = null;
+                }
+                
+                QuickClickOverlayForm.ShowOverlay(profileToShow, hwnd, enterEditMode: false);
+                TrayNotificationHelper.ShowNotification("Quick Clicks", profileToShow != null ? "Overlay shown" : "No profile for this window", 2000);
             }
             catch (Exception ex)
             {
                 try { Helpers.Logger.LogError($"ShowQuickClicksForForegroundWindow failed: {ex.Message}"); } catch { }
+            }
+        }
+
+        // Edit quick clicks for the currently focused window (used by tray menu "Edit Quick Clicks")
+        private void EditQuickClicksForForegroundWindow()
+        {
+            try
+            {
+                var hwnd = Helpers.Win32ApiHelper.GetForegroundWindow();
+                var proc = CurrentApplicationHelper.GetCurrentProcessName();
+                var title = CurrentApplicationHelper.GetCurrentWindowTitle();
+
+                int? mw = null, mh = null;
+                Helpers.Win32ApiHelper.TryGetMonitorResolutionForWindow(hwnd, out var w, out var h);
+                if (w > 0 && h > 0) { mw = w; mh = h; }
+
+                var profilesForMonitor = Helpers.QuickClickLoader.GetProfilesForApp(proc ?? string.Empty, title, mw, mh).ToList();
+
+                Models.QuickClickProfile? profileToShow = null;
+                if (profilesForMonitor.Count > 0)
+                {
+                    profileToShow = profilesForMonitor.First();
+                }
+                else
+                {
+                    // Create a new empty profile for this app
+                    profileToShow = new Models.QuickClickProfile 
+                    { 
+                        ProcessName = proc ?? string.Empty, 
+                        WindowTitlePattern = title, 
+                        MonitorWidth = mw, 
+                        MonitorHeight = mh,
+                        Regions = new System.Collections.Generic.List<Models.QuickClickRegion>()
+                    };
+                }
+                
+                QuickClickOverlayForm.ShowOverlay(profileToShow, hwnd, enterEditMode: true);
+                TrayNotificationHelper.ShowNotification("Quick Clicks", "Edit mode active", 2000);
+            }
+            catch (Exception ex)
+            {
+                Helpers.Logger.LogError($"EditQuickClicksForForegroundWindow failed: {ex.Message}");
+                TrayNotificationHelper.ShowNotification("Quick Clicks Error", ex.Message, 3000);
+            }
+        }
+
+        // Check for voice commands sent via .quick_clicks_command file
+        private void CheckForQuickClicksCommand()
+        {
+            var commandFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".quick_clicks_command");
+            try
+            {
+                if (System.IO.File.Exists(commandFile))
+                {
+                    var command = System.IO.File.ReadAllText(commandFile).Trim().ToLowerInvariant();
+                    System.IO.File.Delete(commandFile); // Delete immediately to avoid re-processing
+                    
+                    Helpers.Logger.LogInfo($"ListenMode: Processing quick clicks command: {command}");
+                    
+                    if (command.Contains("edit") && command.Contains("quick"))
+                    {
+                        EditQuickClicksForForegroundWindow();
+                    }
+                    else if (command.Contains("show") && command.Contains("quick"))
+                    {
+                        ShowQuickClicksForForegroundWindow();
+                    }
+                    else if (command.Contains("hide") && command.Contains("quick"))
+                    {
+                        QuickClickOverlayForm.HideOverlay();
+                    }
+                    else if (command.Contains("create") && command.Contains("quick"))
+                    {
+                        QuickClickOverlayForm.BeginPlacementAtCursorForForegroundWindow();
+                    }
+                    else
+                    {
+                        // Might be a region click command - pass to natural language interpreter
+                        _commands.HandleNaturalAsync(command);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try 
+                { 
+                    Helpers.Logger.LogError($"CheckForQuickClicksCommand failed: {ex.Message}");
+                    if (System.IO.File.Exists(commandFile))
+                        System.IO.File.Delete(commandFile);
+                }
+                catch { }
             }
         }
 
@@ -233,6 +347,13 @@ namespace NaturalCommands
         {
             try
             {
+                // Don't interfere if overlay is already visible in edit mode
+                if (QuickClickOverlayForm.IsVisible && QuickClickOverlayForm.IsInEditMode)
+                {
+                    Helpers.Logger.LogDebug($"ForegroundMonitor: Skipping auto-show because overlay is in edit mode");
+                    return;
+                }
+                
                 // Don't auto-show if user manually hid the overlay
                 if (QuickClickOverlayForm.IsManuallyHidden)
                 {
@@ -242,7 +363,9 @@ namespace NaturalCommands
 
                 if (!AppSettings.Instance.QuickClicks.Enabled || !AppSettings.Instance.QuickClicks.AutoShowOnFocus)
                 {
-                    QuickClickOverlayForm.HideOverlay();
+                    // Don't auto-hide if AutoShowOnFocus is disabled - just skip auto-showing
+                    // (allows manual "show quick clicks" commands to work)
+                    Helpers.Logger.LogDebug($"ForegroundMonitor: Skipping - QuickClicks.Enabled={AppSettings.Instance.QuickClicks.Enabled}, AutoShowOnFocus={AppSettings.Instance.QuickClicks.AutoShowOnFocus}");
                     return;
                 }
 

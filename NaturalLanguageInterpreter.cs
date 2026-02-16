@@ -1632,10 +1632,54 @@ namespace NaturalCommands
             }
             else if (action is EditQuickClicksAction)
             {
-                // Ensure overlay is visible for current window then enter edit mode
-                var showResult = ExecuteActionAsync(new ShowQuickClicksAction());
-                QuickClickOverlayForm.EnterEditMode();
-                return "Quick Clicks editor opened.";
+                // Show overlay directly in edit mode to avoid window recreation flicker
+                try
+                {
+                    var hwnd = Helpers.Win32ApiHelper.GetForegroundWindow();
+                    var proc = CurrentApplicationHelper.GetCurrentProcessName();
+                    var title = CurrentApplicationHelper.GetCurrentWindowTitle();
+
+                    int? mw = null, mh = null;
+                    Helpers.Win32ApiHelper.TryGetMonitorResolutionForWindow(hwnd, out var w, out var h);
+                    if (w > 0 && h > 0) { mw = w; mh = h; }
+
+                    var profilesForMonitor = Helpers.QuickClickLoader.GetProfilesForApp(proc ?? string.Empty, title, mw, mh).ToList();
+                    var allProfilesForApp = Helpers.QuickClickLoader.GetProfilesForApp(proc ?? string.Empty, title, null, null).ToList();
+
+                    Models.QuickClickProfile? profileToShow = null;
+                    if (profilesForMonitor.Count > 0)
+                    {
+                        Models.QuickClickProfile? exact = null;
+                        if (mw.HasValue && mh.HasValue)
+                            exact = profilesForMonitor.FirstOrDefault(p => p.MonitorWidth.HasValue && p.MonitorHeight.HasValue && p.MonitorWidth.Value == mw.Value && p.MonitorHeight.Value == mh.Value);
+                        profileToShow = exact ?? profilesForMonitor.First();
+                    }
+                    else if (allProfilesForApp.Count > 0)
+                    {
+                        // Show with null profile to display warning
+                        profileToShow = null;
+                    }
+                    else
+                    {
+                        // Create a new empty profile for this app
+                        profileToShow = new Models.QuickClickProfile 
+                        { 
+                            ProcessName = proc ?? string.Empty, 
+                            WindowTitlePattern = title, 
+                            MonitorWidth = mw, 
+                            MonitorHeight = mh,
+                            Regions = new System.Collections.Generic.List<Models.QuickClickRegion>()
+                        };
+                    }
+                    
+                    QuickClickOverlayForm.ShowOverlay(profileToShow, hwnd, enterEditMode: true);
+                    return "Quick Clicks editor opened.";
+                }
+                catch (Exception ex)
+                {
+                    NaturalCommands.Helpers.Logger.LogError($"EditQuickClicksAction failed: {ex.Message}");
+                    return $"Edit Quick Clicks failed: {ex.Message}";
+                }
             }
             else if (action is CreateQuickClickAction)
             {

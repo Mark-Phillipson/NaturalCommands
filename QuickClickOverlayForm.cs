@@ -119,24 +119,24 @@ namespace NaturalCommands
             Logger.LogDebug($"QuickClickOverlayForm: UI context initialized: {_uiContext?.GetType().Name ?? "null"}");
         }
 
-        public static void ShowOverlay(QuickClickProfile? profile, IntPtr windowHandle)
+        public static void ShowOverlay(QuickClickProfile? profile, IntPtr windowHandle, bool enterEditMode = false)
         {
             if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
             {
-                _uiContext.Post(_ => ShowOverlay(profile, windowHandle), null);
+                _uiContext.Post(_ => ShowOverlay(profile, windowHandle, enterEditMode), null);
                 return;
             }
 
             lock (_lock)
             {
                 SetManuallyHidden(false); // Clear manual hide flag when showing
-                Logger.LogDebug($"QuickClickOverlayForm.ShowOverlay: Manual hide flag cleared, showing overlay");
+                Logger.LogDebug($"QuickClickOverlayForm.ShowOverlay: Manual hide flag cleared, showing overlay (EditMode={enterEditMode})");
                 if (_instance == null || _instance.IsDisposed)
                 {
                     _instance = new QuickClickOverlayForm();
                 }
 
-                _instance.InternalShow(profile, windowHandle);
+                _instance.InternalShow(profile, windowHandle, enterEditMode);
             }
         }
 
@@ -166,6 +166,8 @@ namespace NaturalCommands
         }
 
         public static bool IsVisible => _instance != null && !_instance.IsDisposed && _instance.Visible;
+        
+        public static bool IsInEditMode => _instance != null && !_instance.IsDisposed && _instance._editMode;
         
         public static bool IsManuallyHidden 
         {
@@ -200,6 +202,11 @@ namespace NaturalCommands
             }
         }
 
+        public static void ClearManualHideFlag()
+        {
+            SetManuallyHidden(false);
+        }
+
         public static void EnterEditMode()
         {
             if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
@@ -211,9 +218,13 @@ namespace NaturalCommands
             lock (_lock)
             {
                 SetManuallyHidden(false); // Clear manual hide flag when entering edit mode
-                if (_instance != null && !_instance.IsDisposed)
+                if (_instance != null && !_instance.IsDisposed && _instance.Visible)
                 {
                     _instance.ToggleEditMode(true);
+                }
+                else
+                {
+                    Logger.LogWarning($"QuickClickOverlayForm.EnterEditMode: Cannot enter edit mode - instance is null, disposed, or not visible");
                 }
             }
         }
@@ -273,7 +284,7 @@ namespace NaturalCommands
         #endregion
 
         #region Internal lifecycle
-        private void InternalShow(QuickClickProfile? profile, IntPtr windowHandle)
+        private void InternalShow(QuickClickProfile? profile, IntPtr windowHandle, bool enterEditMode = false)
         {
             // Don't show if manually hidden (defensive check)
             if (IsManuallyHidden)
@@ -286,8 +297,8 @@ namespace NaturalCommands
             _targetWindow = windowHandle;
             RefreshPositionAndInvalidate();
 
-            // Reset to display mode (not edit mode) whenever showing the overlay
-            ToggleEditMode(false);
+            // Set edit mode BEFORE showing to avoid window recreation flicker
+            ToggleEditMode(enterEditMode);
             _selectedRegion = null;
             _placementMode = false;
             _isDragging = false;
@@ -298,7 +309,7 @@ namespace NaturalCommands
             if (!Visible)
                 Show();
             BringToFront();
-            Logger.LogDebug($"QuickClickOverlayForm.InternalShow: Overlay shown (Visible={Visible})");
+            Logger.LogDebug($"QuickClickOverlayForm.InternalShow: Overlay shown (Visible={Visible}, EditMode={_editMode})");
         }
 
         private void InternalHide()
@@ -330,20 +341,34 @@ namespace NaturalCommands
             base.OnPaint(e);
 
             var g = e.Graphics;
-            // Clear the entire surface to the transparency key color first
-            g.Clear(Color.Lime);
+            
+            // In edit mode, use semi-transparent dark background. In display mode, use transparent (Lime)
+            if (_editMode)
+            {
+                g.Clear(Color.Lime); // First clear to transparency key
+                // Then draw semi-transparent dark overlay so user can see through to the app
+                using (var bg = new SolidBrush(Color.FromArgb(120, 20, 20, 40)))
+                {
+                    g.FillRectangle(bg, ClientRectangle);
+                }
+            }
+            else
+            {
+                g.Clear(Color.Lime); // Fully transparent in display mode
+            }
+            
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
             // Draw warning if no profile provided
             if (_profile == null)
             {
-                var msg = "No Quick Click profile for this app/monitor. Open editor to create one.";
+                var msg = "No Quick Click profile for this app/monitor. Click '+ New' to create a region.";
                 var size = g.MeasureString(msg, _labelFont);
-                var rect = new RectangleF(20, 20, size.Width + 16, size.Height + 10);
-                using (var bg = new SolidBrush(Color.FromArgb(200, 0, 0, 0))) g.FillRectangle(bg, rect);
+                var rect = new RectangleF(20, 60, size.Width + 16, size.Height + 10);
+                using (var bg = new SolidBrush(Color.FromArgb(220, 40, 40, 120))) g.FillRectangle(bg, rect);
                 g.DrawString(msg, _labelFont, Brushes.White, rect.X + 8, rect.Y + 4);
-                return;
+                if (!_editMode) return;
             }
 
             // Draw regions
@@ -392,40 +417,78 @@ namespace NaturalCommands
 
         private void RenderEditorUI(Graphics g)
         {
-            // Simple toolbar in the top-left corner
-            int x = 16; int y = 16; int h = 28; int gap = 8;
+            // Title banner at the very top - make it VERY visible
+            using (var bannerBrush = new SolidBrush(Color.FromArgb(255, 0, 100, 200)))
+            {
+                var bannerRect = new Rectangle(0, 0, Width, 80);
+                g.FillRectangle(bannerBrush, bannerRect);
+                
+                // Draw a bright border around the banner
+                using (var borderPen = new Pen(Color.Yellow, 4))
+                {
+                    g.DrawRectangle(borderPen, 2, 2, Width - 4, 76);
+                }
+                
+                var titleFont = new Font("Segoe UI", 16, FontStyle.Bold);
+                var title = "QUICK CLICKS EDITOR - EDIT MODE ACTIVE";
+                g.DrawString(title, titleFont, Brushes.White, 30, 20);
+                
+                var subtitle = $"Screen: {Width}x{Height} - Say: 'save and exit', 'new', 'delete'";
+                g.DrawString(subtitle, _labelFont, Brushes.Yellow, 30, 50);
+                titleFont.Dispose();
+            }
+
+            // Toolbar below the banner - make buttons MUCH larger and more visible
+            int x = 30; int y = 100; int h = 50; int gap = 15;
             _editorButtons.Clear();
 
             void DrawBtn(string label, Color bg)
             {
-                var size = g.MeasureString(label, _labelFont);
-                var rect = new Rectangle(x, y, (int)size.Width + 20, h);
+                var btnFont = new Font("Segoe UI", 14, FontStyle.Bold);
+                var size = g.MeasureString(label, btnFont);
+                var rect = new Rectangle(x, y, (int)size.Width + 40, h);
+                
+                // Draw button background
                 using (var b = new SolidBrush(bg)) g.FillRectangle(b, rect);
-                g.DrawRectangle(Pens.Black, rect);
-                g.DrawString(label, _labelFont, Brushes.White, rect.X + 10, rect.Y + 4);
+                
+                // Draw bright white border
+                using (var border = new Pen(Color.White, 3)) g.DrawRectangle(border, rect);
+                
+                // Draw text
+                g.DrawString(label, btnFont, Brushes.White, rect.X + 20, rect.Y + 12);
                 _editorButtons.Add((label, rect));
                 x += rect.Width + gap;
+                btnFont.Dispose();
             }
 
-            DrawBtn("+ New", Color.FromArgb(90, 50, 150));
-            DrawBtn("+ Rectangle", Color.FromArgb(70, 120, 70));
-            DrawBtn("Delete", Color.FromArgb(180, 60, 60));
-            DrawBtn("Save & Exit", Color.FromArgb(40, 120, 180));
+            DrawBtn("+ New", Color.FromArgb(255, 120, 50, 200));
+            DrawBtn("+ Rectangle", Color.FromArgb(255, 50, 180, 50));
+            DrawBtn("Delete", Color.FromArgb(255, 220, 30, 30));
+            DrawBtn("Save & Exit", Color.FromArgb(255, 30, 150, 220));
 
-            // If a region is selected, draw click-type selector nearby
+            // If a region is selected, draw click-type selector below buttons
             if (_selectedRegion != null)
             {
-                var badgeX = 16; var badgeY = y + h + 12;
+                var labelText = $"SELECTED REGION: {_selectedRegion.Name} - Choose Click Type:";
+                var labelFont = new Font("Segoe UI", 12, FontStyle.Bold);
+                g.DrawString(labelText, labelFont, Brushes.Yellow, 30, y + h + 20);
+                labelFont.Dispose();
+                
+                var badgeX = 30; var badgeY = y + h + 55;
                 var types = new[] { "Left", "Double", "Right" };
                 foreach (var t in types)
                 {
-                    var rect = new Rectangle(badgeX, badgeY, 80, 24);
+                    var rect = new Rectangle(badgeX, badgeY, 120, 45);
                     var isActive = string.Equals(_selectedRegion.ClickType.ToString(), t, StringComparison.OrdinalIgnoreCase);
-                    using (var b = new SolidBrush(isActive ? Color.DodgerBlue : Color.FromArgb(80, 80, 80))) g.FillRectangle(b, rect);
-                    g.DrawRectangle(Pens.Black, rect);
-                    g.DrawString(t, SystemFonts.DefaultFont, Brushes.White, rect.X + 8, rect.Y + 3);
+                    using (var b = new SolidBrush(isActive ? Color.FromArgb(255, 0, 200, 100) : Color.FromArgb(255, 80, 80, 80))) 
+                        g.FillRectangle(b, rect);
+                    using (var border = new Pen(isActive ? Color.Yellow : Color.White, isActive ? 4 : 2)) 
+                        g.DrawRectangle(border, rect);
+                    var font = new Font("Segoe UI", 12, isActive ? FontStyle.Bold : FontStyle.Regular);
+                    g.DrawString(t, font, Brushes.White, rect.X + 20, rect.Y + 12);
+                    font.Dispose();
                     _editorButtons.Add((t, rect));
-                    badgeX += rect.Width + 8;
+                    badgeX += rect.Width + 15;
                 }
             }
         }

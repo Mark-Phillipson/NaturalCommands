@@ -119,6 +119,29 @@ namespace ExecuteCommands_NET
 		bool mightStartQuickClicks = text.Contains("quick click", StringComparison.OrdinalIgnoreCase) ||
 		                             text.Contains("quick-click", StringComparison.OrdinalIgnoreCase);
 		
+		// Check if listen mode is already running - if so, send command to it via file instead of running locally
+		bool isListenModeRunning = false;
+		try
+		{
+			var currentProcesses = System.Diagnostics.Process.GetProcessesByName("NaturalCommands");
+			var currentProcessId = System.Diagnostics.Process.GetCurrentProcess().Id;
+			isListenModeRunning = currentProcesses.Any(p => p.Id != currentProcessId);
+			
+			if (mightStartQuickClicks && isListenModeRunning)
+			{
+				// Send command to listen mode via file
+				var commandFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".quick_clicks_command");
+				File.WriteAllText(commandFile, text);
+				NaturalCommands.Helpers.Logger.LogInfo($"Quick clicks command sent to listen mode: {text}");
+				Console.WriteLine("Command sent to listen mode");
+				return;
+			}
+		}
+		catch (Exception ex)
+		{
+			NaturalCommands.Helpers.Logger.LogWarning($"Could not check for listen mode: {ex.Message}");
+		}
+		
 		// If this might start auto-click or quick clicks, initialize Windows Forms FIRST
 		if (mightStartAutoClick || mightStartQuickClicks)
 		{
