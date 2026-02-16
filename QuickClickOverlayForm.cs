@@ -77,6 +77,33 @@ namespace NaturalCommands
             Shown += (s, e) => { try { Win32ApiHelper.SetWindowPos(Handle, new IntPtr(-2), 0, 0, 0, 0, 0x0001 | 0x0002); } catch { } };
         }
 
+        /// <summary>
+        /// Override CreateParams to set extended window styles BEFORE window creation.
+        /// This is critical to make the overlay click-through in display mode.
+        /// </summary>
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                const int WS_EX_LAYERED = 0x80000;
+                const int WS_EX_TRANSPARENT = 0x20;
+                const int WS_EX_NOACTIVATE = 0x08000000;
+                const int WS_EX_TOOLWINDOW = 0x00000080;
+
+                var cp = base.CreateParams;
+                // In display mode, make click-through. In edit mode, accept mouse input.
+                if (_editMode)
+                {
+                    cp.ExStyle |= WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+                }
+                else
+                {
+                    cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+                }
+                return cp;
+            }
+        }
+
         #region Public API (thread-safe)
         public static void InitializeUIContext()
         {
@@ -199,8 +226,12 @@ namespace NaturalCommands
             _targetWindow = windowHandle;
             RefreshPositionAndInvalidate();
 
-            // Display mode should be click-through
-            EnsureClickThrough(true);
+            // Reset to display mode (not edit mode) whenever showing the overlay
+            _editMode = false;
+            _selectedRegion = null;
+            _placementMode = false;
+            _isDragging = false;
+
             _repositionTimer.Start();
 
             if (!Visible)
@@ -225,6 +256,8 @@ namespace NaturalCommands
             base.OnPaint(e);
 
             var g = e.Graphics;
+            // Clear the entire surface to the transparency key color first
+            g.Clear(Color.Lime);
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
@@ -560,9 +593,14 @@ namespace NaturalCommands
 
         private void ToggleEditMode(bool enable)
         {
+            if (_editMode == enable) return; // Already in desired mode
+            
             _editMode = enable;
-            // When entering edit mode we must remove WS_EX_TRANSPARENT so the form receives mouse events
-            EnsureClickThrough(!enable);
+            // Force window recreation to apply new CreateParams
+            if (IsHandleCreated)
+            {
+                RecreateHandle();
+            }
             if (enable)
             {
                 // ensure focus so keyboard works
@@ -573,35 +611,9 @@ namespace NaturalCommands
 
         private void EnsureClickThrough(bool clickThrough)
         {
-            // Toggle WS_EX_TRANSPARENT flag at runtime
-            const int GWL_EXSTYLE = -20;
-            const int WS_EX_LAYERED = 0x80000;
-            const int WS_EX_TRANSPARENT = 0x20;
-            const int WS_EX_NOACTIVATE = 0x08000000;
-            const int WS_EX_TOOLWINDOW = 0x00000080;
-
-            try
-            {
-                var ex = Win32ApiHelper.GetWindowLong(this.Handle, GWL_EXSTYLE);
-                if (clickThrough)
-                {
-                    ex |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-                }
-                else
-                {
-                    ex &= ~WS_EX_TRANSPARENT;
-                    ex |= WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-                }
-                // SetWindowLong is not exposed by Win32ApiHelper; use Win32 directly
-                SetWindowLong(this.Handle, GWL_EXSTYLE, ex);
-            }
-            catch { }
+            // This method is no longer needed - CreateParams handles it at window creation
+            // Keeping it as a no-op for compatibility
         }
-        #endregion
-
-        #region Native helpers
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
         #endregion
     }
 }

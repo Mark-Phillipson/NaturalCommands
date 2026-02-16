@@ -605,6 +605,11 @@ namespace NaturalCommands
             text = RemovePoliteModifiers(text);
             text = WordReplacementLoader.Apply(text);
             text = text.Replace("  ", " ").Replace(".", "").Replace(",", "").Trim();
+
+            // Common synonym / misrecognition: accept "quick clips" as "quick clicks"
+            if (text.IndexOf("quick clips", StringComparison.InvariantCultureIgnoreCase) >= 0)
+                text = System.Text.RegularExpressions.Regex.Replace(text, @"quick\s+clips", "quick clicks", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
             // Remove extra words that often appear in these commands
             var extraWords = new[] { "of this", "of others", "of other windows", "on top of others", "on top of this" };
             foreach (var ew in extraWords) text = text.Replace(ew, "");
@@ -1038,6 +1043,20 @@ namespace NaturalCommands
                 var action = new ShowDesktopAction();
                 AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (show desktop)\n");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
+            // Quick Clicks control phrases (show/hide/edit/create)
+            var quickClicksControlPatterns = new[] { "show quick clicks", "hide quick clicks", "edit quick clicks", "create quick click", "create quick click at mouse", "create quick click at cursor" };
+            if (quickClicksControlPatterns.Any(p => text.Equals(p, StringComparison.InvariantCultureIgnoreCase) || text.Contains(p)))
+            {
+                if (text.Contains("show quick clicks"))
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(new ShowQuickClicksAction());
+                if (text.Contains("hide quick clicks"))
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(new HideQuickClicksAction());
+                if (text.Contains("edit quick clicks"))
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(new EditQuickClicksAction());
+                if (text.StartsWith("create quick click"))
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(new CreateQuickClickAction());
             }
 
             // Quick Clicks voice commands (dynamic region matching + explicit phrases)
