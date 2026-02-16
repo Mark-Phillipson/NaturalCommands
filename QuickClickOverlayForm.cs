@@ -227,7 +227,7 @@ namespace NaturalCommands
             RefreshPositionAndInvalidate();
 
             // Reset to display mode (not edit mode) whenever showing the overlay
-            _editMode = false;
+            ToggleEditMode(false);
             _selectedRegion = null;
             _placementMode = false;
             _isDragging = false;
