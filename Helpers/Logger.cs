@@ -23,6 +23,15 @@ namespace NaturalCommands.Helpers
                 var p = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "bin", "app.log");
                 s_logPath = Path.GetFullPath(p);
             }
+
+            // Start with a clean log for each run to avoid unlimited growth / unusable files.
+            try
+            {
+                EnsureLogDirExists();
+                // Truncate or create the log file so we begin fresh on each process start.
+                File.WriteAllText(s_logPath, string.Empty);
+            }
+            catch { }
         }
 
         public static string LogPath => s_logPath;
