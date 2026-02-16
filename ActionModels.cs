@@ -27,6 +27,15 @@ namespace NaturalCommands
     public record StartMouseMoveAction(string Direction) : ActionBase;
     public record StopMouseMoveAction(bool PerformClick = false, bool IsRightClick = false) : ActionBase;
     public record AdjustMouseSpeedAction(string SpeedChange) : ActionBase;
+
+    // Click a named quick-click region (ClickType optional; defaults to Left when omitted)
+    // Uses the model enum `Models.QuickClickClickType` defined in Models/QuickClickRegion.cs.
+    public record ClickQuickClickAction(string RegionName, Models.QuickClickClickType ClickType = Models.QuickClickClickType.Left) : ActionBase;
+
+    public record ShowQuickClicksAction() : ActionBase;
+    public record HideQuickClicksAction() : ActionBase;
+    public record EditQuickClicksAction() : ActionBase;
+    public record CreateQuickClickAction() : ActionBase;
     // Adjust auto-click delay by spoken commands such as "auto click faster" / "auto click slower"
     public record AdjustAutoClickDelayAction(string Change) : ActionBase;
     public record StartAutoClickAction(int DelayMs = 0) : ActionBase;

@@ -191,10 +191,10 @@ Use this checklist to track engineering progress. Update the `Status` column her
 | 5 | Overlay UI scaffold | `QuickClickOverlayForm.cs` | completed ✅ | display + edit modes, selection, drag, basic editor UI |
 | 6 | Create dialog | `CreateQuickClickForm.cs` | completed ✅ | name, click-type, monitor-scope option |
 | 7 | Foreground monitor | `Helpers/ForegroundMonitor.cs` | completed ✅ | `SetWinEventHook` + debounce logic |
-| 8 | Win32 P/Invokes | `Helpers/Win32ApiHelper.cs` | not-started | `SetWinEventHook`, `MonitorFromWindow`, `GetWindowText` |
-| 9 | Current app helper | `CurrentApplicationHelper.cs` | not-started | `GetCurrentWindowTitle()` |
-| 10 | Action model | `ActionModels.cs` | not-started | `ClickQuickClickAction`, `QuickClickClickType` |
-| 11 | NLP + execution | `NaturalLanguageInterpreter.cs` | not-started | interpret + ExecuteActionAsync handlers |
+| 8 | Win32 P/Invokes | `Helpers/Win32ApiHelper.cs` | completed ✅ | Added monitor flags + `GetWindowTitle()` and `TryGetMonitorResolution*` helpers; P/Invokes present |
+| 9 | Current app helper | `CurrentApplicationHelper.cs` | completed ✅ | `GetCurrentWindowTitle()` implemented |
+| 10 | Action model | `ActionModels.cs` | completed ✅ | `ClickQuickClickAction`, `QuickClickClickType` implemented |
+| 11 | NLP + execution | `NaturalLanguageInterpreter.cs` | completed ✅ | interpret + ExecuteActionAsync handlers implemented |
 | 12 | Tray + context menu | `ListenModeApplicationContext.cs` | not-started | add Quick Clicks submenu, init ForegroundMonitor |
 | 13 | Settings UI & model | `Models/AppSettings.cs`, `SettingsForm.cs` | not-started | Quick Clicks settings tab, `MatchOverlayByResolution` |
 | 14 | Tests — unit | `Tests/**` | not-started | loader, talon generator, action handlers |

@@ -577,6 +577,24 @@ namespace NaturalCommands
         [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+        // P/Invoke helpers for performing mouse clicks from interpreter
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool SetCursorPos(int X, int Y);
+
+n        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out System.Drawing.Point lpPoint);
+
+n        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, int dwExtraInfo);
+
+n        private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+        private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+        private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+        private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+        private const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
+        private const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
+
+
         // InterpretAsync implementation
         public System.Threading.Tasks.Task<ActionBase?> InterpretAsync(string text)
 
@@ -1021,6 +1039,74 @@ namespace NaturalCommands
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
 
+            // Quick Clicks voice commands (dynamic region matching + explicit phrases)
+            try
+            {
+                if (AppSettings.Instance.QuickClicks.Enabled)
+                {
+                    string? procName = CurrentApplicationHelper.GetCurrentProcessName();
+                    string? windowTitle = CurrentApplicationHelper.GetCurrentWindowTitle();
+
+n                    // If no profiles for the current app, skip to avoid accidental matches
+                    var appProfiles = NaturalCommands.Helpers.QuickClickLoader.GetProfilesForApp(procName ?? string.Empty, windowTitle, null, null).ToList();
+                    if (appProfiles.Count > 0)
+                    {
+                        // Recognize explicit click-type prefixes: "double click X", "right click X", "click X" (and variants)
+                        var prefixes = new Dictionary<string, Models.QuickClickClickType>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            { "double click ", Models.QuickClickClickType.Double },
+                            { "double ", Models.QuickClickClickType.Double },
+                            { "right click ", Models.QuickClickClickType.Right },
+                            { "right ", Models.QuickClickClickType.Right },
+                            { "middle click ", Models.QuickClickClickType.Middle },
+                            { "middle ", Models.QuickClickClickType.Middle },
+                            { "click ", Models.QuickClickClickType.Left },
+                            { "single click ", Models.QuickClickClickType.Left },
+                            { "single ", Models.QuickClickClickType.Left }
+                        };
+
+n                        foreach (var kv in prefixes)
+                        {
+                            if (text.StartsWith(kv.Key, StringComparison.InvariantCultureIgnoreCase))
+                            {
+                                var candidate = text.Substring(kv.Key.Length).Trim();
+                                if (candidate.StartsWith("the ", StringComparison.InvariantCultureIgnoreCase))
+                                    candidate = candidate.Substring(4).Trim();
+                                if (string.IsNullOrEmpty(candidate)) break;
+
+n                                // Search regions for an exact name match (case-insensitive)
+                                foreach (var p in appProfiles)
+                                {
+                                    var match = p.Regions.FirstOrDefault(r => string.Equals(r.Name, candidate, StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrWhiteSpace(r.VoiceCommand) && string.Equals(r.VoiceCommand, candidate, StringComparison.OrdinalIgnoreCase)));
+                                    if (match != null)
+                                    {
+                                        AppendLog($"[DEBUG] InterpretAsync matched QuickClick (prefix): '{kv.Key.Trim()}' + '{match.Name}'\n");
+                                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(new ClickQuickClickAction(match.Name, kv.Value));
+                                    }
+                                }
+                                break; // don't try other prefixes once one matched
+                            }
+                        }
+
+n                        // Bare-name invocation: if the spoken text exactly matches a region name in any loaded profile for the app,
+                        // treat it as a left click (bare-name always performs Left).
+                        foreach (var p in appProfiles)
+                        {
+                            var match = p.Regions.FirstOrDefault(r => string.Equals(r.Name, text, StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrWhiteSpace(r.VoiceCommand) && string.Equals(r.VoiceCommand, text, StringComparison.OrdinalIgnoreCase)));
+                            if (match != null)
+                            {
+                                AppendLog($"[DEBUG] InterpretAsync matched QuickClick (bare-name): '{match.Name}'\n");
+                                return System.Threading.Tasks.Task.FromResult<ActionBase?>(new ClickQuickClickAction(match.Name));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[ERROR] QuickClick intent parsing failed: {ex.Message}\n");
+            }
+
             // Mouse movement commands
             // Support both "move left" and "mouse move left" or "mouse left"
             string? direction = null;
@@ -1391,6 +1477,149 @@ namespace NaturalCommands
                     NaturalCommands.Helpers.Logger.LogError($"Failed to execute terminal command: {ex.Message}");
                     return $"Failed to execute terminal command: {ex.Message}";
                 }
+            }
+            // Quick Clicks actions (click regions, show/hide/edit/create overlays)
+            else if (action is ClickQuickClickAction clickAction)
+            {
+                try
+                {
+                    var proc = CurrentApplicationHelper.GetCurrentProcessName();
+                    var title = CurrentApplicationHelper.GetCurrentWindowTitle();
+                    var hwnd = Helpers.Win32ApiHelper.GetForegroundWindow();
+
+n                    int? mw = null, mh = null;
+                    Helpers.Win32ApiHelper.TryGetMonitorResolutionForWindow(hwnd, out var w, out var h);
+                    if (w > 0 && h > 0) { mw = w; mh = h; }
+
+n                    // Respect MatchOverlayByResolution setting when locating profiles
+                    var profiles = Helpers.QuickClickLoader.GetProfilesForApp(proc ?? string.Empty, title, AppSettings.Instance.QuickClicks.MatchOverlayByResolution ? mw : null, AppSettings.Instance.QuickClicks.MatchOverlayByResolution ? mh : null).ToList();
+
+n                    if (profiles.Count == 0 && AppSettings.Instance.QuickClicks.MatchOverlayByResolution)
+                    {
+                        // No matching profile for this monitor resolution -> warn and do not click
+                        TrayNotificationHelper.ShowNotification("Quick Clicks", "No quick-click overlay matches the current monitor resolution. Move the window to a matching monitor or create a profile for this monitor.", 4000);
+                        return "Quick Clicks not applied - monitor resolution mismatch.";
+                    }
+
+n                    // Find the region by name across available profiles for the app
+                    Models.QuickClickRegion? region = null;
+                    foreach (var p in profiles)
+                    {
+                        region = p.Regions.FirstOrDefault(r => string.Equals(r.Name, clickAction.RegionName, StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrWhiteSpace(r.VoiceCommand) && string.Equals(r.VoiceCommand, clickAction.RegionName, StringComparison.OrdinalIgnoreCase)));
+                        if (region != null) break;
+                    }
+
+n                    if (region == null)
+                    {
+                        return $"Quick Click region '{clickAction.RegionName}' not found for current application.";
+                    }
+
+n                    // Compute center screen coordinates from window rect + region offsets
+                    var rect = new Helpers.Win32ApiHelper.RECT();
+                    if (!Helpers.Win32ApiHelper.GetWindowRect(hwnd, ref rect))
+                    {
+                        return "Failed to determine target window position.";
+                    }
+                    int centerX = rect.Left + region.X + (region.Width / 2);
+                    int centerY = rect.Top + region.Y + (region.Height / 2);
+
+n                    // Save cursor, move, click, restore cursor
+                    System.Drawing.Point prev = new System.Drawing.Point();
+                    try { GetCursorPos(out prev); } catch { prev = System.Windows.Forms.Cursor.Position; }
+
+                    SetCursorPos(centerX, centerY);
+
+                    // Determine effective click type (action.ClickType overrides)
+                    var effective = clickAction.ClickType;
+                    switch (effective)
+                    {
+                        case Models.QuickClickClickType.Left:
+                            mouse_event(MOUSEEVENTF_LEFTDOWN, centerX, centerY, 0, 0);
+                            mouse_event(MOUSEEVENTF_LEFTUP, centerX, centerY, 0, 0);
+                            break;
+                        case Models.QuickClickClickType.Double:
+                            mouse_event(MOUSEEVENTF_LEFTDOWN, centerX, centerY, 0, 0);
+                            mouse_event(MOUSEEVENTF_LEFTUP, centerX, centerY, 0, 0);
+                            System.Threading.Thread.Sleep(50);
+                            mouse_event(MOUSEEVENTF_LEFTDOWN, centerX, centerY, 0, 0);
+                            mouse_event(MOUSEEVENTF_LEFTUP, centerX, centerY, 0, 0);
+                            break;
+                        case Models.QuickClickClickType.Right:
+                            mouse_event(MOUSEEVENTF_RIGHTDOWN, centerX, centerY, 0, 0);
+                            mouse_event(MOUSEEVENTF_RIGHTUP, centerX, centerY, 0, 0);
+                            break;
+                        case Models.QuickClickClickType.Middle:
+                            mouse_event(MOUSEEVENTF_MIDDLEDOWN, centerX, centerY, 0, 0);
+                            mouse_event(MOUSEEVENTF_MIDDLEUP, centerX, centerY, 0, 0);
+                            break;
+                    }
+
+                    // Restore cursor position
+                    try { SetCursorPos(prev.X, prev.Y); } catch { }
+
+                    return $"Clicked '{region.Name}' ({effective}).";
+                }
+                catch (Exception ex)
+                {
+                    NaturalCommands.Helpers.Logger.LogError($"ClickQuickClickAction failed: {ex.Message}");
+                    return $"Quick Click failed: {ex.Message}";
+                }
+            }
+            else if (action is ShowQuickClicksAction)
+            {
+                try
+                {
+                    var hwnd = Helpers.Win32ApiHelper.GetForegroundWindow();
+                    var proc = CurrentApplicationHelper.GetCurrentProcessName();
+                    var title = CurrentApplicationHelper.GetCurrentWindowTitle();
+
+n                    int? mw = null, mh = null;
+                    Helpers.Win32ApiHelper.TryGetMonitorResolutionForWindow(hwnd, out var w, out var h);
+                    if (w > 0 && h > 0) { mw = w; mh = h; }
+
+                    var profilesForMonitor = Helpers.QuickClickLoader.GetProfilesForApp(proc ?? string.Empty, title, mw, mh).ToList();
+                    var allProfilesForApp = Helpers.QuickClickLoader.GetProfilesForApp(proc ?? string.Empty, title, null, null).ToList();
+
+                    if (profilesForMonitor.Count > 0)
+                    {
+                        Models.QuickClickProfile? exact = null;
+                        if (mw.HasValue && mh.HasValue)
+                            exact = profilesForMonitor.FirstOrDefault(p => p.MonitorWidth.HasValue && p.MonitorHeight.HasValue && p.MonitorWidth.Value == mw.Value && p.MonitorHeight.Value == mh.Value);
+                        var profileToShow = exact ?? profilesForMonitor.First();
+                        QuickClickOverlayForm.ShowOverlay(profileToShow, hwnd);
+                        return "Quick Clicks shown.";
+                    }
+                    if (allProfilesForApp.Count > 0)
+                    {
+                        // show mismatch warning overlay (null profile)
+                        QuickClickOverlayForm.ShowOverlay(null, hwnd);
+                        return "Quick Clicks mismatch warning shown.";
+                    }
+                    QuickClickOverlayForm.HideOverlay();
+                    return "No quick-click profiles for current app.";
+                }
+                catch (Exception ex)
+                {
+                    NaturalCommands.Helpers.Logger.LogError($"ShowQuickClicksAction failed: {ex.Message}");
+                    return $"Show Quick Clicks failed: {ex.Message}";
+                }
+            }
+            else if (action is HideQuickClicksAction)
+            {
+                QuickClickOverlayForm.HideOverlay();
+                return "Quick Clicks hidden.";
+            }
+            else if (action is EditQuickClicksAction)
+            {
+                // Ensure overlay is visible for current window then enter edit mode
+                var showResult = ExecuteActionAsync(new ShowQuickClicksAction());
+                QuickClickOverlayForm.EnterEditMode();
+                return "Quick Clicks editor opened.";
+            }
+            else if (action is CreateQuickClickAction)
+            {
+                QuickClickOverlayForm.BeginPlacementAtCursorForForegroundWindow();
+                return "Quick Click placement started.";
             }
             else if (action is AdjustAutoClickDelayAction adj)
             {

@@ -21,6 +21,11 @@ namespace NaturalCommands.Helpers
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+        // MonitorFromWindow flags (used when resolving which monitor contains a window)
+        public const uint MONITOR_DEFAULTTONULL = 0x00000000;
+        public const uint MONITOR_DEFAULTTOPRIMARY = 0x00000001;
+        public const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
+
         [DllImport("user32.dll", SetLastError = true)]
         public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
 
@@ -50,6 +55,43 @@ namespace NaturalCommands.Helpers
 
         [DllImport("user32.dll")]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        // Convenience wrapper: return window title (null when empty)
+        public static string? GetWindowTitle(IntPtr hWnd)
+        {
+            var sb = new System.Text.StringBuilder(512);
+            int len = GetWindowText(hWnd, sb, sb.Capacity);
+            if (len > 0) return sb.ToString();
+            return null;
+        }
+
+        // Try to resolve the monitor resolution that contains the given window handle.
+        // Returns width/height in pixels (screen coordinates) when successful.
+        public static bool TryGetMonitorResolutionForWindow(IntPtr hwnd, out int width, out int height)
+        {
+            width = height = 0;
+            IntPtr hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            if (hMonitor == IntPtr.Zero) return false;
+            var info = new MONITORINFOEX();
+            info.cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
+            if (!GetMonitorInfo(hMonitor, ref info)) return false;
+            width = info.rcMonitor.Right - info.rcMonitor.Left;
+            height = info.rcMonitor.Bottom - info.rcMonitor.Top;
+            return true;
+        }
+
+        // Try to get resolution directly from a monitor handle.
+        public static bool TryGetMonitorResolution(IntPtr hMonitor, out int width, out int height)
+        {
+            width = height = 0;
+            if (hMonitor == IntPtr.Zero) return false;
+            var info = new MONITORINFOEX();
+            info.cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
+            if (!GetMonitorInfo(hMonitor, ref info)) return false;
+            width = info.rcMonitor.Right - info.rcMonitor.Left;
+            height = info.rcMonitor.Bottom - info.rcMonitor.Top;
+            return true;
+        }
 
         // Helper to enumerate all monitor handles
         public static IEnumerable<IntPtr> GetAllMonitors()
