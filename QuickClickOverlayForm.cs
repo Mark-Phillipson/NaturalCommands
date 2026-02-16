@@ -138,6 +138,58 @@ namespace NaturalCommands
                 }
             }
         }
+
+        /// <summary>
+        /// Show the overlay for the current foreground window and enter placement/edit mode
+        /// with the placement cursor positioned at the current mouse location. Creates a new
+        /// in-memory profile when none exists so the user can add a region immediately.
+        /// </summary>
+        public static void BeginPlacementAtCursorForForegroundWindow()
+        {
+            if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
+            {
+                _uiContext.Post(_ => BeginPlacementAtCursorForForegroundWindow(), null);
+                return;
+            }
+
+            lock (_lock)
+            {
+                if (_instance == null || _instance.IsDisposed)
+                {
+                    _instance = new QuickClickOverlayForm();
+                }
+
+                IntPtr hwnd = Helpers.Win32ApiHelper.GetForegroundWindow();
+                string? proc = CurrentApplicationHelper.GetCurrentProcessName();
+                string? title = CurrentApplicationHelper.GetCurrentWindowTitle();
+
+                int? mw = null, mh = null;
+                try
+                {
+                    var monitor = Win32ApiHelper.MonitorFromWindow(hwnd, 2);
+                    if (monitor != IntPtr.Zero)
+                    {
+                        var info = new Win32ApiHelper.MONITORINFOEX();
+                        info.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Win32ApiHelper.MONITORINFOEX));
+                        if (Win32ApiHelper.GetMonitorInfo(monitor, ref info))
+                        {
+                            mw = info.rcMonitor.Right - info.rcMonitor.Left;
+                            mh = info.rcMonitor.Bottom - info.rcMonitor.Top;
+                        }
+                    }
+                }
+                catch { }
+
+                var profile = Helpers.QuickClickLoader.GetProfilesForApp(proc ?? string.Empty, title, mw, mh).FirstOrDefault()
+                              ?? new QuickClickProfile { ProcessName = proc ?? string.Empty, WindowTitlePattern = title, MonitorWidth = mw, MonitorHeight = mh };
+
+                _instance.InternalShow(profile, hwnd);
+                _instance.ToggleEditMode(true);
+                _instance._placementMode = true;
+                _instance._placementPoint = System.Windows.Forms.Cursor.Position;
+                _instance.Invalidate();
+            }
+        }
         #endregion
 
         #region Internal lifecycle

@@ -186,9 +186,9 @@ Use this checklist to track engineering progress. Update the `Status` column her
 |---:|---|---|---|---|
 | 1 | Update plan (spec) | `plan-quickClicks.prompt.md` | completed | Plan updated with click-type & resolution support ✅ |
 | 2 | Add data model | `Models/QuickClickRegion.cs` | completed | Profile + Region + `QuickClickClickType` enum |
-| 3 | Implement loader | `Helpers/QuickClickLoader.cs` | completed | JSON load/save + GetProfilesForApp(...) |
-| 4 | Talon generator | `Helpers/QuickClickTalonGenerator.cs` | completed | `.talon` file generation per process (auto-run on save) |
-| 5 | Overlay UI scaffold | `QuickClickOverlayForm.cs` | completed | display + edit modes, selection, drag, basic editor UI |
+| 3 | Implement loader | `Helpers/QuickClickLoader.cs` | completed ✅ | JSON load/save + GetProfilesForApp(...) |
+| 4 | Talon generator | `Helpers/QuickClickTalonGenerator.cs` | completed ✅ | `.talon` file generation per process (auto-run on save) |
+| 5 | Overlay UI scaffold | `QuickClickOverlayForm.cs` | completed ✅ | display + edit modes, selection, drag, basic editor UI |
 | 6 | Create dialog | `CreateQuickClickForm.cs` | not-started | name, click-type, monitor-scope option |
 | 7 | Foreground monitor | `Helpers/ForegroundMonitor.cs` | not-started | `SetWinEventHook` + debounce logic |
 | 8 | Win32 P/Invokes | `Helpers/Win32ApiHelper.cs` | not-started | `SetWinEventHook`, `MonitorFromWindow`, `GetWindowText` |

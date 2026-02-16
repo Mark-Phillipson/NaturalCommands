@@ -29,5 +29,26 @@ namespace NaturalCommands
                 return null;
             }
         }
+
+        /// <summary>
+        /// Returns the title of the current foreground window, or null when none.
+        /// </summary>
+        public static string? GetCurrentWindowTitle()
+        {
+            IntPtr hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return null;
+            var sb = new System.Text.StringBuilder(1024);
+            try
+            {
+                // Use centralized Win32 helper when available
+                NaturalCommands.Helpers.Win32ApiHelper.GetWindowText(hwnd, sb, sb.Capacity);
+                var title = sb.ToString();
+                return string.IsNullOrWhiteSpace(title) ? null : title;
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 }
