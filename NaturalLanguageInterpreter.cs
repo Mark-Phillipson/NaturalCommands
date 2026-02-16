@@ -13,6 +13,7 @@ using OpenAI;
 using OpenAI.Chat;
 using OpenAI.Models;
 using NaturalCommands;
+using NaturalCommands.Models;
 
 namespace NaturalCommands
 {
@@ -581,13 +582,13 @@ namespace NaturalCommands
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool SetCursorPos(int X, int Y);
 
-n        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool GetCursorPos(out System.Drawing.Point lpPoint);
 
-n        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, int dwExtraInfo);
 
-n        private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+        private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         private const uint MOUSEEVENTF_LEFTUP = 0x0004;
         private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
         private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
@@ -1047,7 +1048,7 @@ n        private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
                     string? procName = CurrentApplicationHelper.GetCurrentProcessName();
                     string? windowTitle = CurrentApplicationHelper.GetCurrentWindowTitle();
 
-n                    // If no profiles for the current app, skip to avoid accidental matches
+                    // If no profiles for the current app, skip to avoid accidental matches
                     var appProfiles = NaturalCommands.Helpers.QuickClickLoader.GetProfilesForApp(procName ?? string.Empty, windowTitle, null, null).ToList();
                     if (appProfiles.Count > 0)
                     {
@@ -1065,7 +1066,7 @@ n                    // If no profiles for the current app, skip to avoid accide
                             { "single ", Models.QuickClickClickType.Left }
                         };
 
-n                        foreach (var kv in prefixes)
+                        foreach (var kv in prefixes)
                         {
                             if (text.StartsWith(kv.Key, StringComparison.InvariantCultureIgnoreCase))
                             {
@@ -1073,8 +1074,7 @@ n                        foreach (var kv in prefixes)
                                 if (candidate.StartsWith("the ", StringComparison.InvariantCultureIgnoreCase))
                                     candidate = candidate.Substring(4).Trim();
                                 if (string.IsNullOrEmpty(candidate)) break;
-
-n                                // Search regions for an exact name match (case-insensitive)
+                                // Search regions for an exact name match (case-insensitive)
                                 foreach (var p in appProfiles)
                                 {
                                     var match = p.Regions.FirstOrDefault(r => string.Equals(r.Name, candidate, StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrWhiteSpace(r.VoiceCommand) && string.Equals(r.VoiceCommand, candidate, StringComparison.OrdinalIgnoreCase)));
@@ -1088,7 +1088,7 @@ n                                // Search regions for an exact name match (case
                             }
                         }
 
-n                        // Bare-name invocation: if the spoken text exactly matches a region name in any loaded profile for the app,
+                        // Bare-name invocation: if the spoken text exactly matches a region name in any loaded profile for the app,
                         // treat it as a left click (bare-name always performs Left).
                         foreach (var p in appProfiles)
                         {
@@ -1487,21 +1487,21 @@ n                        // Bare-name invocation: if the spoken text exactly mat
                     var title = CurrentApplicationHelper.GetCurrentWindowTitle();
                     var hwnd = Helpers.Win32ApiHelper.GetForegroundWindow();
 
-n                    int? mw = null, mh = null;
+                    int? mw = null, mh = null;
                     Helpers.Win32ApiHelper.TryGetMonitorResolutionForWindow(hwnd, out var w, out var h);
                     if (w > 0 && h > 0) { mw = w; mh = h; }
 
-n                    // Respect MatchOverlayByResolution setting when locating profiles
+                    // Respect MatchOverlayByResolution setting when locating profiles
                     var profiles = Helpers.QuickClickLoader.GetProfilesForApp(proc ?? string.Empty, title, AppSettings.Instance.QuickClicks.MatchOverlayByResolution ? mw : null, AppSettings.Instance.QuickClicks.MatchOverlayByResolution ? mh : null).ToList();
 
-n                    if (profiles.Count == 0 && AppSettings.Instance.QuickClicks.MatchOverlayByResolution)
+                    if (profiles.Count == 0 && AppSettings.Instance.QuickClicks.MatchOverlayByResolution)
                     {
                         // No matching profile for this monitor resolution -> warn and do not click
                         TrayNotificationHelper.ShowNotification("Quick Clicks", "No quick-click overlay matches the current monitor resolution. Move the window to a matching monitor or create a profile for this monitor.", 4000);
                         return "Quick Clicks not applied - monitor resolution mismatch.";
                     }
 
-n                    // Find the region by name across available profiles for the app
+                    // Find the region by name across available profiles for the app
                     Models.QuickClickRegion? region = null;
                     foreach (var p in profiles)
                     {
@@ -1509,12 +1509,12 @@ n                    // Find the region by name across available profiles for th
                         if (region != null) break;
                     }
 
-n                    if (region == null)
+                    if (region == null)
                     {
                         return $"Quick Click region '{clickAction.RegionName}' not found for current application.";
                     }
 
-n                    // Compute center screen coordinates from window rect + region offsets
+                    // Compute center screen coordinates from window rect + region offsets
                     var rect = new Helpers.Win32ApiHelper.RECT();
                     if (!Helpers.Win32ApiHelper.GetWindowRect(hwnd, ref rect))
                     {
@@ -1523,7 +1523,7 @@ n                    // Compute center screen coordinates from window rect + reg
                     int centerX = rect.Left + region.X + (region.Width / 2);
                     int centerY = rect.Top + region.Y + (region.Height / 2);
 
-n                    // Save cursor, move, click, restore cursor
+                    // Save cursor, move, click, restore cursor
                     System.Drawing.Point prev = new System.Drawing.Point();
                     try { GetCursorPos(out prev); } catch { prev = System.Windows.Forms.Cursor.Position; }
 
@@ -1573,7 +1573,7 @@ n                    // Save cursor, move, click, restore cursor
                     var proc = CurrentApplicationHelper.GetCurrentProcessName();
                     var title = CurrentApplicationHelper.GetCurrentWindowTitle();
 
-n                    int? mw = null, mh = null;
+                    int? mw = null, mh = null;
                     Helpers.Win32ApiHelper.TryGetMonitorResolutionForWindow(hwnd, out var w, out var h);
                     if (w > 0 && h > 0) { mw = w; mh = h; }
 
