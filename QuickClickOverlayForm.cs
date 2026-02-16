@@ -56,15 +56,16 @@ namespace NaturalCommands
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
-            BackColor = Color.Lime;
-            TransparencyKey = Color.Lime;
+            BackColor = Color.Magenta;  // Bright color for transparency key
+            TransparencyKey = Color.Magenta;
             StartPosition = FormStartPosition.Manual;
             DoubleBuffered = true;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
 
-            Width = SystemInformation.VirtualScreen.Width;
-            Height = SystemInformation.VirtualScreen.Height;
-            Location = new Point(SystemInformation.VirtualScreen.Left, SystemInformation.VirtualScreen.Top);
+            // Initial size - will be updated when target window is set
+            Width = 800;
+            Height = 600;
+            Location = new Point(0, 0);
 
             // Timer to poll window location so overlay follows the target window
             _repositionTimer = new System.Windows.Forms.Timer { Interval = 200 };
@@ -81,37 +82,16 @@ namespace NaturalCommands
             MouseClick += QuickClickOverlayForm_MouseClick;
             KeyDown += QuickClickOverlayForm_KeyDown;
 
-            // Make sure the overlay doesn't take focus when shown
-            Shown += (s, e) => { try { Win32ApiHelper.SetWindowPos(Handle, new IntPtr(-2), 0, 0, 0, 0, 0x0001 | 0x0002); } catch { } };
-        }
-
-        /// <summary>
-        /// Override CreateParams to set extended window styles BEFORE window creation.
-        /// This is critical to make the overlay click-through in display mode.
-        /// </summary>
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                const int WS_EX_LAYERED = 0x80000;
-                const int WS_EX_TRANSPARENT = 0x20;
-                const int WS_EX_NOACTIVATE = 0x08000000;
-                const int WS_EX_TOOLWINDOW = 0x00000080;
-
-                var cp = base.CreateParams;
-                // In display mode, make click-through. In edit mode, accept mouse input.
-                if (_editMode)
+            // Make sure the overlay stays topmost
+            Shown += (s, e) => {
+                try
                 {
-                    cp.ExStyle |= WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+                    Win32ApiHelper.SetWindowPos(Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002);
                 }
-                else
-                {
-                    cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-                }
-                return cp;
-            }
+                catch { }
+            };
         }
-
+        
         #region Public API (thread-safe)
         public static void InitializeUIContext()
         {
@@ -342,21 +322,7 @@ namespace NaturalCommands
 
             var g = e.Graphics;
             
-            // In edit mode, use semi-transparent dark background. In display mode, use transparent (Lime)
-            if (_editMode)
-            {
-                g.Clear(Color.Lime); // First clear to transparency key
-                // Then draw semi-transparent dark overlay so user can see through to the app
-                using (var bg = new SolidBrush(Color.FromArgb(120, 20, 20, 40)))
-                {
-                    g.FillRectangle(bg, ClientRectangle);
-                }
-            }
-            else
-            {
-                g.Clear(Color.Lime); // Fully transparent in display mode
-            }
-            
+            // Don't clear - transparent background (black) will show through
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
@@ -372,32 +338,35 @@ namespace NaturalCommands
             }
 
             // Draw regions
-            int alpha = (int)(AppSettings.Instance.QuickClicks.OverlayOpacity * 255);
-            foreach (var r in _profile.Regions)
+            if (_profile != null)
             {
-                var rect = RegionToScreenRect(r);
-                if (rect.Width <= 0 || rect.Height <= 0) continue;
-
-                using (var fill = new SolidBrush(Color.FromArgb(alpha / 2, 30, 144, 255)))
-                using (var border = new Pen(Color.FromArgb(alpha, 10, 10, 10), 2))
+                int alpha = (int)(AppSettings.Instance.QuickClicks.OverlayOpacity * 255);
+                foreach (var r in _profile.Regions)
                 {
-                    g.FillRectangle(fill, rect);
-                    g.DrawRectangle(border, rect);
-                }
+                    var rect = RegionToScreenRect(r);
+                    if (rect.Width <= 0 || rect.Height <= 0) continue;
 
-                // Draw name + click-type badge
-                var label = r.Name;
-                var badge = ClickTypeBadge(r.ClickType);
-                var text = string.IsNullOrWhiteSpace(badge) ? label : $"{label} [{badge}]";
-                var textSize = g.MeasureString(text, _labelFont);
-                var textRect = new RectangleF(rect.X + 6, rect.Y + 6, textSize.Width, textSize.Height);
-                using (var bg = new SolidBrush(Color.FromArgb(180, 0, 0, 0))) g.FillRectangle(bg, textRect);
-                g.DrawString(text, _labelFont, _textBrush, textRect.Location);
+                    using (var fill = new SolidBrush(Color.FromArgb(alpha / 2, 30, 144, 255)))
+                    using (var border = new Pen(Color.FromArgb(alpha, 10, 10, 10), 2))
+                    {
+                        g.FillRectangle(fill, rect);
+                        g.DrawRectangle(border, rect);
+                    }
 
-                // Selected highlight
-                if (_selectedRegion == r)
-                {
-                    g.DrawRectangle(_selectedPen, rect.X - 2, rect.Y - 2, rect.Width + 4, rect.Height + 4);
+                    // Draw name + click-type badge
+                    var label = r.Name;
+                    var badge = ClickTypeBadge(r.ClickType);
+                    var text = string.IsNullOrWhiteSpace(badge) ? label : $"{label} [{badge}]";
+                    var textSize = g.MeasureString(text, _labelFont);
+                    var textRect = new RectangleF(rect.X + 6, rect.Y + 6, textSize.Width, textSize.Height);
+                    using (var bg = new SolidBrush(Color.FromArgb(180, 0, 0, 0))) g.FillRectangle(bg, textRect);
+                    g.DrawString(text, _labelFont, _textBrush, textRect.Location);
+
+                    // Selected highlight
+                    if (_selectedRegion == r)
+                    {
+                        g.DrawRectangle(_selectedPen, rect.X - 2, rect.Y - 2, rect.Width + 4, rect.Height + 4);
+                    }
                 }
             }
 
@@ -417,6 +386,8 @@ namespace NaturalCommands
 
         private void RenderEditorUI(Graphics g)
         {
+            // Don't fill the background - let magenta (transparency key) show through
+
             // Title banner at the very top - make it VERY visible
             using (var bannerBrush = new SolidBrush(Color.FromArgb(255, 0, 100, 200)))
             {
@@ -676,25 +647,8 @@ namespace NaturalCommands
         #region Utilities
         private Rectangle RegionToScreenRect(QuickClickRegion r)
         {
-            // Get window rect in screen coordinates
-            if (_targetWindow == IntPtr.Zero)
-            {
-                // fallback to virtual screen
-                return new Rectangle(r.X + SystemInformation.VirtualScreen.Left, r.Y + SystemInformation.VirtualScreen.Top, r.Width, r.Height);
-            }
-
-            var rect = new Win32ApiHelper.RECT();
-            try
-            {
-                if (Win32ApiHelper.GetWindowRect(_targetWindow, ref rect))
-                {
-                    var winLeft = rect.Left;
-                    var winTop = rect.Top;
-                    return new Rectangle(winLeft + r.X, winTop + r.Y, r.Width, r.Height);
-                }
-            }
-            catch { }
-
+            // Since our overlay is positioned exactly on the target window,
+            // regions are just at their X, Y offsets from the form's top-left
             return new Rectangle(r.X, r.Y, r.Width, r.Height);
         }
 
@@ -721,10 +675,10 @@ namespace NaturalCommands
                 if (Win32ApiHelper.GetWindowRect(_targetWindow, ref rect))
                 {
                     _targetWindowRect = new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+                    // Position overlay exactly on the target window
+                    Bounds = _targetWindowRect;
                 }
             }
-            // keep overlay covering virtual screen so mapping remains consistent
-            Bounds = SystemInformation.VirtualScreen;
             Invalidate();
         }
 
