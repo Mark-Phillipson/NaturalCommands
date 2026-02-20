@@ -141,7 +141,6 @@ namespace NaturalCommands
         public static void InitializeUIContext()
         {
             _uiContext = System.Threading.SynchronizationContext.Current;
-            NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] UI context initialized: {_uiContext?.GetType().Name ?? "null"}");
         }
 
         /// <summary>
@@ -149,17 +148,12 @@ namespace NaturalCommands
         /// </summary>
         public static void UpdateOverlay(Point cursorPos, int remainingMs, float percentage)
         {
-            NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] UpdateOverlay called - Pos: ({cursorPos.X}, {cursorPos.Y}), Remaining: {remainingMs}ms, Pct: {percentage:F1}%");
-            
             // Check if we need to invoke on UI thread
             if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
             {
-                NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Posting to UI thread via captured SynchronizationContext");
                 _uiContext.Post(_ => UpdateOverlay(cursorPos, remainingMs, percentage), null);
                 return;
             }
-
-            NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] On UI thread - executing directly");
 
             lock (_lock)
             {
@@ -167,10 +161,8 @@ namespace NaturalCommands
                 {
                     if (_instance == null || _instance.IsDisposed)
                     {
-                        NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Creating new overlay form instance");
                         _instance = new AutoClickOverlayForm();
                         _instance.Show();
-                        NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] New form shown - Visible: {_instance.Visible}, Handle: {_instance.Handle}");
                     }
 
                     // Update position and values - overlay is anchored at the specified point
@@ -187,33 +179,26 @@ namespace NaturalCommands
                     }
 
                     // Keep system cursor visible so it can move independently of the overlay
-                    NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Cursor left visible while overlay is shown");
-                    
-                    NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Updated - Location: ({_instance.Location.X}, {_instance.Location.Y}), Visible: {_instance.Visible}, TopMost: {_instance.TopMost}");
                     
                     if (!_instance.Visible)
                     {
-                        NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Form not visible, calling Show()");
                         _instance.Show();
                     }
                     
                     if (!_instance.TopMost)
                     {
-                        NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Setting TopMost = true");
                         _instance.TopMost = true;
                     }
                     
                     // Only invalidate if percentage or location changed enough to avoid excess repaints (reduces flicker)
                     if (Math.Abs(_instance._percentage - _instance._lastPaintedPercentage) < _minUpdateDelta && _instance.Location == _instance._lastLocation)
                     {
-                        NaturalCommands.Helpers.Logger.LogDebug("[Overlay] Skipping Invalidate - no significant visual change");
                     }
                     else
                     {
                         _instance.Invalidate();
                         _instance._lastPaintedPercentage = _instance._percentage;
                         _instance._lastLocation = _instance.Location;
-                        NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Invalidate called (pct: {_instance._percentage:F1}%, cycle: {_cycleIndex})");
                     }
                 }
                 catch (Exception ex)
@@ -234,7 +219,6 @@ namespace NaturalCommands
                 _currentProgressColor = _progressColors[_cycleIndex];
                 // Choose the background color for when this cycle completes
                 _currentBackgroundFill = _backgroundCycleColors[_cycleIndex];
-                NaturalCommands.Helpers.Logger.LogDebug($"[Overlay] Starting new color cycle {_cycleIndex} - progress color: {_currentProgressColor}, bg fill: {_currentBackgroundFill}");
             }
             catch (Exception ex)
             {

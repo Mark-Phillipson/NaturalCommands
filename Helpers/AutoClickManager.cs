@@ -104,13 +104,10 @@ namespace NaturalCommands.Helpers
                 _pollIntervalMs     // Check every 50ms
             );
 
-            Logger.LogDebug($"[AutoClick] Timer created and started. Initial position: ({_lastPosition.X}, {_lastPosition.Y})");
-
             // Update tray icon to show active state
             TrayNotificationHelper.SetAutoClickActive(true);
 
             Logger.LogInfo($"Auto-click mode started with {delayMs}ms delay (tolerance: {_movementTolerancePixels}px)");
-            Logger.LogDebug($"[AutoClick] ShowOverlay setting: {AppSettings.Instance.AutoClick.ShowOverlay}");
             return $"Auto-click enabled ({delayMs}ms delay, {_movementTolerancePixels}px tolerance)";
         }
 
@@ -119,15 +116,10 @@ namespace NaturalCommands.Helpers
         /// </summary>
         public static string Stop()
         {
-            Logger.LogDebug("[AutoClick] Stop() method called");
-            
             if (!_isActive)
             {
-                Logger.LogDebug("[AutoClick] Stop() - not active, returning early");
                 return "Auto-click mode is not active";
             }
-
-            Logger.LogDebug("[AutoClick] Stop() - stopping timer");
             
             // Stop timer
             if (_monitorTimer != null)
@@ -135,15 +127,12 @@ namespace NaturalCommands.Helpers
                 _monitorTimer.Change(Timeout.Infinite, Timeout.Infinite);
                 _monitorTimer.Dispose();
                 _monitorTimer = null;
-                Logger.LogDebug("[AutoClick] Stop() - timer disposed");
             }
 
             // Hide overlay
-            Logger.LogDebug("[AutoClick] Stop() - hiding overlay");
             AutoClickOverlayForm.HideOverlay();
 
             // Update tray icon to show inactive state
-            Logger.LogDebug("[AutoClick] Stop() - updating tray icon");
             TrayNotificationHelper.SetAutoClickActive(false);
 
             // Update settings
@@ -151,7 +140,6 @@ namespace NaturalCommands.Helpers
             try
             {
                 AppSettings.Instance.Save();
-                Logger.LogDebug("[AutoClick] Stop() - settings saved");
             }
             catch (Exception ex)
             {
@@ -163,7 +151,6 @@ namespace NaturalCommands.Helpers
             _anchorSet = false;
 
             Logger.LogInfo("Auto-click mode stopped");
-            Logger.LogDebug("[AutoClick] Stop() - completed successfully");
             return "Auto-click disabled";
         }
 
@@ -174,7 +161,6 @@ namespace NaturalCommands.Helpers
         {
             if (!_isActive)
             {
-                Logger.LogDebug("[AutoClick] Timer tick but not active, returning");
                 return;
             }
 
@@ -186,8 +172,6 @@ namespace NaturalCommands.Helpers
                     Logger.LogError("Failed to get cursor position in auto-click monitor");
                     return;
                 }
-
-                Logger.LogDebug($"[AutoClick] Tick - Cursor: ({currentPos.X}, {currentPos.Y}), Last: ({_lastPosition.X}, {_lastPosition.Y}), IdleTime: {_idleTimeMs}ms");
 
                 // Check if mouse is over taskbar - if so, stop auto-click
                 if (IsMouseOverTaskbar(currentPos))
@@ -209,26 +193,20 @@ namespace NaturalCommands.Helpers
                     int anchorDx = Math.Abs(currentPos.X - _anchorPosition.X);
                     int anchorDy = Math.Abs(currentPos.Y - _anchorPosition.Y);
                     double distFromAnchor = Math.Sqrt(anchorDx * anchorDx + anchorDy * anchorDy);
-                    Logger.LogDebug($"[AutoClick] Dist from anchor: {distFromAnchor:F2}px (radius {_overlayRadius}px)");
                     if (distFromAnchor <= _overlayRadius)
                     {
                         hasMovedSignificantly = false; // treat as still idle within the overlay
-                        Logger.LogDebug("[AutoClick] Movement within overlay radius - continuing countdown");
                     }
                 }
-
-                Logger.LogDebug($"[AutoClick] Movement - DeltaX: {deltaX}, DeltaY: {deltaY}, Distance: {distance:F2}px, Threshold: {_movementTolerancePixels}px, Moved: {hasMovedSignificantly}");
 
                 if (hasMovedSignificantly)
                 {
                     // Mouse moved significantly - reset idle timer and update position
-                    Logger.LogDebug($"[AutoClick] Mouse moved beyond tolerance, resetting idle time");
                     _lastPosition = currentPos;
                     _idleTimeMs = 0;
                     _anchorSet = false;
                     
                     // Hide overlay when mouse moves outside the anchor
-                    Logger.LogDebug($"[AutoClick] Hiding overlay due to movement");
                     AutoClickOverlayForm.HideOverlay();
                 }
                 else
@@ -237,14 +215,12 @@ namespace NaturalCommands.Helpers
                     _idleTimeMs += _pollIntervalMs;
 
                     int delayMs = AppSettings.Instance.AutoClick.DelayMs;
-                    Logger.LogDebug($"[AutoClick] Mouse idle - IdleTime: {_idleTimeMs}ms / {delayMs}ms");
                     
                     // Establish anchor at the start of the countdown so the overlay stays fixed
                     if (!_anchorSet && _idleTimeMs > 0)
                     {
                         _anchorPosition = currentPos;
                         _anchorSet = true;
-                        Logger.LogDebug($"[AutoClick] Anchor set at ({_anchorPosition.X}, {_anchorPosition.Y}) with radius {_overlayRadius}px");
                     }
 
                     // Show overlay if enabled and we're counting down
@@ -252,8 +228,6 @@ namespace NaturalCommands.Helpers
                     {
                         int remainingMs = Math.Max(0, delayMs - _idleTimeMs);
                         float percentage = Math.Min(100, (_idleTimeMs / (float)delayMs) * 100);
-                        
-                        Logger.LogDebug($"[AutoClick] Preparing overlay update - Remaining: {remainingMs}ms, Percentage: {percentage:F1}%");
 
                         // Throttle overlay updates to avoid excessive UI work on each timer tick
                         bool shouldUpdate = false;
@@ -275,10 +249,6 @@ namespace NaturalCommands.Helpers
                             var point = new System.Drawing.Point(_anchorPosition.X, _anchorPosition.Y);
                             AutoClickOverlayForm.UpdateOverlay(point, remainingMs, percentage);
                         }
-                    }
-                    else if (!AppSettings.Instance.AutoClick.ShowOverlay)
-                    {
-                        Logger.LogDebug($"[AutoClick] Overlay disabled in settings");
                     }
 
                     // Check if idle time has reached the threshold
@@ -312,8 +282,6 @@ namespace NaturalCommands.Helpers
             {
                 mouse_event(MOUSEEVENTF_LEFTDOWN, pos.X, pos.Y, 0, 0);
                 mouse_event(MOUSEEVENTF_LEFTUP, pos.X, pos.Y, 0, 0);
-                
-                Logger.LogDebug($"Auto-click performed at ({pos.X}, {pos.Y})");
             }
             catch (Exception ex)
             {
