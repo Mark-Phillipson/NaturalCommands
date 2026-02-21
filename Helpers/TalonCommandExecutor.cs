@@ -9,6 +9,7 @@ namespace NaturalCommands.Helpers
         public static string Execute(NaturalCommands.RunTalonCommandAction action)
         {
             var settings = Models.AppSettings.Instance.Talon;
+            var dispatchCommand = SanitizeForDispatch(action.TalonCommand);
 
             if (!string.IsNullOrWhiteSpace(settings.CommandQueueFilePath))
             {
@@ -21,9 +22,9 @@ namespace NaturalCommands.Helpers
                         Directory.CreateDirectory(queueDir);
                     }
 
-                    File.AppendAllText(queuePath, action.TalonCommand + Environment.NewLine);
-                    Logger.LogInfo($"TalonCommandExecutor: queued '{action.TalonCommand}' to '{queuePath}'.");
-                    return $"Queued Talon command: {action.TalonCommand}";
+                    File.AppendAllText(queuePath, dispatchCommand + Environment.NewLine);
+                    Logger.LogInfo($"TalonCommandExecutor: queued '{dispatchCommand}' to '{queuePath}'.");
+                    return $"Queued Talon command: {dispatchCommand}";
                 }
                 catch (Exception ex)
                 {
@@ -40,8 +41,8 @@ namespace NaturalCommands.Helpers
                         : settings.BridgeArgumentsTemplate;
 
                     var args = argsTemplate
-                        .Replace("{command}", action.TalonCommand, StringComparison.Ordinal)
-                        .Replace("{command_quoted}", QuoteArgument(action.TalonCommand), StringComparison.Ordinal);
+                        .Replace("{command}", dispatchCommand, StringComparison.Ordinal)
+                        .Replace("{command_quoted}", QuoteArgument(dispatchCommand), StringComparison.Ordinal);
 
                     var psi = new ProcessStartInfo(settings.BridgeExecutable, args)
                     {
@@ -49,8 +50,8 @@ namespace NaturalCommands.Helpers
                     };
 
                     Process.Start(psi);
-                    Logger.LogInfo($"TalonCommandExecutor: dispatched '{action.TalonCommand}' via bridge '{settings.BridgeExecutable}'.");
-                    return $"Dispatched Talon command: {action.TalonCommand}";
+                    Logger.LogInfo($"TalonCommandExecutor: dispatched '{dispatchCommand}' via bridge '{settings.BridgeExecutable}'.");
+                    return $"Dispatched Talon command: {dispatchCommand}";
                 }
                 catch (Exception ex)
                 {
@@ -66,6 +67,28 @@ namespace NaturalCommands.Helpers
         {
             if (string.IsNullOrEmpty(value)) return "\"\"";
             return "\"" + value.Replace("\"", "\\\"") + "\"";
+        }
+
+        private static string SanitizeForDispatch(string command)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                return string.Empty;
+            }
+
+            var sanitized = command.Trim();
+
+            while (sanitized.StartsWith("^", StringComparison.Ordinal))
+            {
+                sanitized = sanitized.Substring(1).TrimStart();
+            }
+
+            while (sanitized.EndsWith("$", StringComparison.Ordinal))
+            {
+                sanitized = sanitized.Substring(0, sanitized.Length - 1).TrimEnd();
+            }
+
+            return string.IsNullOrWhiteSpace(sanitized) ? command.Trim() : sanitized;
         }
     }
 }
