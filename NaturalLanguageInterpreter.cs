@@ -2099,7 +2099,36 @@ namespace NaturalCommands
                         WindowsInput.Native.VirtualKeyCode.TAB);
                     return "[Natural mode] Sent Ctrl+Alt+Tab for app switcher (focus fallback)";
                 }
-                // Fallback to OpenAI if rule-based and normalized match fail
+                
+                // First, try Talon fallback with AI semantic assistance (if enabled)
+                AppendLog($"[DEBUG] HandleNaturalAsync: Checking Talon fallback first. EnableFallback={AppSettings.Instance.Talon.EnableFallback}\n");
+                if (AppSettings.Instance.Talon.EnableFallback)
+                {
+                    try
+                    {
+                        AppendLog($"[DEBUG] HandleNaturalAsync: Attempting Talon resolution for: '{text}'\n");
+                        var talonActionTask = NaturalCommands.Helpers.TalonCommandRouter.ResolveActionAsync(text);
+                        talonActionTask.Wait();
+                        var talonAction = talonActionTask.Result;
+                        AppendLog($"[DEBUG] HandleNaturalAsync: Talon ResolveActionAsync returned: {(talonAction == null ? "null" : $"'{talonAction.TalonCommand}'")}\n");
+                        if (talonAction != null)
+                        {
+                            AppendLog($"[DEBUG] HandleNaturalAsync: Talon fallback matched '{talonAction.TalonCommand}' ({talonAction.MatchSource})\n");
+                            var talonResult = ExecuteActionAsync(talonAction);
+                            return $"[Natural mode] {talonResult}";
+                        }
+                        else
+                        {
+                            AppendLog("[DEBUG] HandleNaturalAsync: Talon returned null (no match)\n");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"[WARN] HandleNaturalAsync: Talon fallback error: {ex.Message}\n");
+                    }
+                }
+
+                // If Talon could not resolve, fallback to OpenAI for general command interpretation
                 AppendLog($"[DEBUG] HandleNaturalAsync: Fallback to OpenAI for: {text}\n");
                 string? currentApp = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName();
                 string aiInput = text;
@@ -2127,34 +2156,6 @@ namespace NaturalCommands
                     AppendLog($"[DEBUG] HandleNaturalAsync: See '[AI] Raw response' above for actual AI output.\n");
                     var aiResult = ExecuteActionAsync(aiAction);
                     return $"[Natural mode] {aiResult}";
-                }
-
-                // AI could not resolve -> try Talon fallback (global catalog matching, no Talon context filters)
-                AppendLog($"[DEBUG] HandleNaturalAsync: Checking Talon fallback. EnableFallback={AppSettings.Instance.Talon.EnableFallback}\n");
-                if (AppSettings.Instance.Talon.EnableFallback)
-                {
-                    try
-                    {
-                        AppendLog($"[DEBUG] HandleNaturalAsync: Attempting Talon resolution for: '{text}'\n");
-                        var talonActionTask = NaturalCommands.Helpers.TalonCommandRouter.ResolveActionAsync(text);
-                        talonActionTask.Wait();
-                        var talonAction = talonActionTask.Result;
-                        AppendLog($"[DEBUG] HandleNaturalAsync: Talon ResolveActionAsync returned: {(talonAction == null ? "null" : $"'{talonAction.TalonCommand}'")}\n");
-                        if (talonAction != null)
-                        {
-                            AppendLog($"[DEBUG] HandleNaturalAsync: Talon fallback matched '{talonAction.TalonCommand}' ({talonAction.MatchSource})\n");
-                            var talonResult = ExecuteActionAsync(talonAction);
-                            return $"[Natural mode] {talonResult}";
-                        }
-                        else
-                        {
-                            AppendLog("[DEBUG] HandleNaturalAsync: Talon returned null (no match)\n");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        AppendLog($"[WARN] HandleNaturalAsync: Talon fallback failed: {ex.Message}\n");
-                    }
                 }
                 else
                 {

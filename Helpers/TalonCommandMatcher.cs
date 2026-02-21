@@ -27,9 +27,29 @@ namespace NaturalCommands.Helpers
                 return exact;
             }
 
+            // Pre-compute token usage frequency for specificity scoring
+            var tokenFrequency = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var cmd in candidates)
+            {
+                var tokens = Normalize(cmd).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var token in tokens)
+                {
+                    if (!tokenFrequency.ContainsKey(token))
+                        tokenFrequency[token] = 0;
+                    tokenFrequency[token]++;
+                }
+            }
+
             var ranked = candidates
-                .Select(c => new RankedCandidate(c, Score(normalizedUtterance, Normalize(c))))
+                .Select(c => 
+                {
+                    var normalizedC = Normalize(c);
+                    var score = Score(normalizedUtterance, normalizedC, tokenFrequency);
+                    var matchCount = CountMatchingTokens(normalizedUtterance, normalizedC);
+                    return new RankedCandidate(c, score, matchCount);
+                })
                 .OrderByDescending(c => c.Score)
+                .ThenByDescending(c => c.MatchCount)  // Tiebreaker: prefer more matching tokens
                 .ThenBy(c => c.Command, StringComparer.OrdinalIgnoreCase)
                 .Take(40)
                 .ToList();
@@ -47,60 +67,62 @@ namespace NaturalCommands.Helpers
 
             if (top.Score >= 0.95)
             {
-                Logger.LogInfo($"[TalonMatcher] Score {top.Score:0.000} >= 0.95, returning exact fuzzy match");
+                Logger.LogInfo($"[TalonMatcher] Score {top.Score:0.000} >= 0.95, returning confident fuzzy match");
                 return top.Command;
             }
 
+            // Try AI-assisted semantic matching (preferred over pure fuzzy scoring)
             var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-            var aiEnabled = Models.AppSettings.Instance.AI.EnableFallback && !string.IsNullOrWhiteSpace(apiKey);
-            if (!aiEnabled)
+            if (!string.IsNullOrWhiteSpace(apiKey))
             {
-                var result = top.Score >= talonSettings.MinFallbackMatchScore ? top.Command : null;
-                Logger.LogInfo($"[TalonMatcher] AI disabled. Top score {top.Score:0.000} vs threshold {talonSettings.MinFallbackMatchScore}. Result: {(result == null ? "null" : $"'{result}'")}");
-                return result;
+                try
+                {
+                    Logger.LogInfo($"[TalonMatcher] Attempting AI semantic matching for: '{utterance}'");
+                    var modelName = Models.AppSettings.Instance.AI.ModelName;
+                    var client = new ChatClient(modelName, apiKey);
+                    var listForPrompt = string.Join("\n", ranked.Select((r, index) => $"{index + 1}. {r.Command}"));
+                    var prompt =
+                        "Choose the single best Talon command for this user utterance from the provided candidates. " +
+                        "Prioritize semantic meaning: ignore grammar/ordering and find the closest meaning. " +
+                        "Return strict JSON only with fields command (string) and confidence (0..1). " +
+                        "If no candidate is suitable, set command to empty string and confidence to 0.";
+
+                    var completion = await client.CompleteChatAsync(new List<ChatMessage>
+                    {
+                        new SystemChatMessage(prompt),
+                        new UserChatMessage($"Utterance: {utterance}\nCandidates:\n{listForPrompt}")
+                    });
+
+                    var content = completion.Value.Content.FirstOrDefault()?.Text;
+                    var parsed = ParseAiResponse(content);
+                    if (parsed != null)
+                    {
+                        var chosen = ranked.FirstOrDefault(r => string.Equals(r.Command, parsed.Value.Command, StringComparison.OrdinalIgnoreCase));
+                        if (!string.IsNullOrWhiteSpace(chosen.Command) && parsed.Value.Confidence >= talonSettings.MinAIConfidence)
+                        {
+                            Logger.LogInfo($"[TalonMatcher] AI matched '{chosen.Command}' with confidence {parsed.Value.Confidence:0.00}");
+                            return chosen.Command;
+                        }
+                    }
+                    else
+                    {
+                        Logger.LogInfo($"[TalonMatcher] AI response parse failed");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning($"[TalonMatcher] AI semantic matching failed: {ex.Message}");
+                }
+            }
+            else
+            {
+                Logger.LogInfo($"[TalonMatcher] No API key available for semantic matching");
             }
 
-            try
-            {
-                var modelName = Models.AppSettings.Instance.AI.ModelName;
-                var client = new ChatClient(modelName, apiKey);
-                var listForPrompt = string.Join("\n", ranked.Select((r, index) => $"{index + 1}. {r.Command}"));
-                var prompt =
-                    "Choose the single best Talon command for this utterance from the provided candidates. " +
-                    "Return strict JSON only with fields command (string) and confidence (0..1). " +
-                    "If no candidate is suitable, set command to empty string and confidence to 0.";
-
-                var completion = await client.CompleteChatAsync(new List<ChatMessage>
-                {
-                    new SystemChatMessage(prompt),
-                    new UserChatMessage($"Utterance: {utterance}\nCandidates:\n{listForPrompt}")
-                });
-
-                var content = completion.Value.Content.FirstOrDefault()?.Text;
-                var parsed = ParseAiResponse(content);
-                if (parsed == null)
-                {
-                    return top.Score >= talonSettings.MinFallbackMatchScore ? top.Command : null;
-                }
-
-                var chosen = ranked.FirstOrDefault(r => string.Equals(r.Command, parsed.Value.Command, StringComparison.OrdinalIgnoreCase));
-                if (string.IsNullOrWhiteSpace(chosen.Command))
-                {
-                    return top.Score >= talonSettings.MinFallbackMatchScore ? top.Command : null;
-                }
-
-                if (parsed.Value.Confidence >= talonSettings.MinAIConfidence)
-                {
-                    return chosen.Command;
-                }
-
-                return top.Score >= talonSettings.MinFallbackMatchScore ? top.Command : null;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning($"TalonCommandMatcher: AI match failed, using fallback scoring. {ex.Message}");
-                return top.Score >= talonSettings.MinFallbackMatchScore ? top.Command : null;
-            }
+            // Fallback: use fuzzy score threshold if AI is unavailable or failed
+            var result = top.Score >= talonSettings.MinFallbackMatchScore ? top.Command : null;
+            Logger.LogInfo($"[TalonMatcher] Using fuzzy fallback. Top score {top.Score:0.000} vs threshold {talonSettings.MinFallbackMatchScore}. Result: {(result == null ? "null" : $"'{result}'")}");
+            return result;
         }
 
         public static string Normalize(string value)
@@ -116,7 +138,7 @@ namespace NaturalCommands.Helpers
             return normalized;
         }
 
-        private static double Score(string a, string b)
+        private static double Score(string a, string b, Dictionary<string, int> tokenFrequency)
         {
             if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return 0;
             if (string.Equals(a, b, StringComparison.Ordinal)) return 1;
@@ -127,8 +149,10 @@ namespace NaturalCommands.Helpers
 
             var aSet = new HashSet<string>(aTokens, StringComparer.Ordinal);
             var bSet = new HashSet<string>(bTokens, StringComparer.Ordinal);
+            
+            // Count exact token matches
             var overlap = aSet.Count(t => bSet.Contains(t));
-
+            
             // Base scoring: recall (coverage of candidate in utterance) + precision (coverage of utterance in candidate)
             var tokenRecall = overlap / (double)bSet.Count;  // How much of candidate is in utterance
             var tokenPrecision = overlap / (double)aSet.Count; // How much of utterance matches candidate
@@ -137,6 +161,12 @@ namespace NaturalCommands.Helpers
             // even if utterance has extra words
             var baseScore = (tokenRecall * 0.7 + tokenPrecision * 0.3);
 
+            // Bonus: if candidate is short and all tokens match, award high score
+            if (bTokens.Length <= 2 && tokenRecall == 1.0)
+            {
+                return 0.9; // Near-perfect for all candidate tokens matching
+            }
+            
             // Bonus: if candidate is short and most of it matches, award higher score
             if (bTokens.Length <= 3 && tokenRecall >= 0.5)
             {
@@ -181,6 +211,19 @@ namespace NaturalCommands.Helpers
             }
         }
 
-        private readonly record struct RankedCandidate(string Command, double Score);
+        private readonly record struct RankedCandidate(string Command, double Score, int MatchCount);
+        
+        private static int CountMatchingTokens(string a, string b)
+        {
+            if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return 0;
+            
+            var aTokens = a.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var bTokens = b.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            
+            var aSet = new HashSet<string>(aTokens, StringComparer.Ordinal);
+            var bSet = new HashSet<string>(bTokens, StringComparer.Ordinal);
+            
+            return aSet.Count(t => bSet.Contains(t));
+        }
     }
 }
