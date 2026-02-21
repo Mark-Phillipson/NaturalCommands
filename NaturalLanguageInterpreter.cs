@@ -678,10 +678,10 @@ namespace NaturalCommands
             }
 
             // Explicit help/command list queries
-            var helpQueries = new[] {
+            var helpQueriesExact = new[] {
                     "what can i say", "help", "show commands", "show available commands", "list commands", "show help", "commands list", "available commands"
                 };
-            if (helpQueries.Any(q => text.Contains(q)))
+            if (helpQueriesExact.Any(q => text.Equals(q, StringComparison.InvariantCultureIgnoreCase)))
             {
                 // ShowAvailableCommands performs the appropriate UI (dialog or notification).
                 // We return null here so no further ShowHelpAction is executed (avoids duplicate notifications).

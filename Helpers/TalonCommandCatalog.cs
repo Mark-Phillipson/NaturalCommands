@@ -86,7 +86,8 @@ namespace NaturalCommands.Helpers
             try
             {
                 var lines = File.ReadAllLines(filePath);
-                bool inCommandBlock = false;
+                bool hasCommandDelimiter = lines.Any(l => string.Equals(l.Trim(), "-", StringComparison.Ordinal));
+                bool inCommandBlock = !hasCommandDelimiter;
                 foreach (var rawLine in lines)
                 {
                     var trimmed = rawLine.Trim();
@@ -111,12 +112,26 @@ namespace NaturalCommands.Helpers
                         continue;
                     }
 
-                    if (!trimmed.EndsWith(":", StringComparison.Ordinal))
+                    var colonIndex = trimmed.IndexOf(':');
+                    if (colonIndex <= 0)
                     {
                         continue;
                     }
 
-                    var phrase = trimmed.Substring(0, trimmed.Length - 1).Trim();
+                    var lower = trimmed.ToLowerInvariant();
+                    if (lower.StartsWith("os:")
+                        || lower.StartsWith("app:")
+                        || lower.StartsWith("app.exe:")
+                        || lower.StartsWith("mode:")
+                        || lower.StartsWith("tag:")
+                        || lower.StartsWith("title:")
+                        || lower.StartsWith("hostname:")
+                        || lower.StartsWith("and "))
+                    {
+                        continue;
+                    }
+
+                    var phrase = trimmed.Substring(0, colonIndex).Trim();
                     if (string.IsNullOrWhiteSpace(phrase))
                     {
                         continue;
