@@ -18,9 +18,12 @@ namespace NaturalCommands.Helpers
             }
 
             var normalizedUtterance = Normalize(utterance);
+            Logger.LogInfo($"[TalonMatcher] Matching utterance: '{utterance}' (normalized: '{normalizedUtterance}') against {candidates.Count} candidates");
+            
             var exact = candidates.FirstOrDefault(c => string.Equals(Normalize(c), normalizedUtterance, StringComparison.Ordinal));
             if (!string.IsNullOrWhiteSpace(exact))
             {
+                Logger.LogInfo($"[TalonMatcher] Exact match found: '{exact}'");
                 return exact;
             }
 
@@ -33,14 +36,18 @@ namespace NaturalCommands.Helpers
 
             if (ranked.Count == 0)
             {
+                Logger.LogInfo($"[TalonMatcher] No candidates ranked");
                 return null;
             }
 
             var top = ranked[0];
+            Logger.LogInfo($"[TalonMatcher] Top match: '{top.Command}' with score {top.Score:0.000}. Top 5: {string.Join(", ", ranked.Take(5).Select(r => $"'{r.Command}'({r.Score:0.000})"))}")
+;
             var talonSettings = Models.AppSettings.Instance.Talon;
 
             if (top.Score >= 0.95)
             {
+                Logger.LogInfo($"[TalonMatcher] Score {top.Score:0.000} >= 0.95, returning exact fuzzy match");
                 return top.Command;
             }
 
@@ -48,7 +55,9 @@ namespace NaturalCommands.Helpers
             var aiEnabled = Models.AppSettings.Instance.AI.EnableFallback && !string.IsNullOrWhiteSpace(apiKey);
             if (!aiEnabled)
             {
-                return top.Score >= talonSettings.MinFallbackMatchScore ? top.Command : null;
+                var result = top.Score >= talonSettings.MinFallbackMatchScore ? top.Command : null;
+                Logger.LogInfo($"[TalonMatcher] AI disabled. Top score {top.Score:0.000} vs threshold {talonSettings.MinFallbackMatchScore}. Result: {(result == null ? "null" : $"'{result}'")}");
+                return result;
             }
 
             try
@@ -120,12 +129,22 @@ namespace NaturalCommands.Helpers
             var bSet = new HashSet<string>(bTokens, StringComparer.Ordinal);
             var overlap = aSet.Count(t => bSet.Contains(t));
 
-            var tokenRecall = overlap / (double)aSet.Count;
-            var tokenPrecision = overlap / (double)bSet.Count;
-            var tokenScore = (tokenRecall + tokenPrecision) / 2.0;
+            // Base scoring: recall (coverage of candidate in utterance) + precision (coverage of utterance in candidate)
+            var tokenRecall = overlap / (double)bSet.Count;  // How much of candidate is in utterance
+            var tokenPrecision = overlap / (double)aSet.Count; // How much of utterance matches candidate
+            
+            // Weight recall more heavily - if all candidate tokens are in utterance, it's likely a match
+            // even if utterance has extra words
+            var baseScore = (tokenRecall * 0.7 + tokenPrecision * 0.3);
+
+            // Bonus: if candidate is short and most of it matches, award higher score
+            if (bTokens.Length <= 3 && tokenRecall >= 0.5)
+            {
+                baseScore = Math.Max(baseScore, 0.7 + (tokenRecall * 0.25));
+            }
 
             var containsBoost = b.Contains(a, StringComparison.Ordinal) || a.Contains(b, StringComparison.Ordinal) ? 0.1 : 0;
-            return Math.Min(1.0, tokenScore + containsBoost);
+            return Math.Min(1.0, baseScore + containsBoost);
         }
 
         private static (string Command, double Confidence)? ParseAiResponse(string? content)

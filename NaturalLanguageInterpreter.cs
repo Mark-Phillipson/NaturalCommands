@@ -2130,24 +2130,35 @@ namespace NaturalCommands
                 }
 
                 // AI could not resolve -> try Talon fallback (global catalog matching, no Talon context filters)
+                AppendLog($"[DEBUG] HandleNaturalAsync: Checking Talon fallback. EnableFallback={AppSettings.Instance.Talon.EnableFallback}\n");
                 if (AppSettings.Instance.Talon.EnableFallback)
                 {
                     try
                     {
+                        AppendLog($"[DEBUG] HandleNaturalAsync: Attempting Talon resolution for: '{text}'\n");
                         var talonActionTask = NaturalCommands.Helpers.TalonCommandRouter.ResolveActionAsync(text);
                         talonActionTask.Wait();
                         var talonAction = talonActionTask.Result;
+                        AppendLog($"[DEBUG] HandleNaturalAsync: Talon ResolveActionAsync returned: {(talonAction == null ? "null" : $"'{talonAction.TalonCommand}'")}\n");
                         if (talonAction != null)
                         {
                             AppendLog($"[DEBUG] HandleNaturalAsync: Talon fallback matched '{talonAction.TalonCommand}' ({talonAction.MatchSource})\n");
                             var talonResult = ExecuteActionAsync(talonAction);
                             return $"[Natural mode] {talonResult}";
                         }
+                        else
+                        {
+                            AppendLog("[DEBUG] HandleNaturalAsync: Talon returned null (no match)\n");
+                        }
                     }
                     catch (Exception ex)
                     {
                         AppendLog($"[WARN] HandleNaturalAsync: Talon fallback failed: {ex.Message}\n");
                     }
+                }
+                else
+                {
+                    AppendLog("[DEBUG] HandleNaturalAsync: Talon fallback is disabled\n");
                 }
 
                 AppendLog("No matching action\n");
