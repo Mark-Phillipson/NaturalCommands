@@ -1,0 +1,4 @@
+
+At the moment we have a system where if the program receives a voice command it does not recognize it asks AI to clarify and interpret what the command actually is but this only includes commands provided by this project. however I would like to extend this to be able to decide whether the command is a command for this program or talon voice commands. This way, if the command is not recognized as a command for this program, it can check if it is a valid Talon voice command.  it can then run the Talon command somehow from a dotnet program.
+
+ I'm not sure if this is even feasible but certainly would be a useful feature to have especially when I've forgotten what a particular command is but can string together some similar words to trigger the correct command.
