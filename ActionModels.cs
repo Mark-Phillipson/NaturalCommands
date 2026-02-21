@@ -46,4 +46,8 @@ namespace NaturalCommands
     public record RunTerminalCommandAction(string Command, string Description) : ActionBase;
     // Windows Explorer specific shortcut action
     public record WindowsExplorerShortcutAction(string Shortcut, string CommandText) : ActionBase;
+    // Execute a matched Talon voice command using configured bridge settings.
+    public record RunTalonCommandAction(string OriginalText, string TalonCommand, string MatchSource = "catalog") : ActionBase;
+    // Reload Talon command catalog from Talon user scripts.
+    public record RefreshTalonCatalogAction : ActionBase;
 }

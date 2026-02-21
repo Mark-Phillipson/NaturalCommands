@@ -46,6 +46,9 @@ namespace NaturalCommands.Models
         // Quick Clicks settings
         public QuickClickSettings QuickClicks { get; set; } = new QuickClickSettings();
 
+        // Talon fallback settings
+        public TalonSettings Talon { get; set; } = new TalonSettings();
+
         /// <summary>
         /// Gets the singleton instance of AppSettings.
         /// </summary>
@@ -403,5 +406,36 @@ namespace NaturalCommands.Models
         /// Optional Talon output directory. When null/empty the app directory `talon_output/` is used.
         /// </summary>
         public string? TalonOutputDirectory { get; set; }
+    }
+
+    public class TalonSettings
+    {
+        /// <summary>Enable Talon fallback when native and AI interpretation return no action.</summary>
+        public bool EnableFallback { get; set; } = true;
+
+        /// <summary>Root directory of Talon user scripts used to build phrase catalog.</summary>
+        public string UserScriptsDirectory { get; set; } = @"C:\Users\MPhil\AppData\Roaming\talon\user";
+
+        /// <summary>Local cache file for parsed Talon phrases (stored in app base directory).</summary>
+        public string CatalogCacheFileName { get; set; } = "talon_phrase_catalog.json";
+
+        /// <summary>Minimum score for non-AI fallback matching when AI is unavailable.</summary>
+        public double MinFallbackMatchScore { get; set; } = 0.7;
+
+        /// <summary>Minimum confidence required for AI-selected Talon command.</summary>
+        public double MinAIConfidence { get; set; } = 0.6;
+
+        /// <summary>
+        /// Optional path to a queue file used by Talon-side scripts. When set, matched commands are appended here.
+        /// </summary>
+        public string CommandQueueFilePath { get; set; } = "";
+
+        /// <summary>Optional executable to invoke for Talon command dispatch.</summary>
+        public string BridgeExecutable { get; set; } = "";
+
+        /// <summary>
+        /// Optional arguments template for bridge executable. Use {command} placeholder for the matched Talon command.
+        /// </summary>
+        public string BridgeArgumentsTemplate { get; set; } = "{command}";
     }
 }

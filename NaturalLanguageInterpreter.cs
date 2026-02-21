@@ -310,6 +310,8 @@ namespace NaturalCommands
             try { NaturalCommands.Helpers.MultiActionLoader.Load(); } catch { }
             // Load quick-click profiles (quick_clicks.json)
             try { NaturalCommands.Helpers.QuickClickLoader.Load(); } catch { }
+            // Load Talon phrase catalog for fallback matching
+            try { NaturalCommands.Helpers.TalonCommandCatalog.EnsureLoaded(); } catch { }
         }
 
         // Emoji mapping API now provided by EmojiManager.cs
@@ -667,6 +669,12 @@ namespace NaturalCommands
                 AppendLog("[INFO] Refreshed Visual Studio shortcuts from .vssettings file\n");
                 NaturalCommands.TrayNotificationHelper.ShowNotification("Shortcuts Refreshed", "Visual Studio keyboard shortcuts have been reloaded.", 5000);
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(null);
+            }
+
+            // Handle refresh Talon command catalog
+            if (text.Contains("refresh talon commands") || text.Contains("reload talon commands") || text.Contains("update talon commands"))
+            {
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(new RefreshTalonCatalogAction());
             }
 
             // Explicit help/command list queries
@@ -1254,15 +1262,9 @@ namespace NaturalCommands
                 }
             }
 
-            // Fallback for unhandled commands: log and call AI
+            // Fallback for unhandled commands: log and let HandleNaturalAsync perform AI/Talon routing
             NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync: No rule-based match for: {text}");
-            string? currentApp = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName();
-            string aiInput = text;
-            if (!string.IsNullOrWhiteSpace(currentApp))
-            {
-                aiInput += $"\nCurrentApplication: {currentApp}";
-            }
-            return InterpretWithAIAsync(aiInput);
+            return System.Threading.Tasks.Task.FromResult<ActionBase?>(null);
             // End of InterpretAsync
         }
         private static readonly string[] SupportedCloseTabApps = new[] { "chrome", "msedge", "firefox", "brave", "opera", "code", "devenv" };
@@ -1498,6 +1500,22 @@ namespace NaturalCommands
                     NaturalCommands.Helpers.Logger.LogError($"Failed to execute terminal command: {ex.Message}");
                     return $"Failed to execute terminal command: {ex.Message}";
                 }
+            }
+            else if (action is RefreshTalonCatalogAction)
+            {
+                try
+                {
+                    var count = NaturalCommands.Helpers.TalonCommandCatalog.Reload();
+                    return $"Refreshed Talon commands ({count} loaded).";
+                }
+                catch (Exception ex)
+                {
+                    return $"Failed to refresh Talon commands: {ex.Message}";
+                }
+            }
+            else if (action is RunTalonCommandAction talonAction)
+            {
+                return NaturalCommands.Helpers.TalonCommandExecutor.Execute(talonAction);
             }
             // Quick Clicks actions (click regions, show/hide/edit/create overlays)
             else if (action is ClickQuickClickAction clickAction)
@@ -2083,11 +2101,18 @@ namespace NaturalCommands
                 }
                 // Fallback to OpenAI if rule-based and normalized match fail
                 AppendLog($"[DEBUG] HandleNaturalAsync: Fallback to OpenAI for: {text}\n");
-                var aiActionTask = InterpretWithAIAsync(text);
+                string? currentApp = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName();
+                string aiInput = text;
+                if (!string.IsNullOrWhiteSpace(currentApp))
+                {
+                    aiInput += $"\nCurrentApplication: {currentApp}";
+                }
+
+                var aiActionTask = InterpretWithAIAsync(aiInput);
                 aiActionTask.Wait();
                 var aiAction = aiActionTask.Result;
                 AppendLog($"[DEBUG] HandleNaturalAsync: OpenAI Action type: {(aiAction == null ? "null" : aiAction.GetType().Name)}\n");
-                // Log the raw AI response if available
+
                 if (aiActionTask.IsCompletedSuccessfully && aiAction != null)
                 {
                     // If the original text was 'close tab', override AI fallback to always send Ctrl+W
@@ -2103,6 +2128,28 @@ namespace NaturalCommands
                     var aiResult = ExecuteActionAsync(aiAction);
                     return $"[Natural mode] {aiResult}";
                 }
+
+                // AI could not resolve -> try Talon fallback (global catalog matching, no Talon context filters)
+                if (AppSettings.Instance.Talon.EnableFallback)
+                {
+                    try
+                    {
+                        var talonActionTask = NaturalCommands.Helpers.TalonCommandRouter.ResolveActionAsync(text);
+                        talonActionTask.Wait();
+                        var talonAction = talonActionTask.Result;
+                        if (talonAction != null)
+                        {
+                            AppendLog($"[DEBUG] HandleNaturalAsync: Talon fallback matched '{talonAction.TalonCommand}' ({talonAction.MatchSource})\n");
+                            var talonResult = ExecuteActionAsync(talonAction);
+                            return $"[Natural mode] {talonResult}";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"[WARN] HandleNaturalAsync: Talon fallback failed: {ex.Message}\n");
+                    }
+                }
+
                 AppendLog("No matching action\n");
                 // Show auto-closing message box for unmatched command
                 AppendLog($"[DEBUG] About to show AutoClosingMessageBox for: {text}\n");

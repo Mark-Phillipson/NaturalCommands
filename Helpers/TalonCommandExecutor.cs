@@ -1,0 +1,71 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+
+namespace NaturalCommands.Helpers
+{
+    public static class TalonCommandExecutor
+    {
+        public static string Execute(NaturalCommands.RunTalonCommandAction action)
+        {
+            var settings = Models.AppSettings.Instance.Talon;
+
+            if (!string.IsNullOrWhiteSpace(settings.CommandQueueFilePath))
+            {
+                try
+                {
+                    var queuePath = settings.CommandQueueFilePath.Trim();
+                    var queueDir = Path.GetDirectoryName(queuePath);
+                    if (!string.IsNullOrWhiteSpace(queueDir) && !Directory.Exists(queueDir))
+                    {
+                        Directory.CreateDirectory(queueDir);
+                    }
+
+                    File.AppendAllText(queuePath, action.TalonCommand + Environment.NewLine);
+                    Logger.LogInfo($"TalonCommandExecutor: queued '{action.TalonCommand}' to '{queuePath}'.");
+                    return $"Queued Talon command: {action.TalonCommand}";
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"TalonCommandExecutor: failed writing queue file '{settings.CommandQueueFilePath}'. {ex.Message}");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.BridgeExecutable))
+            {
+                try
+                {
+                    var argsTemplate = string.IsNullOrWhiteSpace(settings.BridgeArgumentsTemplate)
+                        ? "{command_quoted}"
+                        : settings.BridgeArgumentsTemplate;
+
+                    var args = argsTemplate
+                        .Replace("{command}", action.TalonCommand, StringComparison.Ordinal)
+                        .Replace("{command_quoted}", QuoteArgument(action.TalonCommand), StringComparison.Ordinal);
+
+                    var psi = new ProcessStartInfo(settings.BridgeExecutable, args)
+                    {
+                        UseShellExecute = true
+                    };
+
+                    Process.Start(psi);
+                    Logger.LogInfo($"TalonCommandExecutor: dispatched '{action.TalonCommand}' via bridge '{settings.BridgeExecutable}'.");
+                    return $"Dispatched Talon command: {action.TalonCommand}";
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"TalonCommandExecutor: bridge execution failed. {ex.Message}");
+                    return $"Matched Talon command but dispatch failed: {ex.Message}";
+                }
+            }
+
+            return "Matched Talon command but no dispatch bridge is configured. Set Talon.CommandQueueFilePath or Talon.BridgeExecutable in settings.json.";
+        }
+
+        private static string QuoteArgument(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "\"\"";
+            return "\"" + value.Replace("\"", "\\\"") + "\"";
+        }
+    }
+}
