@@ -88,6 +88,9 @@ namespace NaturalCommands.Helpers
                 sanitized = sanitized.Substring(0, sanitized.Length - 1).TrimEnd();
             }
 
+            sanitized = sanitized.Replace("[", " ").Replace("]", " ");
+            sanitized = string.Join(" ", sanitized.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+
             return string.IsNullOrWhiteSpace(sanitized) ? command.Trim() : sanitized;
         }
     }
