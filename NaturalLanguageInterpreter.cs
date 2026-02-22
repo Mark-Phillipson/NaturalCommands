@@ -72,7 +72,8 @@ namespace NaturalCommands
             { "command prompt", "wt.exe" },
             { "skype", "skype.exe" },
             { "zoom", "zoom.exe" },
-            { "slack", "slack.exe" }
+            { "slack", "slack.exe" },
+            { "steam", "steam://open/main" }
         };
         /// <summary>
         /// Uses OpenAI API to interpret text and return an ActionBase (AI fallback).
@@ -920,8 +921,23 @@ namespace NaturalCommands
             if (text.StartsWith("open "))
             {
                 var appName = text.Substring(5).Trim();
-                // Normalize app name (remove 'the', 'app', etc.)
-                appName = appName.Replace("the ", "").Replace("app", "").Trim();
+                // Normalize app name (remove filler words as whole words only)
+                appName = Regex.Replace(appName, "\\bthe\\b", "", RegexOptions.IgnoreCase).Trim();
+                appName = Regex.Replace(appName, "\\bapplication\\b", "", RegexOptions.IgnoreCase).Trim();
+                appName = Regex.Replace(appName, "\\bapp\\b", "", RegexOptions.IgnoreCase).Trim();
+                appName = Regex.Replace(appName, "\\s+", " ").Trim();
+                var fillerTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "up", "for", "me", "now", "please", "just"
+                };
+                var filteredTokens = appName
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Where(t => !fillerTokens.Contains(t))
+                    .ToArray();
+                if (filteredTokens.Length > 0)
+                {
+                    appName = string.Join(" ", filteredTokens);
+                }
                 // Strip vendor prefixes like "microsoft " or "ms " to handle phrases such as "microsoft paint"
                 if (appName.StartsWith("microsoft ", StringComparison.OrdinalIgnoreCase))
                     appName = appName.Substring("microsoft ".Length).Trim();
@@ -934,6 +950,15 @@ namespace NaturalCommands
                 {
                     var action = new LaunchAppAction(exe);
                     AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (mapped app: {appName} -> {exe})\n");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                }
+                var embeddedAppName = AppMappings.Keys
+                    .OrderByDescending(k => k.Length)
+                    .FirstOrDefault(k => Regex.IsMatch(appName, $"\\b{Regex.Escape(k)}\\b", RegexOptions.IgnoreCase));
+                if (!string.IsNullOrWhiteSpace(embeddedAppName) && AppMappings.TryGetValue(embeddedAppName, out exe))
+                {
+                    var action = new LaunchAppAction(exe);
+                    AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (embedded mapped app: {embeddedAppName} -> {exe})\n");
                     return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
                 }
                 // Fallback: show Alt+Tab switcher and hold Alt
