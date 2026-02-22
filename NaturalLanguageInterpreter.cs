@@ -1599,7 +1599,11 @@ namespace NaturalCommands
 
                     if (candidates.Count == 1 && candidates[0].Confidence >= AppSettings.Instance.VisualTargeting.AutoClickConfidenceThreshold)
                     {
-                        var point = candidates[0].Center;
+                        var point = Helpers.VisualTargetClickPointResolver.Resolve(candidates[0], visualIdentify.TargetPhrase);
+                        if (point == System.Drawing.Point.Empty)
+                        {
+                            point = candidates[0].Center;
+                        }
                         System.Drawing.Point previous;
                         try { GetCursorPos(out previous); } catch { previous = System.Windows.Forms.Cursor.Position; }
 
@@ -1642,7 +1646,12 @@ namespace NaturalCommands
                 VisualCandidateOverlayForm.HideOverlay();
                 System.Threading.Thread.Sleep(30);
 
-                var point = candidate.Center;
+                var session = Helpers.VisualCandidateSessionStore.GetSession();
+                var point = Helpers.VisualTargetClickPointResolver.Resolve(candidate, session?.Query ?? string.Empty);
+                if (point == System.Drawing.Point.Empty)
+                {
+                    point = candidate.Center;
+                }
                 System.Drawing.Point previous;
                 try { GetCursorPos(out previous); } catch { previous = System.Windows.Forms.Cursor.Position; }
 

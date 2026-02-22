@@ -295,6 +295,7 @@ namespace NaturalCommands.Helpers
                 var loweredPhrase = phrase.ToLowerInvariant();
                 var tokens = loweredPhrase.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 var requestedCard = ParseCardFromPhrase(loweredPhrase);
+                var requestedRankOnly = requestedCard == null ? ParseRankOnlyQuery(loweredPhrase) : string.Empty;
                 var elements = UIAutomationHelper.EnumerateClickableElements(scopeToActiveWindow: false);
 
                 var matches = new List<VisualTargetCandidate>();
@@ -312,18 +313,24 @@ namespace NaturalCommands.Helpers
                     }
 
                     var loweredName = name.ToLowerInvariant();
+                    var cardsInName = ParseCardsFromText(loweredName);
                     double score;
                     if (requestedCard != null)
                     {
-                        var cardsInName = ParseCardsFromText(loweredName);
                         var matchingCards = cardsInName.Where(c => c.Equals(requestedCard)).ToList();
                         if (matchingCards.Count == 0)
                         {
                             continue;
                         }
 
-                        if (cardsInName.Count != 1)
+                        if (cardsInName.Count > 1)
                         {
+                            matches.AddRange(BuildStackCardCandidates(
+                                element.Bounds,
+                                cardsInName,
+                                card => card.Equals(requestedCard),
+                                0.9,
+                                "UIA stacked-card exact match"));
                             continue;
                         }
 
@@ -343,6 +350,22 @@ namespace NaturalCommands.Helpers
                     }
                     else
                     {
+                        if (cardsInName.Count > 1 && !string.IsNullOrWhiteSpace(requestedRankOnly))
+                        {
+                            var stackRankMatches = BuildStackCardCandidates(
+                                element.Bounds,
+                                cardsInName,
+                                card => string.Equals(card.Rank, requestedRankOnly, StringComparison.Ordinal),
+                                0.74,
+                                $"UIA stacked-card rank match '{requestedRankOnly}'");
+
+                            if (stackRankMatches.Count > 0)
+                            {
+                                matches.AddRange(stackRankMatches);
+                                continue;
+                            }
+                        }
+
                         if (!tokens.All(t => loweredName.Contains(t)))
                         {
                             continue;
@@ -402,6 +425,125 @@ namespace NaturalCommands.Helpers
                 Logger.LogError($"VisualTargetingService OCR fallback failed: {ex.Message}");
                 return new List<VisualTargetCandidate>();
             }
+        }
+
+        private static string ParseRankOnlyQuery(string phrase)
+        {
+            if (string.IsNullOrWhiteSpace(phrase))
+            {
+                return string.Empty;
+            }
+
+            string? detectedRank = null;
+            var tokenSeparators = new[] { ' ', '\t', '\r', '\n' };
+            var punctuation = new[] { ',', '.', ';', ':', '!', '?', '"', '\'' };
+
+            foreach (var rawToken in phrase.Split(tokenSeparators, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var token = rawToken.Trim().Trim(punctuation);
+                if (token.Length == 0)
+                {
+                    continue;
+                }
+
+                if (string.Equals(token, "of", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                var normalized = NormalizeRank(token);
+                if (string.IsNullOrWhiteSpace(normalized))
+                {
+                    continue;
+                }
+
+                if (detectedRank != null)
+                {
+                    return string.Empty;
+                }
+
+                detectedRank = normalized;
+            }
+
+            return detectedRank ?? string.Empty;
+        }
+
+        private static List<VisualTargetCandidate> BuildStackCardCandidates(
+            System.Drawing.Rectangle stackBounds,
+            List<CardValue> cardsInName,
+            Func<CardValue, bool> predicate,
+            double confidence,
+            string reason)
+        {
+            var candidates = new List<VisualTargetCandidate>();
+            if (cardsInName.Count == 0 || stackBounds.Width <= 0 || stackBounds.Height <= 0)
+            {
+                return candidates;
+            }
+
+            var estimatedCardBounds = EstimateStackCardBounds(stackBounds, cardsInName.Count);
+            var count = Math.Min(cardsInName.Count, estimatedCardBounds.Count);
+            for (var index = 0; index < count; index++)
+            {
+                var card = cardsInName[index];
+                if (!predicate(card))
+                {
+                    continue;
+                }
+
+                candidates.Add(new VisualTargetCandidate
+                {
+                    Label = $"{card.Rank} of {card.Suit}",
+                    Bounds = estimatedCardBounds[index],
+                    Confidence = confidence,
+                    Reason = reason,
+                    Source = "uia"
+                });
+            }
+
+            return candidates;
+        }
+
+        private static List<System.Drawing.Rectangle> EstimateStackCardBounds(System.Drawing.Rectangle stackBounds, int cardCount)
+        {
+            var results = new List<System.Drawing.Rectangle>();
+            if (cardCount <= 0 || stackBounds.Width <= 0 || stackBounds.Height <= 0)
+            {
+                return results;
+            }
+
+            if (cardCount == 1)
+            {
+                results.Add(stackBounds);
+                return results;
+            }
+
+            var estimatedCardHeight = (int)Math.Round(stackBounds.Width * 1.45);
+            estimatedCardHeight = Math.Max(stackBounds.Width, Math.Min(stackBounds.Height, estimatedCardHeight));
+
+            var overlapSpan = stackBounds.Height - estimatedCardHeight;
+            var rowOffset = overlapSpan > 0
+                ? overlapSpan / (double)(cardCount - 1)
+                : stackBounds.Height / (double)cardCount;
+            rowOffset = Math.Max(14, rowOffset);
+
+            for (var index = 0; index < cardCount; index++)
+            {
+                var top = stackBounds.Top + (int)Math.Round(index * rowOffset);
+                if (top >= stackBounds.Bottom)
+                {
+                    top = stackBounds.Bottom - 1;
+                }
+
+                var height = index == cardCount - 1
+                    ? Math.Min(estimatedCardHeight, stackBounds.Bottom - top)
+                    : Math.Min(Math.Max(24, (int)Math.Round(rowOffset) + 10), stackBounds.Bottom - top);
+                height = Math.Max(1, height);
+
+                results.Add(new System.Drawing.Rectangle(stackBounds.Left, top, stackBounds.Width, height));
+            }
+
+            return results;
         }
 
         private static bool ContainsWholePhrase(string text, string phrase)
