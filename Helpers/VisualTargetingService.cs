@@ -14,12 +14,13 @@ namespace NaturalCommands.Helpers
     public static class VisualTargetingService
     {
         private static readonly object _budgetLock = new();
+        private static readonly Regex CardConnectorMisrecognitionRegex = new(@"\b(?<rank>ace|king|queen|jack|10|[2-9]|two|three|four|five|six|seven|eight|nine|ten)\s+off\s+(?<suit>spades?|hearts?|diamonds?|clubs?)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex CardPhraseRegex = new(@"\b(?<rank>ace|king|queen|jack|10|[2-9]|two|three|four|five|six|seven|eight|nine|ten)\s+of\s+(?<suit>spades?|hearts?|diamonds?|clubs?)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static List<VisualTargetCandidate> IdentifyCandidates(string phrase)
         {
             var settings = AppSettings.Instance.VisualTargeting;
-            var normalizedPhrase = (phrase ?? string.Empty).Trim();
+            var normalizedPhrase = NormalizeCardConnectorMisrecognitions((phrase ?? string.Empty).Trim());
             if (string.IsNullOrWhiteSpace(normalizedPhrase) || !settings.Enabled)
             {
                 return new List<VisualTargetCandidate>();
@@ -555,6 +556,22 @@ namespace NaturalCommands.Helpers
 
             var pattern = $@"\b{Regex.Escape(phrase)}\b";
             return Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase);
+        }
+
+        private static string NormalizeCardConnectorMisrecognitions(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+
+            var normalized = CardConnectorMisrecognitionRegex.Replace(text, "${rank} of ${suit}");
+            if (!string.Equals(normalized, text, StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.LogDebug($"VisualTargetingService: normalized card phrase from '{text}' to '{normalized}'.");
+            }
+
+            return normalized;
         }
 
         private static CardValue? ParseCardFromPhrase(string text)
