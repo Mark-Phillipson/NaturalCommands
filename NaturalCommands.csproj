@@ -24,6 +24,7 @@
         <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="7.0.13" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="6.35.0" />
         <PackageReference Include="Microsoft.Windows.Compatibility" Version="9.0.9" />
+        <PackageReference Include="Microsoft.Windows.SDK.NET" Version="10.0.18362.6-preview" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
         <PackageReference Include="OpenAI" Version="2.7.0" />
         <PackageReference Include="SmartComponents.LocalEmbeddings" Version="0.1.0-preview10148" />

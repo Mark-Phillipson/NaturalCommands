@@ -349,8 +349,24 @@ namespace NaturalCommands.Helpers
 
         private static List<VisualTargetCandidate> TryFromLocalOcr(string phrase)
         {
-            Logger.LogDebug($"VisualTargetingService OCR fallback not configured; skipping OCR for '{phrase}'.");
-            return new List<VisualTargetCandidate>();
+            try
+            {
+                var candidates = LocalOcrService.FindCandidates(phrase);
+                if (candidates.Count > 0)
+                {
+                    Logger.LogDebug($"VisualTargetingService: OCR fallback returned {candidates.Count} candidates for '{phrase}'.");
+                }
+                else
+                {
+                    Logger.LogDebug($"VisualTargetingService: OCR fallback found no matches for '{phrase}'.");
+                }
+                return candidates;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"VisualTargetingService OCR fallback failed: {ex.Message}");
+                return new List<VisualTargetCandidate>();
+            }
         }
     }
 }
