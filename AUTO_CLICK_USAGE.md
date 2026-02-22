@@ -108,6 +108,32 @@ When auto-click is active and the mouse is idle:
 4. The auto-click will work across all applications
 5. To disable during gameplay: **"stop auto click"**
 
+## Visual Target Click Usage
+
+This feature is useful when you want to click a specific visible target by description.
+
+### Voice commands
+
+- **"identify ten of spades"**
+- **"show candidates"**
+- **"choose 2"**
+
+### What happens
+
+1. NaturalCommands tries local UI Automation first.
+2. If needed and cloud calls are enabled, it sends a compressed all-monitor screenshot to OpenAI vision.
+3. A single high-confidence target is auto-clicked.
+4. Multiple matches show a numbered overlay for `choose <number>`.
+
+### Cost and latency controls
+
+Use **Settings → AI Integration → Visual Targeting** to set:
+
+- Max cloud calls/day
+- Model tier (`off`, `fast`, `balanced`)
+- Confidence threshold for auto-click
+- Fallback mode (`uia-then-ocr`, `uia-only`, `ocr-only`)
+
 ## Settings File
 
 Settings are stored in:

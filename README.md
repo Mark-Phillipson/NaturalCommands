@@ -134,6 +134,34 @@ The feature works with:
 - **Desktop applications** (Windows native apps)
 - Any application that supports Windows UI Automation API
 
+## Visual Target Click (identify / choose)
+
+NaturalCommands supports a voice-driven visual targeting flow for commands like identifying and clicking specific on-screen targets.
+
+### Commands
+
+- `identify <target>`: Find matching targets on screen.
+- `show candidates`: Re-show the numbered overlay for the latest identify session.
+- `choose <number>`: Click a numbered candidate from the current session.
+
+### Behavior
+
+1. Local UI Automation is attempted first.
+2. If local confidence is not high enough and cloud vision is enabled, a screenshot is sent to OpenAI vision.
+3. If one strong candidate is found, NaturalCommands auto-clicks it.
+4. If multiple candidates are found, a numbered overlay is shown and you can say `choose 1`, `choose 2`, etc.
+
+### Settings
+
+Open **Settings → AI Integration → Visual Targeting**:
+
+- **Auto-click confidence threshold** (`0.50` to `1.00`)
+- **Max cloud visual calls per day** (`0` disables cloud calls)
+- **Model tier** (`off`, `fast`, `balanced`)
+- **Fallback mode** (`uia-then-ocr`, `uia-only`, `ocr-only`)
+
+Cloud budget counters are tracked daily (UTC) in `settings.json` and reset automatically each day.
+
 ## Auto-Click (countdown overlay)
 
 Auto-Click provides a configurable delayed-click feature that displays a small countdown overlay centered on the cursor during the delay. While the countdown is active the overlay temporarily hides the system cursor and shows a progress arc and a small hotspot dot so the user can clearly see where the click will occur.
