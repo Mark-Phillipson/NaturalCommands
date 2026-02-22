@@ -49,6 +49,9 @@ namespace NaturalCommands.Models
         // Talon fallback settings
         public TalonSettings Talon { get; set; } = new TalonSettings();
 
+        // Visual targeting settings (AI screen clicker)
+        public VisualTargetingSettings VisualTargeting { get; set; } = new VisualTargetingSettings();
+
         /// <summary>
         /// Gets the singleton instance of AppSettings.
         /// </summary>
@@ -437,5 +440,35 @@ namespace NaturalCommands.Models
         /// Optional arguments template for bridge executable. Use {command} placeholder for the matched Talon command.
         /// </summary>
         public string BridgeArgumentsTemplate { get; set; } = "{command}";
+    }
+
+    public class VisualTargetingSettings
+    {
+        /// <summary>Enable voice-driven visual targeting commands.</summary>
+        public bool Enabled { get; set; } = true;
+
+        /// <summary>Confidence threshold (0.0-1.0) for immediate auto-click when one candidate is found.</summary>
+        public double AutoClickConfidenceThreshold { get; set; } = 0.86;
+
+        /// <summary>Maximum cloud vision calls allowed per day. 0 disables cloud calls.</summary>
+        public int MaxCloudCallsPerDay { get; set; } = 20;
+
+        /// <summary>Preferred vision model tier (off, fast, balanced).</summary>
+        public string ModelTier { get; set; } = "off";
+
+        /// <summary>Fallback mode preference (uia-then-ocr, uia-only, ocr-only).</summary>
+        public string FallbackMode { get; set; } = "uia-then-ocr";
+
+        /// <summary>Maximum number of candidates to keep in the session.</summary>
+        public int MaxCandidates { get; set; } = 8;
+
+        /// <summary>Overlay timeout in milliseconds for numbered candidate display.</summary>
+        public int OverlayTimeoutMs { get; set; } = 9000;
+
+        /// <summary>UTC date (yyyy-MM-dd) when cloud call usage was last tracked.</summary>
+        public string CloudUsageDateUtc { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd");
+
+        /// <summary>Number of cloud vision calls used on CloudUsageDateUtc.</summary>
+        public int CloudCallsUsedToday { get; set; } = 0;
     }
 }

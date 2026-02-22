@@ -260,6 +260,9 @@ namespace NaturalCommands
             ("show help", "Show help and available commands"),
             ("natural dictate", "Open the voice dictation form (speak or type natural language commands)"),
             ("show letters", "Display letter labels on clickable UI elements for voice-based navigation"),
+            ("identify <target>", "Identify a visual target and click when confident, otherwise show numbered options"),
+            ("show candidates", "Show numbered candidates from the latest visual identify command"),
+            ("choose <number>", "Choose a numbered visual target candidate"),
             ("emoji set <name> <emoji>", "Set an emoji for a named shortcut (e.g. emoji set happy 😀)"),
             ("emoji <name>", "Insert the configured emoji for the given name"),
             ("emoji <emoji>", "Insert the given emoji immediately"),
@@ -1080,6 +1083,33 @@ namespace NaturalCommands
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
 
+            if (text.StartsWith("identify ", StringComparison.InvariantCultureIgnoreCase))
+            {
+                var targetPhrase = text.Substring("identify ".Length).Trim();
+                if (!string.IsNullOrWhiteSpace(targetPhrase))
+                {
+                    var action = new VisualIdentifyClickAction(targetPhrase);
+                    AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (target={targetPhrase})\n");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                }
+            }
+
+            if (text.Equals("show candidates", StringComparison.InvariantCultureIgnoreCase)
+                || text.Equals("show visual candidates", StringComparison.InvariantCultureIgnoreCase))
+            {
+                var action = new VisualShowCandidatesAction();
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name}\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
+            var chooseMatch = Regex.Match(text, @"^(choose|select|pick)\s+(\d+)\s*$", RegexOptions.IgnoreCase);
+            if (chooseMatch.Success && int.TryParse(chooseMatch.Groups[2].Value, out var chosenNumber) && chosenNumber > 0)
+            {
+                var action = new VisualChooseCandidateAction(chosenNumber);
+                AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (candidate={chosenNumber})\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+            }
+
             // Quick Clicks control phrases (show/hide/edit/create)
             var quickClicksControlPatterns = new[] { "show quick clicks", "hide quick clicks", "edit quick clicks", "create quick click", "create quick click at mouse", "create quick click at cursor" };
             if (quickClicksControlPatterns.Any(p => text.Equals(p, StringComparison.InvariantCultureIgnoreCase) || text.Contains(p)))
@@ -1541,6 +1571,86 @@ namespace NaturalCommands
             else if (action is RunTalonCommandAction talonAction)
             {
                 return NaturalCommands.Helpers.TalonCommandExecutor.Execute(talonAction);
+            }
+            else if (action is VisualIdentifyClickAction visualIdentify)
+            {
+                try
+                {
+                    if (!AppSettings.Instance.VisualTargeting.Enabled)
+                    {
+                        return "Visual targeting is disabled in settings.";
+                    }
+
+                    var candidates = Helpers.VisualTargetingService.IdentifyCandidates(visualIdentify.TargetPhrase);
+                    if (candidates.Count == 0)
+                    {
+                        Helpers.VisualCandidateSessionStore.Clear();
+                        VisualCandidateOverlayForm.HideOverlay();
+                        return $"No visual match found for '{visualIdentify.TargetPhrase}'.";
+                    }
+
+                    var session = new Models.VisualTargetSession
+                    {
+                        Query = visualIdentify.TargetPhrase,
+                        CreatedUtc = DateTime.UtcNow,
+                        Candidates = candidates
+                    };
+                    Helpers.VisualCandidateSessionStore.SetSession(session);
+
+                    if (candidates.Count == 1 && candidates[0].Confidence >= AppSettings.Instance.VisualTargeting.AutoClickConfidenceThreshold)
+                    {
+                        var point = candidates[0].Center;
+                        System.Drawing.Point previous;
+                        try { GetCursorPos(out previous); } catch { previous = System.Windows.Forms.Cursor.Position; }
+
+                        SetCursorPos(point.X, point.Y);
+                        mouse_event(MOUSEEVENTF_LEFTDOWN, point.X, point.Y, 0, 0);
+                        mouse_event(MOUSEEVENTF_LEFTUP, point.X, point.Y, 0, 0);
+                        try { SetCursorPos(previous.X, previous.Y); } catch { }
+
+                        VisualCandidateOverlayForm.HideOverlay();
+                        return $"Clicked visual target '{candidates[0].Label}' (confidence {candidates[0].Confidence:0.00}).";
+                    }
+
+                    VisualCandidateOverlayForm.ShowCandidates(candidates, AppSettings.Instance.VisualTargeting.OverlayTimeoutMs);
+                    return $"Found {candidates.Count} visual candidates for '{visualIdentify.TargetPhrase}'. Say 'choose 1' to 'choose {candidates.Count}'.";
+                }
+                catch (Exception ex)
+                {
+                    Helpers.Logger.LogError($"VisualIdentifyClickAction failed: {ex.Message}");
+                    return $"Visual identify failed: {ex.Message}";
+                }
+            }
+            else if (action is VisualShowCandidatesAction)
+            {
+                var session = Helpers.VisualCandidateSessionStore.GetSession();
+                if (session == null || session.Candidates.Count == 0)
+                {
+                    return "No active visual candidate session.";
+                }
+
+                VisualCandidateOverlayForm.ShowCandidates(session.Candidates, AppSettings.Instance.VisualTargeting.OverlayTimeoutMs);
+                return $"Showing {session.Candidates.Count} visual candidates for '{session.Query}'.";
+            }
+            else if (action is VisualChooseCandidateAction chooseVisual)
+            {
+                if (!Helpers.VisualCandidateSessionStore.TryGetCandidate(chooseVisual.CandidateNumber, out var candidate) || candidate == null)
+                {
+                    return $"Candidate {chooseVisual.CandidateNumber} is not available. Say 'show candidates' to view options again.";
+                }
+
+                var point = candidate.Center;
+                System.Drawing.Point previous;
+                try { GetCursorPos(out previous); } catch { previous = System.Windows.Forms.Cursor.Position; }
+
+                SetCursorPos(point.X, point.Y);
+                mouse_event(MOUSEEVENTF_LEFTDOWN, point.X, point.Y, 0, 0);
+                mouse_event(MOUSEEVENTF_LEFTUP, point.X, point.Y, 0, 0);
+                try { SetCursorPos(previous.X, previous.Y); } catch { }
+
+                VisualCandidateOverlayForm.HideOverlay();
+                Helpers.VisualCandidateSessionStore.Clear();
+                return $"Clicked candidate {chooseVisual.CandidateNumber}: {candidate.Label}.";
             }
             // Quick Clicks actions (click regions, show/hide/edit/create overlays)
             else if (action is ClickQuickClickAction clickAction)

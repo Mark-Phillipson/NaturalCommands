@@ -50,4 +50,7 @@ namespace NaturalCommands
     public record RunTalonCommandAction(string OriginalText, string TalonCommand, string MatchSource = "catalog") : ActionBase;
     // Reload Talon command catalog from Talon user scripts.
     public record RefreshTalonCatalogAction : ActionBase;
+    public record VisualIdentifyClickAction(string TargetPhrase) : ActionBase;
+    public record VisualShowCandidatesAction : ActionBase;
+    public record VisualChooseCandidateAction(int CandidateNumber) : ActionBase;
 }

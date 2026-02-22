@@ -60,6 +60,10 @@ namespace NaturalCommands
         private CheckBox chkEnableAIFallback = null!;
         private TextBox txtPromptFile = null!;
         private Button btnBrowsePromptFile = null!;
+        private NumericUpDown numVisualConfidenceThreshold = null!;
+        private NumericUpDown numVisualMaxCallsPerDay = null!;
+        private ComboBox cmbVisualModelTier = null!;
+        private ComboBox cmbVisualFallbackMode = null!;
         
         // Advanced Tab
         private CheckBox chkLoggingEnabled = null!;
@@ -437,6 +441,24 @@ namespace NaturalCommands
             btnBrowsePromptFile.Location = new Point(520, yPos - 35);
             btnBrowsePromptFile.Width = 100;
             panel.Controls.Add(btnBrowsePromptFile);
+
+            yPos += 20;
+            panel.Controls.Add(CreateLabel("Visual Targeting", ref yPos, true));
+            panel.Controls.Add(CreateLabel("Auto-click confidence threshold (0.50-1.00):", ref yPos));
+            numVisualConfidenceThreshold = CreateNumericUpDown(0.50m, 1.00m, ref yPos, true, 0.01m);
+            panel.Controls.Add(numVisualConfidenceThreshold);
+
+            panel.Controls.Add(CreateLabel("Max cloud visual calls per day (0 = disabled):", ref yPos));
+            numVisualMaxCallsPerDay = CreateNumericUpDown(0, 500, ref yPos);
+            panel.Controls.Add(numVisualMaxCallsPerDay);
+
+            panel.Controls.Add(CreateLabel("Model tier:", ref yPos));
+            cmbVisualModelTier = CreateComboBox(new[] { "off", "fast", "balanced" }, ref yPos);
+            panel.Controls.Add(cmbVisualModelTier);
+
+            panel.Controls.Add(CreateLabel("Fallback mode:", ref yPos));
+            cmbVisualFallbackMode = CreateComboBox(new[] { "uia-then-ocr", "uia-only", "ocr-only" }, ref yPos);
+            panel.Controls.Add(cmbVisualFallbackMode);
             
             tab.Controls.Add(panel);
             return tab;
@@ -699,6 +721,10 @@ namespace NaturalCommands
             txtModelName.Text = settings.AI.ModelName;
             chkEnableAIFallback.Checked = settings.AI.EnableFallback;
             txtPromptFile.Text = settings.AI.PromptFile;
+            numVisualConfidenceThreshold.Value = (decimal)settings.VisualTargeting.AutoClickConfidenceThreshold;
+            numVisualMaxCallsPerDay.Value = settings.VisualTargeting.MaxCloudCallsPerDay;
+            cmbVisualModelTier.Text = settings.VisualTargeting.ModelTier;
+            cmbVisualFallbackMode.Text = settings.VisualTargeting.FallbackMode;
             
             // Advanced
             chkLoggingEnabled.Checked = settings.Logging.Enabled;
@@ -751,9 +777,13 @@ namespace NaturalCommands
             settings.Appearance.AccessibilityFontMultiplier = (float)numAccessibilityMultiplier.Value;
             
             // AI
-            txtModelName.Text = settings.AI.ModelName;
+            settings.AI.ModelName = txtModelName.Text;
             settings.AI.EnableFallback = chkEnableAIFallback.Checked;
             settings.AI.PromptFile = txtPromptFile.Text;
+            settings.VisualTargeting.AutoClickConfidenceThreshold = (double)numVisualConfidenceThreshold.Value;
+            settings.VisualTargeting.MaxCloudCallsPerDay = (int)numVisualMaxCallsPerDay.Value;
+            settings.VisualTargeting.ModelTier = string.IsNullOrWhiteSpace(cmbVisualModelTier.Text) ? "off" : cmbVisualModelTier.Text.Trim();
+            settings.VisualTargeting.FallbackMode = string.IsNullOrWhiteSpace(cmbVisualFallbackMode.Text) ? "uia-then-ocr" : cmbVisualFallbackMode.Text.Trim();
             
             // Advanced
             settings.Logging.Enabled = chkLoggingEnabled.Checked;

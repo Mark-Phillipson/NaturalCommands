@@ -21,6 +21,9 @@ namespace NaturalCommands
             ("launch app", "Launch a specified application"),
             ("focus app", "Focus a specified application window"),
             ("show help", "Show help and available commands"),
+            ("identify <target>", "Visually identify and click a target on screen, with disambiguation when needed"),
+            ("show candidates", "Show the last visual identification candidate overlay"),
+            ("choose <number>", "Choose a numbered visual candidate from the current session"),
             ("emoji set <name> <emoji>", "Set an emoji for a named shortcut (e.g. emoji set happy 😀)"),
             ("emoji <name>", "Insert the configured emoji for the given name"),
             ("emoji <emoji>", "Insert the given emoji immediately")

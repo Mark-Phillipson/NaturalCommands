@@ -118,6 +118,9 @@ namespace ExecuteCommands_NET
 		                           text.Contains("auto-click", StringComparison.OrdinalIgnoreCase);
 		bool mightStartQuickClicks = text.Contains("quick click", StringComparison.OrdinalIgnoreCase) ||
 		                             text.Contains("quick-click", StringComparison.OrdinalIgnoreCase);
+		bool mightStartVisualTargeting = text.Contains("identify ", StringComparison.OrdinalIgnoreCase) ||
+		                                 text.Contains("show candidates", StringComparison.OrdinalIgnoreCase) ||
+		                                 text.Contains("choose ", StringComparison.OrdinalIgnoreCase);
 		
 		// Check if listen mode is already running - if so, send command to it via file instead of running locally
 		bool isListenModeRunning = false;
@@ -127,7 +130,7 @@ namespace ExecuteCommands_NET
 			var currentProcessId = System.Diagnostics.Process.GetCurrentProcess().Id;
 			isListenModeRunning = currentProcesses.Any(p => p.Id != currentProcessId);
 			
-			if (mightStartQuickClicks && isListenModeRunning)
+			if ((mightStartQuickClicks || mightStartVisualTargeting) && isListenModeRunning)
 			{
 				// Send command to listen mode via file
 				var commandFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".quick_clicks_command");
@@ -143,7 +146,7 @@ namespace ExecuteCommands_NET
 		}
 		
 		// If this might start auto-click or quick clicks, initialize Windows Forms FIRST
-		if (mightStartAutoClick || mightStartQuickClicks)
+		if (mightStartAutoClick || mightStartQuickClicks || mightStartVisualTargeting)
 		{
 			NaturalCommands.Helpers.Logger.LogDebug("Command may start auto-click or quick clicks - initializing Windows Forms BEFORE execution");
 			Application.EnableVisualStyles();
@@ -152,6 +155,7 @@ namespace ExecuteCommands_NET
 				new System.Windows.Forms.WindowsFormsSynchronizationContext());
 			NaturalCommands.AutoClickOverlayForm.InitializeUIContext();
 			NaturalCommands.QuickClickOverlayForm.InitializeUIContext();
+			NaturalCommands.VisualCandidateOverlayForm.InitializeUIContext();
 			
 			// Execute the command on the UI thread using a timer
 			string? commandResult = null;
@@ -168,7 +172,7 @@ namespace ExecuteCommands_NET
 					Console.WriteLine(commandResult);
 					
 					// Check if auto-click is now active or quick clicks overlay is visible
-					if (NaturalCommands.Helpers.AutoClickManager.IsActive() || NaturalCommands.QuickClickOverlayForm.IsVisible)
+					if (NaturalCommands.Helpers.AutoClickManager.IsActive() || NaturalCommands.QuickClickOverlayForm.IsVisible || NaturalCommands.VisualCandidateOverlayForm.IsVisible)
 					{
 						NaturalCommands.Helpers.Logger.LogInfo("Auto-click active or quick clicks visible - keeping application alive with message pump.");
 						
@@ -176,7 +180,7 @@ namespace ExecuteCommands_NET
 						var checkTimer = new System.Windows.Forms.Timer { Interval = 500 };
 						checkTimer.Tick += (s2, e2) =>
 						{
-							if (!NaturalCommands.Helpers.AutoClickManager.IsActive() && !NaturalCommands.QuickClickOverlayForm.IsVisible)
+							if (!NaturalCommands.Helpers.AutoClickManager.IsActive() && !NaturalCommands.QuickClickOverlayForm.IsVisible && !NaturalCommands.VisualCandidateOverlayForm.IsVisible)
 							{
 								checkTimer.Stop();
 								NaturalCommands.Helpers.Logger.LogInfo("Auto-click stopped and quick clicks hidden - exiting application.");
@@ -303,6 +307,7 @@ namespace ExecuteCommands_NET
 // Initialize the overlays' UI contexts
 			NaturalCommands.AutoClickOverlayForm.InitializeUIContext();
 			NaturalCommands.QuickClickOverlayForm.InitializeUIContext();
+			NaturalCommands.VisualCandidateOverlayForm.InitializeUIContext();
 				
 				Application.Run(new NaturalCommands.ListenModeApplicationContext());
 			}
