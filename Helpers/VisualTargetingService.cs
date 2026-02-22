@@ -51,9 +51,29 @@ namespace NaturalCommands.Helpers
                 candidates = localUiCandidates;
             }
 
-            if (candidates.Count == 0 && !string.Equals(settings.FallbackMode, "uia-only", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(settings.FallbackMode, "uia-only", StringComparison.OrdinalIgnoreCase))
             {
-                candidates = TryFromLocalOcr(normalizedPhrase);
+                var shouldTryOcr = candidates.Count == 0;
+                if (!shouldTryOcr && string.Equals(candidates[0].Source, "uia", StringComparison.OrdinalIgnoreCase) && candidates[0].Confidence < 0.86)
+                {
+                    shouldTryOcr = true;
+                }
+
+                if (shouldTryOcr)
+                {
+                    var ocrCandidates = TryFromLocalOcr(normalizedPhrase);
+                    if (candidates.Count == 0)
+                    {
+                        candidates = ocrCandidates;
+                    }
+                    else if (ocrCandidates.Count > 0)
+                    {
+                        candidates = candidates
+                            .Concat(ocrCandidates)
+                            .OrderByDescending(c => c.Confidence)
+                            .ToList();
+                    }
+                }
             }
 
             var maxCandidates = Math.Max(1, settings.MaxCandidates);
@@ -297,7 +317,7 @@ namespace NaturalCommands.Helpers
                 var tokens = loweredPhrase.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 var requestedCard = ParseCardFromPhrase(loweredPhrase);
                 var requestedRankOnly = requestedCard == null ? ParseRankOnlyQuery(loweredPhrase) : string.Empty;
-                var elements = UIAutomationHelper.EnumerateClickableElements(scopeToActiveWindow: false);
+                var elements = UIAutomationHelper.EnumerateClickableElements(scopeToActiveWindow: true);
 
                 var matches = new List<VisualTargetCandidate>();
                 foreach (var element in elements)
@@ -309,6 +329,11 @@ namespace NaturalCommands.Helpers
 
                     var name = (element.Name ?? string.Empty).Trim();
                     if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    if (name.Length > 140 || name.Contains('\n') || name.Contains('\r'))
                     {
                         continue;
                     }

@@ -4,8 +4,6 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using NaturalCommands.Models;
@@ -13,6 +11,7 @@ using Windows.Foundation;
 using Windows.Globalization;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
+using Windows.Storage.Streams;
 
 namespace NaturalCommands.Helpers
 {
@@ -148,7 +147,7 @@ namespace NaturalCommands.Helpers
 
         private static async Task<OcrResult?> RunOcrAsync(Bitmap bitmap)
         {
-            using var softwareBitmap = ConvertToSoftwareBitmap(bitmap);
+            using var softwareBitmap = await ConvertToSoftwareBitmapAsync(bitmap);
 
             var engine = OcrEngine.TryCreateFromUserProfileLanguages();
             if (engine == null)
@@ -165,7 +164,7 @@ namespace NaturalCommands.Helpers
             return await engine.RecognizeAsync(softwareBitmap);
         }
 
-        private static SoftwareBitmap ConvertToSoftwareBitmap(Bitmap source)
+        private static async Task<SoftwareBitmap> ConvertToSoftwareBitmapAsync(Bitmap source)
         {
             using var argb = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
             using (var graphics = Graphics.FromImage(argb))
@@ -173,33 +172,22 @@ namespace NaturalCommands.Helpers
                 graphics.DrawImage(source, new Rectangle(0, 0, argb.Width, argb.Height));
             }
 
-            var rect = new Rectangle(0, 0, argb.Width, argb.Height);
-            var data = argb.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-            try
-            {
-                var stride = Math.Abs(data.Stride);
-                var packedRowBytes = data.Width * 4;
-                var rawBytes = stride * data.Height;
-                var rawData = new byte[rawBytes];
-                Marshal.Copy(data.Scan0, rawData, 0, rawBytes);
+            using var memoryStream = new MemoryStream();
+            argb.Save(memoryStream, ImageFormat.Bmp);
+            memoryStream.Position = 0;
 
-                var pixelData = new byte[packedRowBytes * data.Height];
-                for (var y = 0; y < data.Height; y++)
-                {
-                    Buffer.BlockCopy(rawData, y * stride, pixelData, y * packedRowBytes, packedRowBytes);
-                }
-
-                return SoftwareBitmap.CreateCopyFromBuffer(
-                    pixelData.AsBuffer(),
-                    BitmapPixelFormat.Bgra8,
-                    data.Width,
-                    data.Height,
-                    BitmapAlphaMode.Premultiplied);
-            }
-            finally
+            using var randomAccessStream = new InMemoryRandomAccessStream();
+            using (var output = randomAccessStream.GetOutputStreamAt(0))
             {
-                argb.UnlockBits(data);
+                using var writer = new DataWriter(output);
+                writer.WriteBytes(memoryStream.ToArray());
+                await writer.StoreAsync();
+                await writer.FlushAsync();
             }
+
+            randomAccessStream.Seek(0);
+            var decoder = await BitmapDecoder.CreateAsync(randomAccessStream);
+            return await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
         }
     }
 }

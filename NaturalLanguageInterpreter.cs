@@ -312,8 +312,6 @@ namespace NaturalCommands
             WordReplacementLoader.Load();
             // Load user-defined multi-action commands (multi_actions.json)
             try { NaturalCommands.Helpers.MultiActionLoader.Load(); } catch { }
-            // Load quick-click profiles (quick_clicks.json)
-            try { NaturalCommands.Helpers.QuickClickLoader.Load(); } catch { }
             // Load Talon phrase catalog for fallback matching
             try { NaturalCommands.Helpers.TalonCommandCatalog.EnsureLoaded(); } catch { }
         }
@@ -592,6 +590,9 @@ namespace NaturalCommands
         private static extern bool GetCursorPos(out System.Drawing.Point lpPoint);
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(System.Drawing.Point Point);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, int dwExtraInfo);
 
         private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
@@ -600,6 +601,46 @@ namespace NaturalCommands
         private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
         private const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
         private const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
+
+        private static void PerformLeftClickAtPoint(System.Drawing.Point point)
+        {
+            System.Drawing.Point previous;
+            try { GetCursorPos(out previous); } catch { previous = System.Windows.Forms.Cursor.Position; }
+
+            try
+            {
+                var targetWindow = WindowFromPoint(point);
+                if (targetWindow != IntPtr.Zero)
+                {
+                    SetForegroundWindow(targetWindow);
+                }
+            }
+            catch { }
+
+            SetCursorPos(point.X, point.Y);
+            System.Threading.Thread.Sleep(35);
+
+            var usedInputSimulator = false;
+            try
+            {
+                var sim = new WindowsInput.InputSimulator();
+                sim.Mouse.LeftButtonDown();
+                System.Threading.Thread.Sleep(25);
+                sim.Mouse.LeftButtonUp();
+                usedInputSimulator = true;
+            }
+            catch { }
+
+            if (!usedInputSimulator)
+            {
+                mouse_event(MOUSEEVENTF_LEFTDOWN, point.X, point.Y, 0, 0);
+                System.Threading.Thread.Sleep(25);
+                mouse_event(MOUSEEVENTF_LEFTUP, point.X, point.Y, 0, 0);
+            }
+
+            System.Threading.Thread.Sleep(70);
+            try { SetCursorPos(previous.X, previous.Y); } catch { }
+        }
 
 
         // InterpretAsync implementation
@@ -1597,22 +1638,39 @@ namespace NaturalCommands
                     };
                     Helpers.VisualCandidateSessionStore.SetSession(session);
 
-                    if (candidates.Count == 1 && candidates[0].Confidence >= AppSettings.Instance.VisualTargeting.AutoClickConfidenceThreshold)
+                    bool shouldAutoClickTop = false;
+                    string autoClickReason = string.Empty;
+                    var confidenceThreshold = AppSettings.Instance.VisualTargeting.AutoClickConfidenceThreshold;
+                    var workaroundMinConfidence = Math.Max(0.45, confidenceThreshold - 0.35);
+
+                    if (candidates.Count >= 1 && candidates[0].Confidence >= workaroundMinConfidence)
+                    {
+                        shouldAutoClickTop = true;
+                        if (candidates.Count == 1)
+                        {
+                            autoClickReason = "single candidate workaround";
+                        }
+                        else
+                        {
+                            var top = candidates[0];
+                            var second = candidates[1];
+                            autoClickReason = $"top candidate workaround ({top.Confidence:0.00} vs {second.Confidence:0.00})";
+                        }
+                    }
+
+                    if (shouldAutoClickTop)
                     {
                         var point = Helpers.VisualTargetClickPointResolver.Resolve(candidates[0], visualIdentify.TargetPhrase);
                         if (point == System.Drawing.Point.Empty)
                         {
                             point = candidates[0].Center;
                         }
-                        System.Drawing.Point previous;
-                        try { GetCursorPos(out previous); } catch { previous = System.Windows.Forms.Cursor.Position; }
-
-                        SetCursorPos(point.X, point.Y);
-                        mouse_event(MOUSEEVENTF_LEFTDOWN, point.X, point.Y, 0, 0);
-                        mouse_event(MOUSEEVENTF_LEFTUP, point.X, point.Y, 0, 0);
-                        try { SetCursorPos(previous.X, previous.Y); } catch { }
+                        Helpers.Logger.LogInfo($"Visual identify click point: ({point.X},{point.Y}) for '{candidates[0].Label}'.");
+                        PerformLeftClickAtPoint(point);
 
                         VisualCandidateOverlayForm.HideOverlay();
+                        Helpers.VisualCandidateSessionStore.Clear();
+                        Helpers.Logger.LogInfo($"Visual identify auto-clicked top candidate via {autoClickReason}.");
                         return $"Clicked visual target '{candidates[0].Label}' (confidence {candidates[0].Confidence:0.00}).";
                     }
 
@@ -1652,13 +1710,8 @@ namespace NaturalCommands
                 {
                     point = candidate.Center;
                 }
-                System.Drawing.Point previous;
-                try { GetCursorPos(out previous); } catch { previous = System.Windows.Forms.Cursor.Position; }
-
-                SetCursorPos(point.X, point.Y);
-                mouse_event(MOUSEEVENTF_LEFTDOWN, point.X, point.Y, 0, 0);
-                mouse_event(MOUSEEVENTF_LEFTUP, point.X, point.Y, 0, 0);
-                try { SetCursorPos(previous.X, previous.Y); } catch { }
+                Helpers.Logger.LogInfo($"Visual choose click point: ({point.X},{point.Y}) for '{candidate.Label}'.");
+                PerformLeftClickAtPoint(point);
 
                 Helpers.VisualCandidateSessionStore.Clear();
                 return $"Clicked candidate {chooseVisual.CandidateNumber}: {candidate.Label}.";
