@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using NaturalCommands.Models;
 
 namespace NaturalCommands.Helpers
@@ -13,6 +14,7 @@ namespace NaturalCommands.Helpers
     public static class VisualTargetingService
     {
         private static readonly object _budgetLock = new();
+        private static readonly Regex CardPhraseRegex = new(@"\b(?<rank>ace|king|queen|jack|10|[2-9]|two|three|four|five|six|seven|eight|nine|ten)\s+of\s+(?<suit>spades?|hearts?|diamonds?|clubs?)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static List<VisualTargetCandidate> IdentifyCandidates(string phrase)
         {
@@ -292,6 +294,7 @@ namespace NaturalCommands.Helpers
             {
                 var loweredPhrase = phrase.ToLowerInvariant();
                 var tokens = loweredPhrase.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var requestedCard = ParseCardFromPhrase(loweredPhrase);
                 var elements = UIAutomationHelper.EnumerateClickableElements(scopeToActiveWindow: false);
 
                 var matches = new List<VisualTargetCandidate>();
@@ -309,23 +312,55 @@ namespace NaturalCommands.Helpers
                     }
 
                     var loweredName = name.ToLowerInvariant();
-                    if (!tokens.All(t => loweredName.Contains(t)))
+                    double score;
+                    if (requestedCard != null)
                     {
-                        continue;
-                    }
+                        var cardsInName = ParseCardsFromText(loweredName);
+                        var matchingCards = cardsInName.Where(c => c.Equals(requestedCard)).ToList();
+                        if (matchingCards.Count == 0)
+                        {
+                            continue;
+                        }
 
-                    double score = 0.55;
-                    if (string.Equals(loweredName, loweredPhrase, StringComparison.OrdinalIgnoreCase))
-                    {
-                        score = 0.95;
+                        if (cardsInName.Count != 1)
+                        {
+                            continue;
+                        }
+
+                        var normalizedCardPhrase = $"{requestedCard.Rank} of {requestedCard.Suit}";
+                        if (string.Equals(loweredName, normalizedCardPhrase, StringComparison.OrdinalIgnoreCase))
+                        {
+                            score = 0.98;
+                        }
+                        else if (ContainsWholePhrase(loweredName, normalizedCardPhrase))
+                        {
+                            score = 0.9;
+                        }
+                        else
+                        {
+                            score = 0.82;
+                        }
                     }
-                    else if (loweredName.StartsWith(loweredPhrase, StringComparison.OrdinalIgnoreCase))
+                    else
                     {
-                        score = 0.88;
-                    }
-                    else if (loweredName.Contains(loweredPhrase, StringComparison.OrdinalIgnoreCase))
-                    {
-                        score = 0.8;
+                        if (!tokens.All(t => loweredName.Contains(t)))
+                        {
+                            continue;
+                        }
+
+                        score = 0.55;
+                        if (string.Equals(loweredName, loweredPhrase, StringComparison.OrdinalIgnoreCase))
+                        {
+                            score = 0.95;
+                        }
+                        else if (loweredName.StartsWith(loweredPhrase, StringComparison.OrdinalIgnoreCase))
+                        {
+                            score = 0.86;
+                        }
+                        else if (ContainsWholePhrase(loweredName, loweredPhrase))
+                        {
+                            score = 0.78;
+                        }
                     }
 
                     matches.Add(new VisualTargetCandidate
@@ -368,5 +403,80 @@ namespace NaturalCommands.Helpers
                 return new List<VisualTargetCandidate>();
             }
         }
+
+        private static bool ContainsWholePhrase(string text, string phrase)
+        {
+            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(phrase))
+            {
+                return false;
+            }
+
+            var pattern = $@"\b{Regex.Escape(phrase)}\b";
+            return Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase);
+        }
+
+        private static CardValue? ParseCardFromPhrase(string text)
+        {
+            var cards = ParseCardsFromText(text);
+            return cards.Count == 1 ? cards[0] : null;
+        }
+
+        private static List<CardValue> ParseCardsFromText(string text)
+        {
+            var cards = new List<CardValue>();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return cards;
+            }
+
+            foreach (Match match in CardPhraseRegex.Matches(text))
+            {
+                var rank = NormalizeRank(match.Groups["rank"].Value);
+                var suit = NormalizeSuit(match.Groups["suit"].Value);
+                if (string.IsNullOrWhiteSpace(rank) || string.IsNullOrWhiteSpace(suit))
+                {
+                    continue;
+                }
+
+                cards.Add(new CardValue(rank, suit));
+            }
+
+            return cards;
+        }
+
+        private static string NormalizeRank(string rank)
+        {
+            return rank.Trim().ToLowerInvariant() switch
+            {
+                "2" or "two" => "two",
+                "3" or "three" => "three",
+                "4" or "four" => "four",
+                "5" or "five" => "five",
+                "6" or "six" => "six",
+                "7" or "seven" => "seven",
+                "8" or "eight" => "eight",
+                "9" or "nine" => "nine",
+                "10" or "ten" => "ten",
+                "ace" => "ace",
+                "king" => "king",
+                "queen" => "queen",
+                "jack" => "jack",
+                _ => string.Empty
+            };
+        }
+
+        private static string NormalizeSuit(string suit)
+        {
+            return suit.Trim().ToLowerInvariant() switch
+            {
+                "spade" or "spades" => "spades",
+                "heart" or "hearts" => "hearts",
+                "diamond" or "diamonds" => "diamonds",
+                "club" or "clubs" => "clubs",
+                _ => string.Empty
+            };
+        }
+
+        private sealed record CardValue(string Rank, string Suit);
     }
 }

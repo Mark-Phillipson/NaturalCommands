@@ -1102,8 +1102,8 @@ namespace NaturalCommands
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
 
-            var chooseMatch = Regex.Match(text, @"^(choose|select|pick)\s+(\d+)\s*$", RegexOptions.IgnoreCase);
-            if (chooseMatch.Success && int.TryParse(chooseMatch.Groups[2].Value, out var chosenNumber) && chosenNumber > 0)
+            var chooseMatch = Regex.Match(text, @"^(choose|select|pick)\s+(?:number\s+)?([a-z0-9]+(?:st|nd|rd|th)?)\s*$", RegexOptions.IgnoreCase);
+            if (chooseMatch.Success && Helpers.SpokenNumberParser.TryParsePositive(chooseMatch.Groups[2].Value, out var chosenNumber))
             {
                 var action = new VisualChooseCandidateAction(chosenNumber);
                 AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (candidate={chosenNumber})\n");
