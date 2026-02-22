@@ -1639,6 +1639,9 @@ namespace NaturalCommands
                     return $"Candidate {chooseVisual.CandidateNumber} is not available. Say 'show candidates' to view options again.";
                 }
 
+                VisualCandidateOverlayForm.HideOverlay();
+                System.Threading.Thread.Sleep(30);
+
                 var point = candidate.Center;
                 System.Drawing.Point previous;
                 try { GetCursorPos(out previous); } catch { previous = System.Windows.Forms.Cursor.Position; }
@@ -1648,7 +1651,6 @@ namespace NaturalCommands
                 mouse_event(MOUSEEVENTF_LEFTUP, point.X, point.Y, 0, 0);
                 try { SetCursorPos(previous.X, previous.Y); } catch { }
 
-                VisualCandidateOverlayForm.HideOverlay();
                 Helpers.VisualCandidateSessionStore.Clear();
                 return $"Clicked candidate {chooseVisual.CandidateNumber}: {candidate.Label}.";
             }

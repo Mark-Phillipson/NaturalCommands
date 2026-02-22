@@ -10,6 +10,12 @@ namespace NaturalCommands
 {
     public class VisualCandidateOverlayForm : Form
     {
+        private const int WM_NCHITTEST = 0x84;
+        private const int HTTRANSPARENT = -1;
+        private const int WS_EX_NOACTIVATE = 0x08000000;
+        private const int WS_EX_TRANSPARENT = 0x00000020;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+
         private static VisualCandidateOverlayForm? _instance;
         private static readonly object _lock = new();
         private static System.Threading.SynchronizationContext? _uiContext;
@@ -79,7 +85,6 @@ namespace NaturalCommands
                 }
 
                 _instance.BringToFront();
-                _instance.Activate();
                 _instance.Invalidate();
             }
         }
@@ -138,6 +143,31 @@ namespace NaturalCommands
             using var bg = new SolidBrush(Color.FromArgb(190, 0, 0, 0));
             graphics.FillRectangle(bg, rect);
             graphics.DrawString(instruction, _hintFont, Brushes.White, rect.X + 8, rect.Y + 5);
+        }
+
+        protected override bool ShowWithoutActivation => true;
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                cp.ExStyle |= WS_EX_NOACTIVATE;
+                cp.ExStyle |= WS_EX_TRANSPARENT;
+                cp.ExStyle |= WS_EX_TOOLWINDOW;
+                return cp;
+            }
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_NCHITTEST)
+            {
+                m.Result = (IntPtr)HTTRANSPARENT;
+                return;
+            }
+
+            base.WndProc(ref m);
         }
     }
 }
