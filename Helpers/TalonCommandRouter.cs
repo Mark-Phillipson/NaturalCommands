@@ -19,7 +19,8 @@ namespace NaturalCommands.Helpers
                 return null;
             }
 
-            var match = await TalonCommandMatcher.MatchAsync(text, commands);
+            var contextPreferences = TalonCommandCatalog.GetContextPreferences();
+            var match = await TalonCommandMatcher.MatchAsync(text, commands, contextPreferences);
             if (string.IsNullOrWhiteSpace(match))
             {
                 return null;

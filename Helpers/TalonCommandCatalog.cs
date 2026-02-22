@@ -10,12 +10,19 @@ namespace NaturalCommands.Helpers
     {
         private static readonly object s_lock = new object();
         private static List<string> s_commands = new List<string>();
+        private static Dictionary<string, double> s_contextPreference = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         private static bool s_loaded;
 
         public static IReadOnlyList<string> GetCommands()
         {
             EnsureLoaded();
             return s_commands;
+        }
+
+        public static IReadOnlyDictionary<string, double> GetContextPreferences()
+        {
+            EnsureLoaded();
+            return s_contextPreference;
         }
 
         public static void EnsureLoaded()
@@ -46,13 +53,14 @@ namespace NaturalCommands.Helpers
             var cachePath = GetCachePath(settings.CatalogCacheFileName);
 
             var commands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var commandStats = new Dictionary<string, CommandStats>(StringComparer.OrdinalIgnoreCase);
             if (Directory.Exists(scriptRoot))
             {
                 try
                 {
                     foreach (var file in Directory.EnumerateFiles(scriptRoot, "*.talon", SearchOption.AllDirectories))
                     {
-                        ParseTalonFile(file, commands);
+                        ParseTalonFile(file, commands, commandStats);
                     }
                 }
                 catch (Exception ex)
@@ -73,6 +81,8 @@ namespace NaturalCommands.Helpers
                 .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
+            s_contextPreference = BuildContextPreference(s_commands, commandStats);
+
             if (s_commands.Count > 0)
             {
                 TryWriteCache(cachePath, s_commands);
@@ -81,12 +91,34 @@ namespace NaturalCommands.Helpers
             Logger.LogInfo($"TalonCommandCatalog: Loaded {s_commands.Count} Talon commands.");
         }
 
-        private static void ParseTalonFile(string filePath, HashSet<string> commands)
+        private static void ParseTalonFile(string filePath, HashSet<string> commands, Dictionary<string, CommandStats> commandStats)
         {
             try
             {
                 var lines = File.ReadAllLines(filePath);
                 bool hasCommandDelimiter = lines.Any(l => string.Equals(l.Trim(), "-", StringComparison.Ordinal));
+                bool hasAppContext = false;
+                if (hasCommandDelimiter)
+                {
+                    foreach (var line in lines)
+                    {
+                        var trimmed = line.Trim();
+                        if (trimmed == "-")
+                        {
+                            break;
+                        }
+
+                        var lowerContext = trimmed.ToLowerInvariant();
+                        if (lowerContext.StartsWith("app:")
+                            || lowerContext.StartsWith("app.exe:")
+                            || lowerContext.StartsWith("title:"))
+                        {
+                            hasAppContext = true;
+                            break;
+                        }
+                    }
+                }
+
                 bool inCommandBlock = !hasCommandDelimiter;
                 foreach (var rawLine in lines)
                 {
@@ -137,17 +169,65 @@ namespace NaturalCommands.Helpers
                         continue;
                     }
 
+                    if (phrase.Contains('^') || phrase.Contains('$'))
+                    {
+                        continue;
+                    }
+
                     if (phrase.Contains("=", StringComparison.Ordinal) || phrase.StartsWith("tag(", StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
                     }
 
                     commands.Add(phrase);
+                    AddCommandStats(commandStats, phrase, hasAppContext);
                 }
             }
             catch (Exception ex)
             {
                 Logger.LogWarning($"TalonCommandCatalog: Failed parsing '{filePath}': {ex.Message}");
+            }
+        }
+
+        private static Dictionary<string, double> BuildContextPreference(List<string> commands, Dictionary<string, CommandStats> commandStats)
+        {
+            var preference = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            foreach (var command in commands)
+            {
+                if (!commandStats.TryGetValue(command, out var stats))
+                {
+                    preference[command] = 0.5;
+                    continue;
+                }
+
+                var total = stats.GlobalCount + stats.AppScopedCount;
+                if (total <= 0)
+                {
+                    preference[command] = 0.5;
+                    continue;
+                }
+
+                preference[command] = (stats.GlobalCount + 0.25) / (total + 0.5);
+            }
+
+            return preference;
+        }
+
+        private static void AddCommandStats(Dictionary<string, CommandStats> commandStats, string command, bool isAppScoped)
+        {
+            if (!commandStats.TryGetValue(command, out var stats))
+            {
+                stats = new CommandStats();
+                commandStats[command] = stats;
+            }
+
+            if (isAppScoped)
+            {
+                stats.AppScopedCount++;
+            }
+            else
+            {
+                stats.GlobalCount++;
             }
         }
 
@@ -209,6 +289,12 @@ namespace NaturalCommands.Helpers
         {
             public DateTime GeneratedUtc { get; set; }
             public List<string> Commands { get; set; } = new List<string>();
+        }
+
+        private sealed class CommandStats
+        {
+            public int GlobalCount { get; set; }
+            public int AppScopedCount { get; set; }
         }
     }
 }

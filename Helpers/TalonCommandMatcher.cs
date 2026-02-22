@@ -10,7 +10,7 @@ namespace NaturalCommands.Helpers
 {
     public static class TalonCommandMatcher
     {
-        public static async Task<string?> MatchAsync(string utterance, IReadOnlyList<string> candidates)
+        public static async Task<string?> MatchAsync(string utterance, IReadOnlyList<string> candidates, IReadOnlyDictionary<string, double>? contextPreferences = null)
         {
             if (string.IsNullOrWhiteSpace(utterance) || candidates == null || candidates.Count == 0)
             {
@@ -46,10 +46,16 @@ namespace NaturalCommands.Helpers
                     var normalizedC = Normalize(c);
                     var score = Score(normalizedUtterance, normalizedC, tokenFrequency);
                     var matchCount = CountMatchingTokens(normalizedUtterance, normalizedC);
-                    return new RankedCandidate(c, score, matchCount);
+                    var styleScore = ComputeTalonStylePreference(normalizedC);
+                    var specificityScore = ComputeSpecificityScore(normalizedC, tokenFrequency);
+                    var contextScore = contextPreferences != null && contextPreferences.TryGetValue(c, out var cp) ? cp : 0.5;
+                    return new RankedCandidate(c, score, matchCount, styleScore, specificityScore, contextScore);
                 })
                 .OrderByDescending(c => c.Score)
-                .ThenByDescending(c => c.MatchCount)  // Tiebreaker: prefer more matching tokens
+                .ThenByDescending(c => c.MatchCount)        // Then prefer more matching tokens
+                .ThenByDescending(c => c.ContextScore)      // Then prefer globally-applicable Talon commands
+                .ThenByDescending(c => c.StyleScore)        // Then prefer Talon noun-first style
+                .ThenByDescending(c => c.SpecificityScore)  // Then prefer more specific (rarer) phrases
                 .ThenBy(c => c.Command, StringComparer.OrdinalIgnoreCase)
                 .Take(40)
                 .ToList();
@@ -83,7 +89,7 @@ namespace NaturalCommands.Helpers
                     var listForPrompt = string.Join("\n", ranked.Select((r, index) => $"{index + 1}. {r.Command}"));
                     var prompt =
                         "Choose the single best Talon command for this user utterance from the provided candidates. " +
-                        "Prioritize semantic meaning: ignore grammar/ordering and find the closest meaning. " +
+                        "Prioritize semantic meaning and prefer canonical Talon phrasing (noun-first, action-last) and globally-applicable commands over app-specific variants when meanings are equivalent. " +
                         "Return strict JSON only with fields command (string) and confidence (0..1). " +
                         "If no candidate is suitable, set command to empty string and confidence to 0.";
 
@@ -211,7 +217,13 @@ namespace NaturalCommands.Helpers
             }
         }
 
-        private readonly record struct RankedCandidate(string Command, double Score, int MatchCount);
+        private readonly record struct RankedCandidate(
+            string Command,
+            double Score,
+            int MatchCount,
+            double StyleScore,
+            double SpecificityScore,
+            double ContextScore);
         
         private static int CountMatchingTokens(string a, string b)
         {
@@ -224,6 +236,76 @@ namespace NaturalCommands.Helpers
             var bSet = new HashSet<string>(bTokens, StringComparer.Ordinal);
             
             return aSet.Count(t => bSet.Contains(t));
+        }
+
+        private static double ComputeTalonStylePreference(string candidate)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                return 0;
+            }
+
+            var candidateTokens = candidate.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (candidateTokens.Length == 0)
+            {
+                return 0;
+            }
+
+            if (candidateTokens.Length == 1)
+            {
+                return 0;
+            }
+
+            var verbs = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "open", "close", "kill", "move", "focus", "show", "hide", "minimize", "maximize",
+                "rename", "delete", "copy", "paste", "save", "find", "search", "run", "start", "stop",
+                "click", "drag", "scroll", "select", "toggle", "next", "previous"
+            };
+
+            var first = candidateTokens[0];
+            var last = candidateTokens[^1];
+            var hasVerbLast = verbs.Contains(last);
+            var hasVerbFirst = verbs.Contains(first);
+
+            if (hasVerbLast && !hasVerbFirst)
+            {
+                return 1.0;
+            }
+
+            if (hasVerbFirst && !hasVerbLast)
+            {
+                return 0.0;
+            }
+
+            return 0.5;
+        }
+
+        private static double ComputeSpecificityScore(string candidate, Dictionary<string, int> tokenFrequency)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                return 0;
+            }
+
+            var tokens = candidate.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0)
+            {
+                return 0;
+            }
+
+            double total = 0;
+            foreach (var token in tokens)
+            {
+                if (!tokenFrequency.TryGetValue(token, out var frequency) || frequency <= 0)
+                {
+                    continue;
+                }
+
+                total += 1.0 / frequency;
+            }
+
+            return total / tokens.Length;
         }
     }
 }
