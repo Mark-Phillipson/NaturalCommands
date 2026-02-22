@@ -11,6 +11,13 @@ namespace NaturalCommands
     {
         public const string HotkeyText = "Win+Ctrl+H";
 
+        private static string GetQuickClicksCommandFilePath()
+        {
+            var baseDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NaturalCommands");
+            System.IO.Directory.CreateDirectory(baseDir);
+            return System.IO.Path.Combine(baseDir, ".quick_clicks_command");
+        }
+
         private readonly HotkeyRegistrar _hotkeyRegistrar;
         private readonly Commands _commands;
         private bool _dictationOpen;
@@ -22,11 +29,11 @@ namespace NaturalCommands
             // Clean up any leftover command file from previous run to prevent auto-triggering on startup
             try
             {
-                var commandFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".quick_clicks_command");
+                var commandFile = GetQuickClicksCommandFilePath();
                 if (System.IO.File.Exists(commandFile))
                 {
                     System.IO.File.Delete(commandFile);
-                    Helpers.Logger.LogDebug("ListenMode: Deleted leftover .quick_clicks_command file on startup");
+                    Helpers.Logger.LogDebug($"ListenMode: Deleted leftover .quick_clicks_command file on startup: {commandFile}");
                 }
             }
             catch (Exception ex)
@@ -297,7 +304,7 @@ namespace NaturalCommands
         // Check for voice commands sent via .quick_clicks_command file
         private void CheckForQuickClicksCommand()
         {
-            var commandFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".quick_clicks_command");
+            var commandFile = GetQuickClicksCommandFilePath();
             try
             {
                 if (System.IO.File.Exists(commandFile))
@@ -305,7 +312,7 @@ namespace NaturalCommands
                     var command = System.IO.File.ReadAllText(commandFile).Trim().ToLowerInvariant();
                     System.IO.File.Delete(commandFile); // Delete immediately to avoid re-processing
                     
-                    Helpers.Logger.LogInfo($"ListenMode: Processing quick clicks command: {command}");
+                    Helpers.Logger.LogInfo($"ListenMode: Processing quick clicks command: {command} (file: {commandFile})");
                     
                     if (command.Contains("edit") && command.Contains("quick"))
                     {

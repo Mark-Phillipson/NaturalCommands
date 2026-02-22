@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -102,7 +103,7 @@ namespace NaturalCommands.Helpers
             }
             catch (Exception ex)
             {
-                Logger.LogError($"LocalOcrService failed: {ex.Message}");
+                Logger.LogError($"LocalOcrService failed: {ex}");
                 return new List<VisualTargetCandidate>();
             }
         }
@@ -147,13 +148,7 @@ namespace NaturalCommands.Helpers
 
         private static async Task<OcrResult?> RunOcrAsync(Bitmap bitmap)
         {
-            using var stream = new MemoryStream();
-            bitmap.Save(stream, ImageFormat.Bmp);
-            stream.Position = 0;
-
-            using var randomAccessStream = stream.AsRandomAccessStream();
-            var decoder = await BitmapDecoder.CreateAsync(randomAccessStream);
-            var softwareBitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+            using var softwareBitmap = ConvertToSoftwareBitmap(bitmap);
 
             var engine = OcrEngine.TryCreateFromUserProfileLanguages();
             if (engine == null)
@@ -168,6 +163,43 @@ namespace NaturalCommands.Helpers
             }
 
             return await engine.RecognizeAsync(softwareBitmap);
+        }
+
+        private static SoftwareBitmap ConvertToSoftwareBitmap(Bitmap source)
+        {
+            using var argb = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
+            using (var graphics = Graphics.FromImage(argb))
+            {
+                graphics.DrawImage(source, new Rectangle(0, 0, argb.Width, argb.Height));
+            }
+
+            var rect = new Rectangle(0, 0, argb.Width, argb.Height);
+            var data = argb.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                var stride = Math.Abs(data.Stride);
+                var packedRowBytes = data.Width * 4;
+                var rawBytes = stride * data.Height;
+                var rawData = new byte[rawBytes];
+                Marshal.Copy(data.Scan0, rawData, 0, rawBytes);
+
+                var pixelData = new byte[packedRowBytes * data.Height];
+                for (var y = 0; y < data.Height; y++)
+                {
+                    Buffer.BlockCopy(rawData, y * stride, pixelData, y * packedRowBytes, packedRowBytes);
+                }
+
+                return SoftwareBitmap.CreateCopyFromBuffer(
+                    pixelData.AsBuffer(),
+                    BitmapPixelFormat.Bgra8,
+                    data.Width,
+                    data.Height,
+                    BitmapAlphaMode.Premultiplied);
+            }
+            finally
+            {
+                argb.UnlockBits(data);
+            }
         }
     }
 }

@@ -9,6 +9,13 @@ namespace ExecuteCommands_NET
 {
 	internal static class Program
 	{
+		private static string GetQuickClicksCommandFilePath()
+		{
+			var baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NaturalCommands");
+			Directory.CreateDirectory(baseDir);
+			return Path.Combine(baseDir, ".quick_clicks_command");
+		}
+
 		/// <summary>
 		///  The main entry point for the application.
 		/// </summary>
@@ -130,12 +137,12 @@ namespace ExecuteCommands_NET
 			var currentProcessId = System.Diagnostics.Process.GetCurrentProcess().Id;
 			isListenModeRunning = currentProcesses.Any(p => p.Id != currentProcessId);
 			
-			if ((mightStartQuickClicks || mightStartVisualTargeting) && isListenModeRunning)
+			if (mightStartQuickClicks && isListenModeRunning)
 			{
 				// Send command to listen mode via file
-				var commandFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".quick_clicks_command");
+				var commandFile = GetQuickClicksCommandFilePath();
 				File.WriteAllText(commandFile, text);
-				NaturalCommands.Helpers.Logger.LogInfo($"Quick clicks command sent to listen mode: {text}");
+				NaturalCommands.Helpers.Logger.LogInfo($"Quick clicks command sent to listen mode: {text} (file: {commandFile})");
 				Console.WriteLine("Command sent to listen mode");
 				return;
 			}
