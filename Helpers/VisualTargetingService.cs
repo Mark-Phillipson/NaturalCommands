@@ -26,9 +26,25 @@ namespace NaturalCommands.Helpers
                 return new List<VisualTargetCandidate>();
             }
 
-            var localUiCandidates = string.Equals(settings.FallbackMode, "ocr-only", StringComparison.OrdinalIgnoreCase)
+            var currentProcessName = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName() ?? string.Empty;
+            Logger.LogInfo($"VisualTargetingService: IdentifyCandidates called - phrase='{phrase}', normalized='{normalizedPhrase}', currentProcess='{currentProcessName}'.");
+            
+            var preferOcrForCurrentApp = ShouldPreferOcrForApp(currentProcessName)
+                && !string.Equals(settings.FallbackMode, "uia-only", StringComparison.OrdinalIgnoreCase);
+
+            if (preferOcrForCurrentApp)
+            {
+                Logger.LogInfo($"VisualTargetingService: preferring OCR for process '{currentProcessName}'.");
+            }
+
+            var localUiCandidates = string.Equals(settings.FallbackMode, "ocr-only", StringComparison.OrdinalIgnoreCase) || preferOcrForCurrentApp
                 ? new List<VisualTargetCandidate>()
                 : TryFromUiAutomation(normalizedPhrase);
+            Logger.LogDebug($"VisualTargetingService: localUiCandidates.Count={localUiCandidates.Count} for phrase '{normalizedPhrase}'.");
+            if (localUiCandidates.Count > 0)
+            {
+                Logger.LogDebug($"VisualTargetingService: UIA candidates: {string.Join(", ", localUiCandidates.Select(c => $"'{c.Label}'({c.Confidence:0.00})"))}");
+            }
             if (localUiCandidates.Count == 1
                 && localUiCandidates[0].Confidence >= settings.AutoClickConfidenceThreshold
                 && string.Equals(localUiCandidates[0].Source, "uia", StringComparison.OrdinalIgnoreCase))
@@ -49,11 +65,13 @@ namespace NaturalCommands.Helpers
             if (candidates.Count == 0)
             {
                 candidates = localUiCandidates;
+                Logger.LogDebug($"VisualTargetingService: cloud vision returned 0 candidates, using localUiCandidates.");
             }
 
             if (!string.Equals(settings.FallbackMode, "uia-only", StringComparison.OrdinalIgnoreCase))
             {
                 var shouldTryOcr = candidates.Count == 0;
+                Logger.LogDebug($"VisualTargetingService: initial candidates.Count={candidates.Count}, shouldTryOcr={shouldTryOcr}.");
                 if (!shouldTryOcr && string.Equals(candidates[0].Source, "uia", StringComparison.OrdinalIgnoreCase) && candidates[0].Confidence < 0.86)
                 {
                     shouldTryOcr = true;
@@ -61,10 +79,13 @@ namespace NaturalCommands.Helpers
 
                 if (shouldTryOcr)
                 {
+                    Logger.LogDebug($"VisualTargetingService: attempting OCR for phrase '{normalizedPhrase}'.");
                     var ocrCandidates = TryFromLocalOcr(normalizedPhrase);
+                    Logger.LogDebug($"VisualTargetingService: OCR returned {ocrCandidates.Count} candidates.");
                     if (candidates.Count == 0)
                     {
                         candidates = ocrCandidates;
+                        Logger.LogDebug($"VisualTargetingService: using OCR candidates (was 0 before).");
                     }
                     else if (ocrCandidates.Count > 0)
                     {
@@ -77,10 +98,20 @@ namespace NaturalCommands.Helpers
             }
 
             var maxCandidates = Math.Max(1, settings.MaxCandidates);
-            return candidates
+            var finalResult = candidates
                 .OrderByDescending(c => c.Confidence)
                 .Take(maxCandidates)
                 .ToList();
+            if (finalResult.Count > 0)
+            {
+                Logger.LogDebug($"VisualTargetingService: returning {finalResult.Count} candidates; top is '{finalResult[0].Label}' (confidence {finalResult[0].Confidence:0.00}, source '{finalResult[0].Source}').");
+            }
+            else
+            {
+                Logger.LogDebug($"VisualTargetingService: returning 0 candidates for phrase '{normalizedPhrase}'.");
+            }
+            Logger.LogInfo($"VisualTargetingService.IdentifyCandidates complete: returning {finalResult.Count} candidates for '{normalizedPhrase}'.");
+            return finalResult;
         }
 
         private static bool CanUseCloudVision(VisualTargetingSettings settings)
@@ -319,6 +350,8 @@ namespace NaturalCommands.Helpers
                 var requestedRankOnly = requestedCard == null ? ParseRankOnlyQuery(loweredPhrase) : string.Empty;
                 var elements = UIAutomationHelper.EnumerateClickableElements(scopeToActiveWindow: true);
 
+                Logger.LogDebug($"TryFromUiAutomation: searching for phrase '{phrase}' (tokens: {string.Join(", ", tokens)}), found {elements.Count} clickable elements.");
+
                 var matches = new List<VisualTargetCandidate>();
                 foreach (var element in elements)
                 {
@@ -394,6 +427,7 @@ namespace NaturalCommands.Helpers
 
                         if (!tokens.All(t => loweredName.Contains(t)))
                         {
+                            Logger.LogDebug($"TryFromUiAutomation: skipping element '{name}' - not all tokens found. Tokens: {string.Join(", ", tokens)}, Element name: '{loweredName}'.");
                             continue;
                         }
 
@@ -420,8 +454,10 @@ namespace NaturalCommands.Helpers
                         Reason = $"UIA match '{name}'",
                         Source = "uia"
                     });
+                    Logger.LogDebug($"TryFromUiAutomation: added match '{name}' with score {score:0.00}.");
                 }
 
+                Logger.LogDebug($"TryFromUiAutomation: completed, found {matches.Count} matches for '{phrase}'.");
                 return matches;
             }
             catch (Exception ex)
@@ -435,7 +471,9 @@ namespace NaturalCommands.Helpers
         {
             try
             {
-                var candidates = LocalOcrService.FindCandidates(phrase);
+                // Run OCR on a background thread to avoid SynchronizationContext deadlock
+                // The UI thread might be blocked waiting, and OCR operations need to marshal back to UI context
+                var candidates = Task.Run(async () => await LocalOcrService.FindCandidatesAsync(phrase)).GetAwaiter().GetResult();
                 if (candidates.Count > 0)
                 {
                     Logger.LogDebug($"VisualTargetingService: OCR fallback returned {candidates.Count} candidates for '{phrase}'.");
@@ -451,6 +489,18 @@ namespace NaturalCommands.Helpers
                 Logger.LogError($"VisualTargetingService OCR fallback failed: {ex.Message}");
                 return new List<VisualTargetCandidate>();
             }
+        }
+
+        private static bool ShouldPreferOcrForApp(string processName)
+        {
+            if (string.IsNullOrWhiteSpace(processName))
+            {
+                return false;
+            }
+
+            return string.Equals(processName, "steam", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "steamwebhelper", StringComparison.OrdinalIgnoreCase)
+                || processName.Contains("steam", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string ParseRankOnlyQuery(string phrase)

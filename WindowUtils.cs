@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using NaturalCommands.Helpers;
 
 namespace NaturalCommands
 {
@@ -18,6 +19,11 @@ namespace NaturalCommands
         public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
         [DllImport("user32.dll")]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")]
+        public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+        
         public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         public struct MONITORINFOEX
@@ -47,6 +53,29 @@ namespace NaturalCommands
             }
             EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, MonitorEnum, IntPtr.Zero);
             return monitors;
+        }
+
+        public static System.Drawing.Rectangle GetForegroundWindowBounds()
+        {
+            try
+            {
+                IntPtr hwnd = GetForegroundWindow();
+                if (hwnd == IntPtr.Zero)
+                {
+                    return System.Drawing.Rectangle.Empty;
+                }
+
+                if (GetWindowRect(hwnd, out RECT rect))
+                {
+                    return new System.Drawing.Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"WindowUtils.GetForegroundWindowBounds: Failed to get foreground window bounds: {ex.Message}");
+            }
+
+            return System.Drawing.Rectangle.Empty;
         }
     }
 }

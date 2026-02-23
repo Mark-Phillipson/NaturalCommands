@@ -1623,6 +1623,12 @@ namespace NaturalCommands
                     }
 
                     var candidates = Helpers.VisualTargetingService.IdentifyCandidates(visualIdentify.TargetPhrase);
+                    Helpers.Logger.LogInfo($"ExecuteActionAsync VisualIdentifyClickAction: got {candidates.Count} candidates for '{visualIdentify.TargetPhrase}'.");
+                    if (candidates.Count > 0)
+                    {
+                        Helpers.Logger.LogDebug($"ExecuteActionAsync: top candidate: '{candidates[0].Label}' (confidence {candidates[0].Confidence:0.00}, source '{candidates[0].Source}')");
+                    }
+                    
                     if (candidates.Count == 0)
                     {
                         Helpers.VisualCandidateSessionStore.Clear();
@@ -1642,6 +1648,11 @@ namespace NaturalCommands
                     string autoClickReason = string.Empty;
                     var confidenceThreshold = AppSettings.Instance.VisualTargeting.AutoClickConfidenceThreshold;
                     var workaroundMinConfidence = Math.Max(0.45, confidenceThreshold - 0.35);
+                    Helpers.Logger.LogDebug($"Visual identify: {candidates.Count} candidates found, confidenceThreshold={confidenceThreshold:0.00}, workaroundMinConfidence={workaroundMinConfidence:0.00}.");
+                    if (candidates.Count > 0)
+                    {
+                        Helpers.Logger.LogDebug($"Visual identify: top candidate is '{candidates[0].Label}' (confidence {candidates[0].Confidence:0.00}, source '{candidates[0].Source}').");
+                    }
 
                     if (candidates.Count >= 1 && candidates[0].Confidence >= workaroundMinConfidence)
                     {
@@ -1660,18 +1671,25 @@ namespace NaturalCommands
 
                     if (shouldAutoClickTop)
                     {
+                        Helpers.Logger.LogInfo($"ExecuteActionAsync: AUTO-CLICKING candidate '{candidates[0].Label}' via {autoClickReason}.");
                         var point = Helpers.VisualTargetClickPointResolver.Resolve(candidates[0], visualIdentify.TargetPhrase);
                         if (point == System.Drawing.Point.Empty)
                         {
                             point = candidates[0].Center;
+                            Helpers.Logger.LogDebug($"ExecuteActionAsync: resolver returned empty, using center point.");
                         }
-                        Helpers.Logger.LogInfo($"Visual identify click point: ({point.X},{point.Y}) for '{candidates[0].Label}'.");
+                        Helpers.Logger.LogInfo($"ExecuteActionAsync: click point: ({point.X},{point.Y}) for '{candidates[0].Label}'.");
                         PerformLeftClickAtPoint(point);
+                        Helpers.Logger.LogInfo($"ExecuteActionAsync: PerformLeftClickAtPoint completed.");
 
                         VisualCandidateOverlayForm.HideOverlay();
                         Helpers.VisualCandidateSessionStore.Clear();
                         Helpers.Logger.LogInfo($"Visual identify auto-clicked top candidate via {autoClickReason}.");
                         return $"Clicked visual target '{candidates[0].Label}' (confidence {candidates[0].Confidence:0.00}).";
+                    }
+                    else
+                    {
+                        Helpers.Logger.LogInfo($"ExecuteActionAsync: NOT auto-clicking - confidence too low. Top: {candidates[0].Confidence:0.00} < threshold: {workaroundMinConfidence:0.00}.");
                     }
 
                     VisualCandidateOverlayForm.ShowCandidates(candidates, AppSettings.Instance.VisualTargeting.OverlayTimeoutMs);
