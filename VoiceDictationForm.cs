@@ -24,6 +24,7 @@ namespace DictationBoxMSP
         private Button btnCopyText = null!;
         private Button btnSearchWeb = null!;
         private Button btnOpenInVsc = null!;
+        private Button btnSendToCopilot = null!; // new button for Copilot CLI
         private Button btnToggleTransparent = null!;
         private Panel bottomPanel = null!;
         private Label lblTransient = null!;
@@ -111,6 +112,7 @@ namespace DictationBoxMSP
             this.btnCopyText = new Button() { Text = "Copy &Text", Height = 121 };
             this.btnSearchWeb = new Button() { Text = "Search &Web", Height = 121 };
             this.btnOpenInVsc = new Button() { Text = "Open in &VS Code", Height = 121 };
+            this.btnSendToCopilot = new Button() { Text = "Send to Copi&lot", Height = 121 }; // Copilot CLI
             this.autoSubmitTimer = new System.Windows.Forms.Timer();
             this.startDictationTimer = new System.Windows.Forms.Timer();
             this.dictationStopDebounceTimer = new System.Windows.Forms.Timer();
@@ -152,8 +154,9 @@ namespace DictationBoxMSP
 
             // Buttons row (middle)
             var buttonsContainer = new Panel() { Dock = DockStyle.Fill };
-            var flow = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, AutoSize = false };
-            flow.WrapContents = false;
+            var flow = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = false };
+            // allow buttons to wrap onto a second line when there isn't enough width
+            flow.WrapContents = true;
             flow.Padding = new Padding(6);
             // shorten button heights so marquee and buttons are visible together
             var btnHeight = 64;
@@ -162,17 +165,19 @@ namespace DictationBoxMSP
             this.btnCopyText.Height = btnHeight;
             this.btnSearchWeb.Height = btnHeight;
             this.btnOpenInVsc.Height = btnHeight;
+            this.btnSendToCopilot.Height = btnHeight; // new button height
             this.btnToggleTransparent = new Button() { Text = "Toggle Trans&parent", Height = btnHeight };
 
             flow.Controls.Add(btnCancel);
             flow.Controls.Add(btnSendCommand);
             flow.Controls.Add(btnCopyText);
             flow.Controls.Add(btnOpenInVsc);
+            flow.Controls.Add(btnSendToCopilot); // add to flow layout
             flow.Controls.Add(btnToggleTransparent);
             flow.Controls.Add(btnSearchWeb);
 
             // Keep explicit widths for remaining buttons so text remains visible
-            btnCancel.Width = 140; btnSendCommand.Width = 170; btnCopyText.Width = 160; btnSearchWeb.Width = 160; btnOpenInVsc.Width = 180; btnToggleTransparent.Width = 180;
+            btnCancel.Width = 140; btnSendCommand.Width = 170; btnCopyText.Width = 160; btnSearchWeb.Width = 160; btnOpenInVsc.Width = 180; btnSendToCopilot.Width = 180; btnToggleTransparent.Width = 180;
 
             // Make button fonts slightly larger so text is easier to read
             try
@@ -184,6 +189,7 @@ namespace DictationBoxMSP
                 btnCopyText.Font = btnFont;
                 btnSearchWeb.Font = btnFont;
                 btnOpenInVsc.Font = btnFont;
+                btnSendToCopilot.Font = btnFont;
                 btnToggleTransparent.Font = btnFont;
             }
             catch { }
@@ -197,13 +203,14 @@ namespace DictationBoxMSP
             {
                 // Ensure text input receives focus first
                 txtInput.TabIndex = 0;
-                // Visual left-to-right order: Search Web, Toggle Transparent, Open in VS Code, Copy Text, Send Command, Cancel
+                // Visual left-to-right order: Search Web, Toggle Transparent, Open in VS Code, Copilot CLI, Copy Text, Send Command, Cancel
                 btnSearchWeb.TabIndex = 1;
                 btnToggleTransparent.TabIndex = 2;
                 btnOpenInVsc.TabIndex = 3;
-                btnCopyText.TabIndex = 4;
-                btnSendCommand.TabIndex = 5;
-                btnCancel.TabIndex = 6;
+                btnSendToCopilot.TabIndex = 4;
+                btnCopyText.TabIndex = 5;
+                btnSendCommand.TabIndex = 6;
+                btnCancel.TabIndex = 7;
             }
             catch { }
 
@@ -293,6 +300,7 @@ namespace DictationBoxMSP
             btnSendCommand.FlatStyle = FlatStyle.Flat; btnSendCommand.FlatAppearance.BorderSize = 1; btnSendCommand.FlatAppearance.BorderColor = SystemColors.ControlDark; btnSendCommand.Margin = new Padding(6);
             btnCopyText.FlatStyle = FlatStyle.Flat; btnCopyText.FlatAppearance.BorderSize = 1; btnCopyText.FlatAppearance.BorderColor = SystemColors.ControlDark; btnCopyText.Margin = new Padding(6);
             btnOpenInVsc.FlatStyle = FlatStyle.Flat; btnOpenInVsc.FlatAppearance.BorderSize = 1; btnOpenInVsc.FlatAppearance.BorderColor = SystemColors.ControlDark; btnOpenInVsc.Margin = new Padding(6);
+            btnSendToCopilot.FlatStyle = FlatStyle.Flat; btnSendToCopilot.FlatAppearance.BorderSize = 1; btnSendToCopilot.FlatAppearance.BorderColor = SystemColors.ControlDark; btnSendToCopilot.Margin = new Padding(6);
             btnSearchWeb.FlatStyle = FlatStyle.Flat; btnSearchWeb.FlatAppearance.BorderSize = 1; btnSearchWeb.FlatAppearance.BorderColor = SystemColors.ControlDark; btnSearchWeb.Margin = new Padding(6);
             btnToggleTransparent.FlatStyle = FlatStyle.Flat; btnToggleTransparent.FlatAppearance.BorderSize = 1; btnToggleTransparent.FlatAppearance.BorderColor = SystemColors.ControlDark; btnToggleTransparent.Margin = new Padding(6);
 
@@ -304,9 +312,11 @@ namespace DictationBoxMSP
                 tt.ShowAlways = true;
                 tt.SetToolTip(btnToggleTransparent, "Toggle Transparent (Alt+P)");
                 tt.SetToolTip(btnCopyText, "Copy text to clipboard (Alt+T)");
+                tt.SetToolTip(btnSendToCopilot, "Send text to Copilot CLI in a new terminal");
                 // Ensure mnemonics are enabled explicitly
                 btnToggleTransparent.UseMnemonic = true;
                 btnCopyText.UseMnemonic = true;
+                btnSendToCopilot.UseMnemonic = true;
             }
             catch { }
 
@@ -316,7 +326,8 @@ namespace DictationBoxMSP
             this.Text = "Voice Dictation";
             this.StartPosition = FormStartPosition.CenterScreen;
             // Make the form a little wider and twice as high so buttons don't get cut off
-            this.Size = new Size(1200, 800);
+            // increasing width helps when many buttons are present
+            this.Size = new Size(1400, 800);
 
             btnCancel.Click += BtnCancel_Click;
             // start button removed; dictation triggered via voice phrase
@@ -325,6 +336,7 @@ namespace DictationBoxMSP
             btnSendCommand.LostFocus += BtnSendCommand_LostFocus;
             btnCopyText.Click += BtnCopyText_Click;
             btnOpenInVsc.Click += BtnOpenInVsc_Click;
+            btnSendToCopilot.Click += BtnSendToCopilot_Click; // copilot handler
             btnToggleTransparent.Click += BtnToggleTransparent_Click;
             btnSearchWeb.Click += BtnSearchWeb_Click;
             this.FormClosing += VoiceDictationForm_FormClosing;
@@ -718,6 +730,114 @@ namespace DictationBoxMSP
             catch { }
         }
 
+        private void BtnSendToCopilot_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                var text = txtInput.Text ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(text)) return;
+
+                // copy text to clipboard so user can paste elsewhere if desired
+                try { Clipboard.SetText(text); } catch { }
+
+                bool hasCopilot = IsCommandAvailable("copilot");
+                bool hasGh = IsCommandAvailable("gh");
+                if (!hasCopilot && !hasGh)
+                {
+                    MessageBox.Show("GitHub Copilot CLI not found on PATH.\nPlease install 'copilot' or the GitHub CLI with the Copilot extension.",
+                        "Copilot CLI Missing", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Determine the command string, omitting text when multiline since CLI handles it poorly
+                var cliCmd = GetCopilotCommand(text, hasCopilot, hasGh);
+                LaunchTerminalWithCommand(cliCmd);
+
+                // update transient label for user feedback
+                if (lblTransient != null)
+                {
+                    lblTransient.Text = "Copied to clipboard and opened Copilot CLI";
+                    lblTransient.BackColor = Color.LimeGreen;
+                    lblTransient.ForeColor = Color.Black;
+                    lblTransient.Visible = true;
+                    lblTransient.BringToFront();
+                    Task.Run(async () =>
+                    {
+                        await Task.Delay(1500);
+                        try { if (lblTransient != null) lblTransient.Visible = false; } catch { }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to launch Copilot CLI: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private bool IsCommandAvailable(string command)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "where",
+                    Arguments = command,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using var proc = Process.Start(psi);
+                if (proc == null) return false;
+                proc.WaitForExit(1000);
+                return proc.ExitCode == 0;
+            }
+            catch { return false; }
+        }
+
+        // Build the command line that will be passed to the terminal.
+        // If the supplied text contains newlines we avoid embedding it as an argument
+        // because Copilot CLI can't handle multiline prompts well. In that case we
+        // still copy the text to the clipboard so the user may paste it manually.
+        // Always launch the CLI without passing the text as an argument.  We have already
+        // copied the text to the clipboard prior to calling this method, so the user may
+        // manually paste it into the Copilot session.
+        private string GetCopilotCommand(string text, bool hasCopilot, bool hasGh)
+        {
+            if (hasCopilot) return "copilot";
+            else return "gh copilot chat";
+        }
+
+        private void LaunchTerminalWithCommand(string command)
+        {
+            try
+            {
+                // Try Windows Terminal (wt.exe) first
+                var wtPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", "wt.exe");
+                if (File.Exists(wtPath))
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = wtPath,
+                        Arguments = $"cmd /k {command}",
+                        UseShellExecute = true
+                    };
+                    Process.Start(psi);
+                }
+                else
+                {
+                    // fallback to classic cmd
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = $"/c start cmd /k {command}",
+                        UseShellExecute = true
+                    };
+                    Process.Start(psi);
+                }
+            }
+            catch { }
+        }
+
         private void BtnSendCommand_GotFocus(object? sender, EventArgs e)
         {
             try
@@ -824,7 +944,8 @@ namespace DictationBoxMSP
                 "Press Backspace: say 'press backspace'",
                 "Press Tab: say 'press tab'",
                 "Press Space: say 'press space'",
-                "Say 'voice typing' to open Windows Voice Typing and set Talon Voice to sleep"
+                "Say 'voice typing' to open Windows Voice Typing and set Talon Voice to sleep",
+                "Click 'Send to Copi\u00A0lot' or press Alt+L to open a terminal and run Copilot CLI with the text"
             };
         }
 
