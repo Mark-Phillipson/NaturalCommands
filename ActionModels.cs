@@ -51,6 +51,7 @@ namespace NaturalCommands
     // Reload Talon command catalog from Talon user scripts.
     public record RefreshTalonCatalogAction : ActionBase;
     public record VisualIdentifyClickAction(string TargetPhrase) : ActionBase;
+    public record VisualCloudAction(string TargetPhrase) : ActionBase; // debug-only action to send image+phrase to AI
     public record VisualShowCandidatesAction : ActionBase;
     public record VisualChooseCandidateAction(int CandidateNumber) : ActionBase;
 }

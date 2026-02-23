@@ -28,11 +28,37 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                 return new List<VisualTargetCandidate>();
             }
 
-            var tokens = normalized
+            // start with basic word tokens
+            var tokenList = normalized
                 .ToLowerInvariant()
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Distinct()
-                .ToArray();
+                .ToList();
+
+            // if this is a card phrase, add useful synonyms (abbreviated rank and suit symbol)
+            var requestedCard = TryParseCardPhrase(normalized);
+            if (requestedCard != null)
+            {
+                string rankAbbrev = RankToAbbreviation(requestedCard.Value.rank);
+                if (!string.IsNullOrWhiteSpace(rankAbbrev) && !tokenList.Contains(rankAbbrev))
+                {
+                    tokenList.Add(rankAbbrev);
+                }
+
+                string suitSymbol = SuitToSymbol(requestedCard.Value.suit);
+                if (!string.IsNullOrWhiteSpace(suitSymbol) && !tokenList.Contains(suitSymbol))
+                {
+                    tokenList.Add(suitSymbol);
+                }
+
+                // also include suit name alone (e.g. "clubs") which may appear on cards
+                if (!tokenList.Contains(requestedCard.Value.suit))
+                {
+                    tokenList.Add(requestedCard.Value.suit);
+                }
+            }
+
+            var tokens = tokenList.ToArray();
 
             if (tokens.Length == 0)
             {
@@ -135,6 +161,14 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
 
                 var candidates = new List<VisualTargetCandidate>();
                 Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: starting to process {ocrResult.Lines.Count} OCR lines for phrase '{phrase}'...");
+                // log each OCR line for debugging
+                int lineIndex = 0;
+                foreach (var debugLine in ocrResult.Lines)
+                {
+                    var dl = (debugLine.Text ?? string.Empty).Trim();
+                    Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line #{lineIndex}: '{dl}'");
+                    lineIndex++;
+                }
                 try
                 {
                     foreach (var line in ocrResult.Lines)
@@ -146,24 +180,25 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                         }
 
                         var loweredLine = lineText.ToLowerInvariant();
-                        int matchedTokenCount = tokens.Count(token => loweredLine.Contains(token));
-                        if (matchedTokenCount == 0)
-                        {
-                            // Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line '{lineText}' - no tokens matched.");
-                            continue;
-                        }
 
-                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line '{lineText}' matched {matchedTokenCount}/{tokens.Length} tokens.");
-                        var tokenCoverage = matchedTokenCount / (double)tokens.Length;
-                        var confidence = 0.45 + (0.5 * tokenCoverage);
-                        if (string.Equals(loweredLine, normalized.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
-                        {
-                            confidence = 0.97;
-                        }
-                        else if (loweredLine.Contains(normalized, StringComparison.OrdinalIgnoreCase))
-                        {
-                            confidence = Math.Max(confidence, 0.85);
-                        }
+                    int matchedTokenCount = tokens.Count(token => loweredLine.Contains(token) || (!string.IsNullOrEmpty(token) && lineText.Contains(token)));
+                    if (matchedTokenCount == 0)
+                    {
+                        // Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line '{lineText}' - no tokens matched.");
+                        continue;
+                    }
+
+                    Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line '{lineText}' matched {matchedTokenCount}/{tokens.Length} tokens.");
+                    var tokenCoverage = matchedTokenCount / (double)tokens.Length;
+                    double confidence = 0.45 + (0.5 * tokenCoverage);
+                    if (string.Equals(loweredLine, normalized.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        confidence = 0.97;
+                    }
+                    else if (loweredLine.Contains(normalized, StringComparison.OrdinalIgnoreCase))
+                    {
+                        confidence = Math.Max(confidence, 0.85);
+                    }
 
                         Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: computing bounding rect from {line.Words?.Count ?? 0} words...");
                         var lineRect = BuildBoundingRectFromWords(line);
@@ -355,6 +390,132 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                 Logger.LogError($"ConvertToSoftwareBitmapAsync failed: {ex.Message} - {ex.StackTrace}");
                 throw;
             }
+        }
+
+        // card phrase helpers ------------------------------------------------
+        // expose token construction logic for unit testing
+        public static string[] BuildTokenListForPhrase(string phrase)
+        {
+            var normalized = (phrase ?? string.Empty).Trim();
+            var tokenList = normalized
+                .ToLowerInvariant()
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Distinct()
+                .ToList();
+
+            var requestedCard = TryParseCardPhrase(normalized);
+            if (requestedCard != null)
+            {
+                string rankAbbrev = RankToAbbreviation(requestedCard.Value.rank);
+                if (!string.IsNullOrWhiteSpace(rankAbbrev) && !tokenList.Contains(rankAbbrev))
+                {
+                    tokenList.Add(rankAbbrev);
+                }
+
+                string suitSymbol = SuitToSymbol(requestedCard.Value.suit);
+                if (!string.IsNullOrWhiteSpace(suitSymbol) && !tokenList.Contains(suitSymbol))
+                {
+                    tokenList.Add(suitSymbol);
+                }
+
+                if (!tokenList.Contains(requestedCard.Value.suit))
+                {
+                    tokenList.Add(requestedCard.Value.suit);
+                }
+            }
+
+            return tokenList.ToArray();
+        }
+
+        private static (string rank, string suit)? TryParseCardPhrase(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            var regex = new System.Text.RegularExpressions.Regex(@"\b(?<rank>ace|king|queen|jack|10|[2-9]|two|three|four|five|six|seven|eight|nine|ten)\s+of\s+(?<suit>spades?|hearts?|diamonds?|clubs?)\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+            var match = regex.Match(text);
+            if (!match.Success)
+            {
+                return null;
+            }
+
+            var rank = NormalizeRank(match.Groups["rank"].Value);
+            var suit = NormalizeSuit(match.Groups["suit"].Value);
+            if (string.IsNullOrWhiteSpace(rank) || string.IsNullOrWhiteSpace(suit))
+            {
+                return null;
+            }
+
+            return (rank, suit);
+        }
+
+        private static string NormalizeRank(string rank)
+        {
+            return rank.Trim().ToLowerInvariant() switch
+            {
+                "2" or "two" => "two",
+                "3" or "three" => "three",
+                "4" or "four" => "four",
+                "5" or "five" => "five",
+                "6" or "six" => "six",
+                "7" or "seven" => "seven",
+                "8" or "eight" => "eight",
+                "9" or "nine" => "nine",
+                "10" or "ten" => "ten",
+                "ace" => "ace",
+                "king" => "king",
+                "queen" => "queen",
+                "jack" => "jack",
+                _ => string.Empty
+            };
+        }
+
+        private static string NormalizeSuit(string suit)
+        {
+            return suit.Trim().ToLowerInvariant() switch
+            {
+                "spade" or "spades" => "spades",
+                "heart" or "hearts" => "hearts",
+                "diamond" or "diamonds" => "diamonds",
+                "club" or "clubs" => "clubs",
+                _ => string.Empty
+            };
+        }
+
+        private static string RankToAbbreviation(string rank)
+        {
+            return rank.ToLowerInvariant() switch
+            {
+                "ace" => "a",
+                "king" => "k",
+                "queen" => "q",
+                "jack" => "j",
+                "two" => "2",
+                "three" => "3",
+                "four" => "4",
+                "five" => "5",
+                "six" => "6",
+                "seven" => "7",
+                "eight" => "8",
+                "nine" => "9",
+                "ten" => "10",
+                _ => string.Empty
+            };
+        }
+
+        private static string SuitToSymbol(string suit)
+        {
+            return suit.ToLowerInvariant() switch
+            {
+                "spades" => "♠",
+                "hearts" => "♥",
+                "diamonds" => "♦",
+                "clubs" => "♣",
+                _ => string.Empty
+            };
         }
 
         // Backward compatibility wrapper - use FindCandidatesAsync instead

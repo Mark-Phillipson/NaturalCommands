@@ -20,7 +20,8 @@ namespace NaturalCommands.Helpers
         public static List<VisualTargetCandidate> IdentifyCandidates(string phrase)
         {
             var settings = AppSettings.Instance.VisualTargeting;
-            var normalizedPhrase = NormalizeCardConnectorMisrecognitions((phrase ?? string.Empty).Trim());
+            // normalize early so all downstream logic sees the same phrase transformation
+            var normalizedPhrase = NormalizePhrase(phrase);
             if (string.IsNullOrWhiteSpace(normalizedPhrase) || !settings.Enabled)
             {
                 return new List<VisualTargetCandidate>();
@@ -155,11 +156,11 @@ namespace NaturalCommands.Helpers
             }
         }
 
-        private static List<VisualTargetCandidate> TryFromCloudVision(string phrase, VisualTargetingSettings settings)
+        private static List<VisualTargetCandidate> TryFromCloudVision(string phrase, VisualTargetingSettings settings, ScreenCaptureResult? preCapture = null)
         {
             try
             {
-                var capture = ScreenCaptureService.CaptureAllScreensJpeg(maxLongEdge: 1400, quality: 55);
+                var capture = preCapture ?? ScreenCaptureService.CaptureAllScreensJpeg(maxLongEdge: 1400, quality: 55);
                 var model = MapModelTier(settings.ModelTier);
                 var payloadJson = BuildCloudRequestJson(model, phrase, capture.ImageBase64Jpeg);
 
@@ -200,6 +201,40 @@ namespace NaturalCommands.Helpers
                 Logger.LogError($"VisualTargetingService cloud vision failed: {ex.Message}");
                 return new List<VisualTargetCandidate>();
             }
+        }
+
+        /// <summary>
+        /// Public helper for diagnostics: capture screenshot and send to cloud vision API using current settings.
+        /// Returns whatever candidates the model produces, or an empty list if cloud vision cannot be used.
+        /// </summary>
+        public static List<VisualTargetCandidate> GetCloudVisionCandidates(string phrase)
+        {
+            var settings = AppSettings.Instance.VisualTargeting;
+            if (!CanUseCloudVision(settings))
+            {
+                Logger.LogInfo("VisualTargetingService: GetCloudVisionCandidates skipped because cloud vision is unavailable.");
+                return new List<VisualTargetCandidate>();
+            }
+
+            var normalized = NormalizeCardConnectorMisrecognitions((phrase ?? string.Empty).Trim());
+            Logger.LogInfo($"VisualTargetingService: GetCloudVisionCandidates invoked for phrase '{normalized}'");
+
+            // capture screenshot ourselves so we can save it for debugging
+            var capture = ScreenCaptureService.CaptureAllScreensJpeg(maxLongEdge: 1400, quality: 60);
+            try
+            {
+                var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                    "nc-screenshot-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + ".jpg");
+                System.IO.File.WriteAllBytes(tmp, Convert.FromBase64String(capture.ImageBase64Jpeg));
+                Logger.LogInfo($"VisualTargetingService: saved debug screenshot to {tmp}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning($"VisualTargetingService: failed to save debug screenshot: {ex.Message}");
+            }
+
+            // feed capture manually to cloud request to avoid recapturing with different parameters
+            return TryFromCloudVision(normalized, settings, capture);
         }
 
         private static string MapModelTier(string tier)
@@ -351,6 +386,15 @@ namespace NaturalCommands.Helpers
                 var elements = UIAutomationHelper.EnumerateClickableElements(scopeToActiveWindow: true);
 
                 Logger.LogDebug($"TryFromUiAutomation: searching for phrase '{phrase}' (tokens: {string.Join(", ", tokens)}), found {elements.Count} clickable elements.");
+                // also dump element names for troubleshooting
+                if (elements.Count > 0)
+                {
+                    var sampleNames = elements
+                        .Take(20)
+                        .Select(e => string.IsNullOrWhiteSpace(e.Name) ? "<empty>" : e.Name)
+                        .ToList();
+                    Logger.LogDebug($"TryFromUiAutomation: sample element names: {string.Join(", ", sampleNames)}");
+                }
 
                 var matches = new List<VisualTargetCandidate>();
                 foreach (var element in elements)
@@ -631,6 +675,36 @@ namespace NaturalCommands.Helpers
 
             var pattern = $@"\b{Regex.Escape(phrase)}\b";
             return Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase);
+        }
+
+        /// <summary>
+        /// Apply a set of normalizations to the incoming phrase before attempting
+        /// any form of visual targeting.  This is a public helper so unit tests can
+        /// verify behavior.
+        /// </summary>
+        public static string NormalizePhrase(string phrase)
+        {
+            if (string.IsNullOrWhiteSpace(phrase))
+            {
+                return string.Empty;
+            }
+
+            var text = phrase.Trim();
+
+            // fix common mis-hearings of the connector
+            text = NormalizeCardConnectorMisrecognitions(text);
+
+            // handle the very common speech-to-text error where "spades" comes
+            // back as "space".  Only convert when it looks like a card phrase
+            // to avoid mangling unrelated text.
+            text = Regex.Replace(text, @"\b(of|off)\s+space\b", "of spades", RegexOptions.IgnoreCase);
+
+            if (!string.Equals(text, phrase, StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.LogDebug($"VisualTargetingService: normalized phrase from '{phrase}' to '{text}'.");
+            }
+
+            return text;
         }
 
         private static string NormalizeCardConnectorMisrecognitions(string text)

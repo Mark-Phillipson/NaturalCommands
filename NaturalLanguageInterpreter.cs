@@ -666,6 +666,19 @@ namespace NaturalCommands
             AppendLog($"[DEBUG] InterpretAsync normalized input: {text}\n");
 
             // Quick Steam "play" handling (avoid AI fallback for installed Steam games)
+            // ---- special debug: cloud vision request ----
+            if (text.StartsWith("cloud vision ", StringComparison.OrdinalIgnoreCase))
+            {
+                var phrase = text.Substring("cloud vision ".Length).Trim();
+                AppendLog($"[DEBUG] InterpretAsync matched CloudVision debug action: {phrase}\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(new VisualCloudAction(phrase));
+            }
+            if (text.StartsWith("vision ai ", StringComparison.OrdinalIgnoreCase))
+            {
+                var phrase = text.Substring("vision ai ".Length).Trim();
+                AppendLog($"[DEBUG] InterpretAsync matched VisionAI debug action: {phrase}\n");
+                return System.Threading.Tasks.Task.FromResult<ActionBase?>(new VisualCloudAction(phrase));
+            }
             if (text.StartsWith("play "))
             {
                 var gameName = text.Substring(5).Trim();
@@ -1613,6 +1626,25 @@ namespace NaturalCommands
             {
                 return NaturalCommands.Helpers.TalonCommandExecutor.Execute(talonAction);
             }
+            else if (action is VisualCloudAction cloudAction)
+            {
+                // debug-only action: send screenshot+phrase to AI model without clicking
+                var candidates = Helpers.VisualTargetingService.GetCloudVisionCandidates(cloudAction.TargetPhrase);
+                Helpers.Logger.LogInfo($"ExecuteActionAsync VisualCloudAction: cloud returned {candidates.Count} candidates for '{cloudAction.TargetPhrase}'.");
+                if (candidates.Count > 0)
+                {
+                    foreach (var c in candidates)
+                    {
+                        Helpers.Logger.LogInfo($"  candidate '{c.Label}' ({c.Confidence:0.00}) source={c.Source} reason={c.Reason}");
+                    }
+                }
+                else
+                {
+                    Helpers.Logger.LogInfo("  cloud vision produced no candidates");
+                }
+                return $"Cloud returned {candidates.Count} candidates for '{cloudAction.TargetPhrase}'. See log for details.";
+            }
+
             else if (action is VisualIdentifyClickAction visualIdentify)
             {
                 try
@@ -1624,11 +1656,7 @@ namespace NaturalCommands
 
                     var candidates = Helpers.VisualTargetingService.IdentifyCandidates(visualIdentify.TargetPhrase);
                     Helpers.Logger.LogInfo($"ExecuteActionAsync VisualIdentifyClickAction: got {candidates.Count} candidates for '{visualIdentify.TargetPhrase}'.");
-                    if (candidates.Count > 0)
-                    {
-                        Helpers.Logger.LogDebug($"ExecuteActionAsync: top candidate: '{candidates[0].Label}' (confidence {candidates[0].Confidence:0.00}, source '{candidates[0].Source}')");
-                    }
-                    
+
                     if (candidates.Count == 0)
                     {
                         Helpers.VisualCandidateSessionStore.Clear();
