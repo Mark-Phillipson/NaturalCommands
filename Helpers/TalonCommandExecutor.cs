@@ -22,7 +22,7 @@ namespace NaturalCommands.Helpers
                         Directory.CreateDirectory(queueDir);
                     }
 
-                    File.AppendAllText(queuePath, dispatchCommand + Environment.NewLine);
+                    File.WriteAllText(queuePath, dispatchCommand + Environment.NewLine);
                     Logger.LogInfo($"TalonCommandExecutor: queued '{dispatchCommand}' to '{queuePath}'.");
                     return $"Queued Talon command: {dispatchCommand}";
                 }
