@@ -1,19 +1,53 @@
 ## Talon Voice Integration
 
-NaturalCommands can be triggered using Talon Voice by saying **"natural"** (or **"nat"**) followed by the command you want to execute. For example:
+NaturalCommands can be triggered using Talon Voice by saying **"natural"** (or **"nat"**) followed by the command you want to execute.
 
-- `natural what can I say`
-- `natural dictate`
-
-### Talon File Commands
+### Main Commands
 
 ```talon
 ^(natural | nat) <user.text>$:
-	user.run_application_csharp_natural(text)
+    user.run_application_csharp_natural(text)
 ^(natural | nat) dictate$:
-	speech.disable()
-	user.run_application_csharp_natural("dictate")
+    speech.disable()
+    user.run_application_csharp_natural("dictate")
+^show letters$:
+    user.run_application_csharp_natural("show letters")
+^show taskbar$:
+    user.run_application_csharp_natural("show taskbar")
+^show desktop$:
+    user.run_application_csharp_natural("show desktop")
+^(ID) <user.text>$:
+    user.run_application_csharp_natural("identify " + text)
 ```
+
+**Voice command examples:**
+- `natural what can I say` - display available commands
+- `natural dictate` - open voice dictation UI
+- `show letters` - overlay letter labels on clickable elements
+- `show taskbar` - focus and label taskbar icons
+- `show desktop` - focus and label desktop icons
+- `identify button` - find and highlight target elements
+
+### Semantic Command Matching
+
+NaturalCommands supports **semantic matching** for Talon voice commands. This means if you say something that's **semantically similar** but not an exact textual match to a registered command, it will still be evaluated and executed based on meaning.
+
+**How it works:**
+1. When you issue a voice command via Talon, NaturalCommands first attempts an exact match against known commands
+2. If no exact match is found, the fuzzy matcher scores the input against available commands by similarity
+3. If a good semantic match is found (e.g., "close tab" matches "close the current tab"), it will be executed
+4. If still no suitable match, the AI interpreter is invoked as a fallback to infer the intended action
+
+**Example:**
+- Registered command: `close tab`
+- You say: `natural close this tab`
+- Result: Matches semantically and executes the close tab action
+
+### Using `mimic` with Talon Commands (Workaround)
+
+As a workaround in custom Talon my stuff repository, the `mimic` command is used to automatically invoke voice commands when a command phrase has been recognized as having Talon command semantics (even though `mimic` is not formally supported by Talon). This is the only available workaround for executing a NaturalCommands action based on voice input that was processed with the same semantic meaning.
+
+The **talon_stuff repository** automatically scans a text file that lists command phrases, and generates `mimic` calls to execute them through NaturalCommands. This scanning mechanism allows commands to be executed based on their semantic recognition rather than exact Talon command matching.
 
 ### Python Code
 
@@ -33,14 +67,58 @@ def run_application_csharp_natural(naturalCommand: str):
 
 ### Mouse Movement Commands
 
-NaturalCommands includes Talon voice commands for continuous mouse movement. See [talon_mouse_commands.talon](talon_mouse_commands.talon) for the complete command list.
+NaturalCommands includes Talon voice commands for continuous mouse movement.
 
 **Features:**
 - Directional movement: left, right, up, down, and diagonals
 - Speed adjustment: "mouse faster" or "mouse slower"
 - Stop commands: "mouse stop", "stop click", "stop right click"
 
-To use these commands, copy the [talon_mouse_commands.talon](talon_mouse_commands.talon) file into your Talon user directory and say commands like:
+**Mouse Commands:**
+
+```talon
+# Basic directional movement
+^mouse left$:
+    user.run_application_csharp_natural("mouse left")
+^mouse right$:
+    user.run_application_csharp_natural("mouse right")
+^mouse up$:
+    user.run_application_csharp_natural("mouse up")
+^mouse down$:
+    user.run_application_csharp_natural("mouse down")
+
+# Diagonal movement
+^mouse up left$:
+    user.run_application_csharp_natural("mouse up left")
+^mouse up right$:
+    user.run_application_csharp_natural("mouse up right")
+^mouse down left$:
+    user.run_application_csharp_natural("mouse down left")
+^mouse down right$:
+    user.run_application_csharp_natural("mouse down right")
+
+# Stop commands
+^mouse stop$:
+    user.run_application_csharp_natural("mouse stop")
+^stop mouse$:
+    user.run_application_csharp_natural("stop mouse")
+^stop click$:
+    user.run_application_csharp_natural("stop click")
+^stop right click$:
+    user.run_application_csharp_natural("stop right click")
+
+# Speed adjustment
+^mouse faster$:
+    user.run_application_csharp_natural("mouse faster")
+^mouse slower$:
+    user.run_application_csharp_natural("mouse slower")
+^faster$:
+    user.run_application_csharp_natural("faster")
+^slower$:
+    user.run_application_csharp_natural("slower")
+```
+
+**Voice command examples:**
 - `mouse left` - start moving the mouse left
 - `mouse up right` - move diagonally up and right
 - `mouse faster` - increase movement speed
@@ -105,16 +183,25 @@ The "show letters" feature enables voice-based navigation of UI elements by over
 
 ### Examples
 
-```bash
+```talon
 # Show letter labels on clickable elements
-dotnet run --framework net10.0-windows -- natural "show letters"
+^show letters$:
+    user.run_application_csharp_natural("show letters")
 
 # Then type letters like "a", "b", "ab", etc. to click the corresponding element
+# Voice command: say "show letters"
 ```
 
 ### Show Desktop
 
-1. Say **"show desktop"** or **"natural show desktop"**
+Talon command:
+```talon
+^show desktop$:
+    user.run_application_csharp_natural("show desktop")
+```
+
+Usage:
+1. Say **"show desktop"**
 2. The desktop will be focused (icons exposed) and letter labels will be applied to desktop icons so you can activate them by typing the letters; press **ESC** to cancel.
 
 ### Supported Elements
@@ -138,8 +225,14 @@ The feature works with:
 
 NaturalCommands supports a voice-driven visual targeting flow for commands like identifying and clicking specific on-screen targets.
 
-### Commands
+### Talon Commands
 
+```talon
+^(ID) <user.text>$:
+    user.run_application_csharp_natural("identify " + text)
+```
+
+Voice command usage:
 - `identify <target>`: Find matching targets on screen.
 - `show candidates`: Re-show the numbered overlay for the latest identify session.
 - `choose <number>`: Click a numbered candidate from the current session.
@@ -172,20 +265,20 @@ Auto-Click provides a configurable delayed-click feature that displays a small c
 - When shown, the overlay replaces (hides) the system cursor during the countdown and restores it when the countdown finishes or is cancelled.
 - There is a **Stop Auto-Click** tray menu option to cancel the countdown, and the auto-click will also automatically stop if the mouse is moved to the taskbar/system tray to prevent accidental clicks.
 
+**Talon Command:**
+```talon
+^auto click$:
+    user.run_application_csharp_natural("auto click")
+```
+
 **Usage:**
 1. Open **Settings → Auto-Click** to enable/set the delay and toggle the overlay.
-2. Trigger a delayed click using your preferred command; the overlay will appear centered on the pointer and display progress.
+2. Say **"auto click"** to trigger a delayed click; the overlay will appear centered on the pointer and display progress.
 3. Cancel with the **Stop Auto-Click** tray menu item or by moving the pointer to the taskbar.
 
 ## Contributing
 
 Contributions are welcome — please open issues and pull requests on GitHub.
-
-## Steam detection (experimental) 🎮
-
-- The app can now detect installed Steam games by scanning your Steam libraries (appmanifest_*.acf) and will allow launching games by voice using commands like `play <game name>`.
-- Launches use the Steam URI (`steam://rungameid/<appid>`) so Steam handles the actual game start.
-- Currently Steam is the only supported source; detection is experimental — open an issue if you encounter games that are not detected or mismatched.
 
 ## License
 

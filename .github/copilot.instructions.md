@@ -69,4 +69,4 @@ dotnet build NaturalCommands.csproj -c Release
 - **Talon Voice:** Triggered via `natural <command>` (see README for Talon config)
 - **OpenAI API:** For fuzzy command matching when exact match fails
 - **Visual Studio DTE:** For IDE automation commands
-- **Steam:** For launching games via `SteamService.cs`
+

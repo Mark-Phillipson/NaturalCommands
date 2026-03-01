@@ -72,8 +72,7 @@ namespace NaturalCommands
             { "command prompt", "wt.exe" },
             { "skype", "skype.exe" },
             { "zoom", "zoom.exe" },
-            { "slack", "slack.exe" },
-            { "steam", "steam://open/main" }
+            { "slack", "slack.exe" }
         };
         /// <summary>
         /// Uses OpenAI API to interpret text and return an ActionBase (AI fallback).
@@ -146,43 +145,6 @@ namespace NaturalCommands
                                         appExe = appExeProp.GetString();
                                     else if (root.TryGetProperty("AppIdOrPath", out var appIdProp))
                                         appExe = appIdProp.GetString();
-
-                                    // If AI suggested an executable, attempt to match to a Steam game first (useful when AI returns an exe name for games)
-                                    try
-                                    {
-                                        if (!string.IsNullOrWhiteSpace(appExe))
-                                        {
-                                            // If it's already a steam URI, keep as-is
-                                            if (appExe.StartsWith("steam://", StringComparison.OrdinalIgnoreCase))
-                                                return new LaunchAppAction(appExe);
-
-                                            // Strip extension/path and try to find a Steam match
-                                            var exeName = System.IO.Path.GetFileNameWithoutExtension(appExe);
-                                            var game = NaturalCommands.Helpers.SteamService.FindGameByName(exeName ?? appExe);
-                                            if (game == null && text.StartsWith("play "))
-                                            {
-                                                game = NaturalCommands.Helpers.SteamService.FindGameByName(text.Substring(5).Trim());
-                                            }
-                                            if (game != null)
-                                            {
-                                                NaturalCommands.Helpers.Logger.LogDebug($"InterpretWithAIAsync: Rewrote AI LaunchAppAction to Steam URI for '{game.Name}' -> steam://rungameid/{game.AppId}");
-                                                return new LaunchAppAction($"steam://rungameid/{game.AppId}");
-                                            }
-                                        }
-                                        else if (text.StartsWith("play "))
-                                        {
-                                            var game = NaturalCommands.Helpers.SteamService.FindGameByName(text.Substring(5).Trim());
-                                            if (game != null)
-                                            {
-                                                NaturalCommands.Helpers.Logger.LogDebug($"InterpretWithAIAsync: Resolved play command to Steam URI '{game.Name}' -> steam://rungameid/{game.AppId}");
-                                                return new LaunchAppAction($"steam://rungameid/{game.AppId}");
-                                            }
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        try { NaturalCommands.Helpers.Logger.LogError($"InterpretWithAIAsync Steam lookup failed: {ex.Message}"); } catch { }
-                                    }
 
                                     return new LaunchAppAction(appExe ?? "");
                                 case "SendKeysAction":
@@ -665,7 +627,6 @@ namespace NaturalCommands
             text = text.Trim();
             AppendLog($"[DEBUG] InterpretAsync normalized input: {text}\n");
 
-            // Quick Steam "play" handling (avoid AI fallback for installed Steam games)
             // ---- special debug: cloud vision request ----
             if (text.StartsWith("cloud vision ", StringComparison.OrdinalIgnoreCase))
             {
@@ -678,24 +639,6 @@ namespace NaturalCommands
                 var phrase = text.Substring("vision ai ".Length).Trim();
                 AppendLog($"[DEBUG] InterpretAsync matched VisionAI debug action: {phrase}\n");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(new VisualCloudAction(phrase));
-            }
-            if (text.StartsWith("play "))
-            {
-                var gameName = text.Substring(5).Trim();
-                try
-                {
-                    var game = NaturalCommands.Helpers.SteamService.FindGameByName(gameName);
-                    if (game != null)
-                    {
-                        var uri = $"steam://rungameid/{game.AppId}";
-                        AppendLog($"[DEBUG] InterpretAsync: Matched Steam game '{game.Name}' -> {uri}\n");
-                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(new LaunchAppAction(uri));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    AppendLog($"[ERROR] InterpretAsync Steam lookup failed: {ex.Message}\n");
-                }
             }
 
             // Focus window by name: /focus [window name], focus [window name], focus window [name]
@@ -2509,26 +2452,6 @@ namespace NaturalCommands
             text = RemovePoliteModifiers(text);
             text = WordReplacementLoader.Apply(text);
             NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync input: {text}");
-
-            // Quick Steam "play" handling
-            if (text.StartsWith("play "))
-            {
-                var gameName = text.Substring(5).Trim();
-                try
-                {
-                    var game = NaturalCommands.Helpers.SteamService.FindGameByName(gameName);
-                    if (game != null)
-                    {
-                        var uri = $"steam://rungameid/{game.AppId}";
-                        NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync: Matched Steam game '{game.Name}' -> {uri}");
-                        return System.Threading.Tasks.Task.FromResult<ActionBase?>(new LaunchAppAction(uri));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    try { NaturalCommands.Helpers.Logger.LogError($"InterpretAsync Steam lookup failed: {ex.Message}"); } catch { }
-                }
-            }
 
             // Fuzzy match against available commands
             var bestMatch = availableCommands
