@@ -25,6 +25,7 @@ namespace DictationBoxMSP
         private Button btnSearchWeb = null!;
         private Button btnOpenInVsc = null!;
         private Button btnSendToCopilot = null!; // new button for Copilot CLI
+        private Button btnCallAssistant = null!; // new button for personal-assistant CLI
         private Button btnToggleTransparent = null!;
         private Panel bottomPanel = null!;
         private Label lblTransient = null!;
@@ -113,6 +114,7 @@ namespace DictationBoxMSP
             this.btnSearchWeb = new Button() { Text = "Search &Web", Height = 121 };
             this.btnOpenInVsc = new Button() { Text = "Open in &VS Code", Height = 121 };
             this.btnSendToCopilot = new Button() { Text = "Send to Copi&lot", Height = 121 }; // Copilot CLI
+            this.btnCallAssistant = new Button() { Text = "Call &Assistant", Height = 121 }; // Personal Assistant CLI
             this.autoSubmitTimer = new System.Windows.Forms.Timer();
             this.startDictationTimer = new System.Windows.Forms.Timer();
             this.dictationStopDebounceTimer = new System.Windows.Forms.Timer();
@@ -166,6 +168,7 @@ namespace DictationBoxMSP
             this.btnSearchWeb.Height = btnHeight;
             this.btnOpenInVsc.Height = btnHeight;
             this.btnSendToCopilot.Height = btnHeight; // new button height
+            this.btnCallAssistant.Height = btnHeight; // new button height
             this.btnToggleTransparent = new Button() { Text = "Toggle Trans&parent", Height = btnHeight };
 
             flow.Controls.Add(btnCancel);
@@ -173,11 +176,12 @@ namespace DictationBoxMSP
             flow.Controls.Add(btnCopyText);
             flow.Controls.Add(btnOpenInVsc);
             flow.Controls.Add(btnSendToCopilot); // add to flow layout
+            flow.Controls.Add(btnCallAssistant); // add to flow layout
             flow.Controls.Add(btnToggleTransparent);
             flow.Controls.Add(btnSearchWeb);
 
             // Keep explicit widths for remaining buttons so text remains visible
-            btnCancel.Width = 140; btnSendCommand.Width = 170; btnCopyText.Width = 160; btnSearchWeb.Width = 160; btnOpenInVsc.Width = 180; btnSendToCopilot.Width = 180; btnToggleTransparent.Width = 180;
+            btnCancel.Width = 140; btnSendCommand.Width = 170; btnCopyText.Width = 160; btnSearchWeb.Width = 160; btnOpenInVsc.Width = 180; btnSendToCopilot.Width = 180; btnCallAssistant.Width = 160; btnToggleTransparent.Width = 180;
 
             // Make button fonts slightly larger so text is easier to read
             try
@@ -190,6 +194,7 @@ namespace DictationBoxMSP
                 btnSearchWeb.Font = btnFont;
                 btnOpenInVsc.Font = btnFont;
                 btnSendToCopilot.Font = btnFont;
+                btnCallAssistant.Font = btnFont;
                 btnToggleTransparent.Font = btnFont;
             }
             catch { }
@@ -203,14 +208,15 @@ namespace DictationBoxMSP
             {
                 // Ensure text input receives focus first
                 txtInput.TabIndex = 0;
-                // Visual left-to-right order: Search Web, Toggle Transparent, Open in VS Code, Copilot CLI, Copy Text, Send Command, Cancel
+                // Visual left-to-right order: Search Web, Toggle Transparent, Open in VS Code, Call Assistant, Copilot CLI, Copy Text, Send Command, Cancel
                 btnSearchWeb.TabIndex = 1;
                 btnToggleTransparent.TabIndex = 2;
                 btnOpenInVsc.TabIndex = 3;
-                btnSendToCopilot.TabIndex = 4;
-                btnCopyText.TabIndex = 5;
-                btnSendCommand.TabIndex = 6;
-                btnCancel.TabIndex = 7;
+                btnCallAssistant.TabIndex = 4;
+                btnSendToCopilot.TabIndex = 5;
+                btnCopyText.TabIndex = 6;
+                btnSendCommand.TabIndex = 7;
+                btnCancel.TabIndex = 8;
             }
             catch { }
 
@@ -301,6 +307,7 @@ namespace DictationBoxMSP
             btnCopyText.FlatStyle = FlatStyle.Flat; btnCopyText.FlatAppearance.BorderSize = 1; btnCopyText.FlatAppearance.BorderColor = SystemColors.ControlDark; btnCopyText.Margin = new Padding(6);
             btnOpenInVsc.FlatStyle = FlatStyle.Flat; btnOpenInVsc.FlatAppearance.BorderSize = 1; btnOpenInVsc.FlatAppearance.BorderColor = SystemColors.ControlDark; btnOpenInVsc.Margin = new Padding(6);
             btnSendToCopilot.FlatStyle = FlatStyle.Flat; btnSendToCopilot.FlatAppearance.BorderSize = 1; btnSendToCopilot.FlatAppearance.BorderColor = SystemColors.ControlDark; btnSendToCopilot.Margin = new Padding(6);
+            btnCallAssistant.FlatStyle = FlatStyle.Flat; btnCallAssistant.FlatAppearance.BorderSize = 1; btnCallAssistant.FlatAppearance.BorderColor = SystemColors.ControlDark; btnCallAssistant.Margin = new Padding(6);
             btnSearchWeb.FlatStyle = FlatStyle.Flat; btnSearchWeb.FlatAppearance.BorderSize = 1; btnSearchWeb.FlatAppearance.BorderColor = SystemColors.ControlDark; btnSearchWeb.Margin = new Padding(6);
             btnToggleTransparent.FlatStyle = FlatStyle.Flat; btnToggleTransparent.FlatAppearance.BorderSize = 1; btnToggleTransparent.FlatAppearance.BorderColor = SystemColors.ControlDark; btnToggleTransparent.Margin = new Padding(6);
 
@@ -313,10 +320,12 @@ namespace DictationBoxMSP
                 tt.SetToolTip(btnToggleTransparent, "Toggle Transparent (Alt+P)");
                 tt.SetToolTip(btnCopyText, "Copy text to clipboard (Alt+T)");
                 tt.SetToolTip(btnSendToCopilot, "Send text to Copilot CLI in a new terminal");
+                tt.SetToolTip(btnCallAssistant, "Send text to Personal Assistant CLI in a new terminal (Alt+A)");
                 // Ensure mnemonics are enabled explicitly
                 btnToggleTransparent.UseMnemonic = true;
                 btnCopyText.UseMnemonic = true;
                 btnSendToCopilot.UseMnemonic = true;
+                btnCallAssistant.UseMnemonic = true;
             }
             catch { }
 
@@ -337,6 +346,7 @@ namespace DictationBoxMSP
             btnCopyText.Click += BtnCopyText_Click;
             btnOpenInVsc.Click += BtnOpenInVsc_Click;
             btnSendToCopilot.Click += BtnSendToCopilot_Click; // copilot handler
+            btnCallAssistant.Click += BtnCallAssistant_Click; // personal assistant handler
             btnToggleTransparent.Click += BtnToggleTransparent_Click;
             btnSearchWeb.Click += BtnSearchWeb_Click;
             this.FormClosing += VoiceDictationForm_FormClosing;
@@ -774,6 +784,113 @@ namespace DictationBoxMSP
             }
         }
 
+        private void BtnCallAssistant_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                var text = txtInput.Text ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(text)) return;
+
+                // copy text to clipboard so user can paste elsewhere if desired
+                try { Clipboard.SetText(text); } catch { }
+
+                // Locate personal-assistant.exe
+                var assistantPath = FindPersonalAssistantExecutable();
+                if (string.IsNullOrWhiteSpace(assistantPath))
+                {
+                    MessageBox.Show("Personal Assistant executable not found.\nPlease ensure personal-assistant.exe is available on PATH or in the application directory.",
+                        "Personal Assistant Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Build the command line
+                var command = GetAssistantCommand(text, assistantPath);
+                LaunchTerminalWithCommand(command);
+
+                // update transient label for user feedback
+                if (lblTransient != null)
+                {
+                    lblTransient.Text = "Copied to clipboard and opened Personal Assistant";
+                    lblTransient.BackColor = Color.LimeGreen;
+                    lblTransient.ForeColor = Color.Black;
+                    lblTransient.Visible = true;
+                    lblTransient.BringToFront();
+                    Task.Run(async () =>
+                    {
+                        await Task.Delay(1500);
+                        try { if (lblTransient != null) lblTransient.Visible = false; } catch { }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to launch Personal Assistant: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private string? FindPersonalAssistantExecutable()
+        {
+            try
+            {
+                // Try to find in PATH
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "where",
+                    Arguments = "personal-assistant",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using var proc = Process.Start(psi);
+                if (proc != null)
+                {
+                    proc.WaitForExit(1000);
+                    if (proc.ExitCode == 0)
+                    {
+                        var output = proc.StandardOutput.ReadToEnd().Trim();
+                        var lines = output.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+                        if (lines.Length > 0 && File.Exists(lines[0]))
+                            return lines[0];
+                    }
+                }
+            }
+            catch { }
+
+            // Try common locations
+            var possibleLocationPatterns = new[]
+            {
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "personal-assistant.exe"),
+                // Try sibling project paths (relative from NaturalCommands output directory)
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "personal-assistant", "bin", "Debug", "net10.0", "personal-assistant.exe"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "personal-assistant", "bin", "Release", "net10.0", "publish", "personal-assistant.exe"),
+                // Try absolute path
+                @"C:\Users\MPhil\source\repos\personal-assistant\bin\Debug\net10.0\personal-assistant.exe",
+                // Try nget installation
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nget", "bin", "personal-assistant.exe"),
+            };
+
+            foreach (var path in possibleLocationPatterns)
+            {
+                try
+                {
+                    var expandedPath = Path.GetFullPath(path);
+                    if (File.Exists(expandedPath))
+                        return expandedPath;
+                }
+                catch { }
+            }
+
+            return null;
+        }
+
+        private string GetAssistantCommand(string text, string assistantPath)
+        {
+            // Build command: personal-assistant.exe --cli "prompt"
+            // Escape quotes in the text
+            var escapedText = text.Replace("\"", "\\\"");
+            return $"\"{assistantPath}\" --cli \"{escapedText}\"";
+        }
+
         private bool IsCommandAvailable(string command)
         {
             try
@@ -945,7 +1062,8 @@ namespace DictationBoxMSP
                 "Press Tab: say 'press tab'",
                 "Press Space: say 'press space'",
                 "Say 'voice typing' to open Windows Voice Typing and set Talon Voice to sleep",
-                "Click 'Send to Copi\u00A0lot' or press Alt+L to open a terminal and run Copilot CLI with the text"
+                "Click 'Send to Copi\u00A0lot' or press Alt+L to open a terminal and run Copilot CLI with the text",
+                "Click 'Call &Assistant' or press Alt+A to open a terminal and run Personal Assistant CLI with the text"
             };
         }
 
