@@ -1,0 +1,5 @@
+[
+  { "app": "UAC" },
+  { "app": "Windows Security" },
+  { "app": "Windows Defender" }
+]

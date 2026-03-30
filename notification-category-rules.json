@@ -1,0 +1,8 @@
+[
+  { "app": "Microsoft Outlook", "category": "warning" },
+  { "app": "Microsoft Teams", "category": "info" },
+  { "app": "Windows Update", "category": "warning" },
+  { "app": "Windows Security", "category": "critical" },
+  { "app": "Chrome", "category": "info" },
+  { "default": "info" }
+]

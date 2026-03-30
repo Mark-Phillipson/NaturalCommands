@@ -94,14 +94,72 @@ namespace ExecuteCommands_NET
 				return;
 			}
 
-			// Apply word replacements before processing
-			text = NaturalCommands.Helpers.WordReplacementHelper.ApplyWordReplacements(text);
+		if (mode == "listen-notifications" || mode == "notifications-listen")
+		{
+			Application.EnableVisualStyles();
+			Application.SetCompatibleTextRenderingDefault(false);
 
-			// Diagnostic: log normalized mode/text
-			NaturalCommands.Helpers.Logger.LogDebug($"Normalized mode: '{mode}', text: '{text}'");
-
-			if (string.IsNullOrWhiteSpace(mode))
+			var listener = new WindowsNotificationListenerService();
+			Console.WriteLine("[listen-notifications] Requesting notification access...");
+			var allowed = listener.Start();  // does RequestAccess + starts poll — all on one STA thread
+			if (!allowed)
 			{
+				NaturalCommands.Helpers.Logger.LogError("Notification listener access denied. Go to Windows Settings > System > Notifications, enable NaturalCommands.");
+				Console.Error.WriteLine("[listen-notifications] ACCESS DENIED — enable NaturalCommands in Windows Settings > System > Notifications.");
+				return;
+			}
+
+			NaturalCommands.Helpers.Logger.LogInfo("Windows notification listener started.");
+			Console.WriteLine("[listen-notifications] Listening for Windows notifications...");
+			Application.Run(new ApplicationContext());
+			return;
+		}
+
+		if (mode == "ticker" || mode == "ticker-file")
+		{
+			IEnumerable<string> lines;
+			if (mode == "ticker-file")
+			{
+				try
+				{
+					lines = File.ReadAllLines(text);
+				}
+				catch (Exception ex)
+				{
+					NaturalCommands.Helpers.Logger.LogError($"Ticker file read failed: {ex.Message}");
+					lines = new[] { $"critical:Failed to read ticker file: {ex.Message}" };
+				}
+			}
+			else
+			{
+				lines = text.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim());
+			}
+
+			Application.EnableVisualStyles();
+			Application.SetCompatibleTextRenderingDefault(false);
+			var ticker = new TickerOverlayForm(lines, cycleSeconds: 5, maxCycles: 5, topPosition: false);
+			Application.Run(ticker);
+			return;
+		}
+
+		if (mode == "ticker-test")
+		{
+			Application.EnableVisualStyles();
+			Application.SetCompatibleTextRenderingDefault(false);
+			var testLines = new[]
+			{
+				"info:Ticker test started",
+				"success:Ticker overlay is working",
+				"warning:Ticker test message",
+				"critical:Ticker test critical alert"
+			};
+			var testTicker = new TickerOverlayForm(testLines, cycleSeconds: 2, maxCycles: 2, topPosition: false);
+			Application.Run(testTicker);
+			return;
+		}
+
+		if (string.IsNullOrWhiteSpace(mode))
+		{
 				NaturalCommands.Helpers.Logger.LogError("Mode argument is empty. Usage: ExecuteCommands.exe <mode> <dictation>");
 				return;
 			}
