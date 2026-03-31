@@ -18,11 +18,20 @@ namespace NaturalCommands
             return System.IO.Path.Combine(baseDir, ".quick_clicks_command");
         }
 
+        // Path used by external processes to send ticker payloads to a running listen-mode instance.
+        private static string GetTickerPayloadFilePath()
+        {
+            var baseDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NaturalCommands");
+            System.IO.Directory.CreateDirectory(baseDir);
+            return System.IO.Path.Combine(baseDir, ".ticker_payload");
+        }
+
         private readonly HotkeyRegistrar _hotkeyRegistrar;
         private readonly Commands _commands;
         private bool _dictationOpen;
         private SettingsForm? _settingsForm;
         private System.Windows.Forms.Timer? _manualHideCheckTimer;
+        private System.Windows.Forms.Timer? _tickerCheckTimer;
 
         public ListenModeApplicationContext()
         {
@@ -155,6 +164,18 @@ namespace NaturalCommands
                 }
             }
             catch { }
+
+            // Start a ticker payload watcher so external processes can send ticker messages to the resident listen-mode instance.
+            try
+            {
+                _tickerCheckTimer = new System.Windows.Forms.Timer { Interval = 500 };
+                _tickerCheckTimer.Tick += (s, e) => { CheckForTickerPayload(); };
+                _tickerCheckTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                Helpers.Logger.LogWarning($"ListenMode: Failed to start ticker payload watcher: {ex.Message}");
+            }
 
         }
 
@@ -346,6 +367,62 @@ namespace NaturalCommands
                         System.IO.File.Delete(commandFile);
                 }
                 catch { }
+            }
+        }
+
+        // Check for ticker payloads dropped by external processes (e.g., personal-assistant)
+        private void CheckForTickerPayload()
+        {
+            var payloadFile = GetTickerPayloadFilePath();
+            try
+            {
+                if (System.IO.File.Exists(payloadFile))
+                {
+                    var lines = System.IO.File.ReadAllLines(payloadFile).Select(l => l.Trim()).Where(l => !string.IsNullOrEmpty(l)).ToList();
+                    System.IO.File.Delete(payloadFile);
+
+                    Helpers.Logger.LogInfo($"ListenMode: Received ticker payload with {lines.Count} lines (file: {payloadFile})");
+
+                    if (lines.Count > 0)
+                    {
+                        ShowTickerLines(lines);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { Helpers.Logger.LogError($"CheckForTickerPayload failed: {ex.Message}"); if (System.IO.File.Exists(payloadFile)) System.IO.File.Delete(payloadFile); } catch { }
+            }
+        }
+
+        // Show the ticker lines in a new STA thread (re-usable by notification listener and ticker payload watcher)
+        private void ShowTickerLines(System.Collections.Generic.List<string> lines)
+        {
+            // Similar to WindowsNotificationListenerService.ShowTicker
+            lock (this)
+            {
+                // Create a new form on its own STA thread so it can be invoked later for additions
+                var linesCopy = new System.Collections.Generic.List<string>(lines);
+                NaturalCommands.TickerOverlayForm? created = null;
+                var handleReady = new System.Threading.ManualResetEventSlim(false);
+
+                var thread = new System.Threading.Thread(() =>
+                {
+                    System.Windows.Forms.Application.EnableVisualStyles();
+                    System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
+                    var form = new NaturalCommands.TickerOverlayForm(linesCopy, cycleSeconds: 5, maxCycles: 0, topPosition: false);
+                    form.FormClosed += (s, e) => { /* nothing to do */ };
+                    var _ = form.Handle; // ensure handle created
+                    created = form;
+                    handleReady.Set();
+                    System.Windows.Forms.Application.Run(form);
+                });
+                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+                thread.IsBackground = true;
+                thread.Start();
+
+                // Wait briefly for the form to be ready
+                handleReady.Wait(TimeSpan.FromSeconds(3));
             }
         }
 
