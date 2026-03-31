@@ -9,6 +9,9 @@ namespace ExecuteCommands_NET
 {
 	internal static class Program
 	{
+		private static TickerOverlayForm? _tickerForm = null;
+		private static readonly object _tickerLock = new object();
+
 		private static string GetQuickClicksCommandFilePath()
 		{
 			var baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NaturalCommands");
@@ -23,13 +26,90 @@ namespace ExecuteCommands_NET
 			return Path.Combine(baseDir, ".ticker_payload");
 		}
 
+		private static bool HasOtherNaturalCommandsProcess()
+		{
+			var currentProcessId = Process.GetCurrentProcess().Id;
+			return Process.GetProcessesByName("NaturalCommands").Any(process => process.Id != currentProcessId);
+		}
+
+		private static void DeliverTickerPayload(IEnumerable<string> lines)
+		{
+			var payloadPath = GetTickerPayloadFilePath();
+			var tempPath = payloadPath + ".tmp";
+			File.WriteAllLines(tempPath, lines);
+			if (File.Exists(payloadPath))
+			{
+				File.Delete(payloadPath);
+			}
+
+			File.Move(tempPath, payloadPath);
+			NaturalCommands.Helpers.Logger.LogInfo($"[WATCHER] Delivered ticker payload to resident form: {payloadPath}");
+		}
+
 		private static void StartTickerWatcher()
 		{
 			var watcherThread = new System.Threading.Thread(() =>
 			{
 				var payloadPath = GetTickerPayloadFilePath();
 				string? lastHash = null;
+				NaturalCommands.Helpers.Logger.LogInfo($"[WATCHER] Starting payload watcher on {payloadPath}");
 
+				// Create the single persistent ticker form on a UI thread
+				System.Threading.Thread? uiThread = null;
+				System.Action<string> recreateFormIfNeeded = (reason) =>
+				{
+					try
+					{
+						lock (_tickerLock)
+						{
+							if (_tickerForm == null || _tickerForm.IsDisposed)
+							{
+								NaturalCommands.Helpers.Logger.LogInfo($"[TICKER-UI] Recreating form ({reason})...");
+								// Kill existing thread if any
+								if (uiThread != null && uiThread.IsAlive)
+								{
+									// Thread will exit naturally when we exit this method
+								}
+
+								uiThread = new System.Threading.Thread(() =>
+								{
+									try
+									{
+										NaturalCommands.Helpers.Logger.LogInfo("[TICKER-UI] Creating persistent ticker form...");
+										lock (_tickerLock)
+										{
+											_tickerForm = new TickerOverlayForm(new[] { "Ticker ready" }, cycleSeconds: 5, maxCycles: 0, topPosition: false, hideOnDismiss: true);
+										}
+										NaturalCommands.Helpers.Logger.LogInfo("[TICKER-UI] Persistent ticker form created, entering message pump");
+										Application.Run(_tickerForm);
+										NaturalCommands.Helpers.Logger.LogInfo("[TICKER-UI] Message pump exited");
+									}
+									catch (Exception ex)
+									{
+										NaturalCommands.Helpers.Logger.LogError($"[TICKER-UI] Failed to create persistent ticker: {ex.Message} | {ex.StackTrace}");
+									}
+								})
+								{
+									IsBackground = false
+								};
+
+								uiThread.TrySetApartmentState(System.Threading.ApartmentState.STA);
+								uiThread.Start();
+								NaturalCommands.Helpers.Logger.LogInfo("[TICKER-UI] UI thread spawned");
+								System.Threading.Thread.Sleep(500); // Give thread time to create form
+							}
+						}
+					}
+					catch (Exception ex)
+					{
+						NaturalCommands.Helpers.Logger.LogError($"[TICKER-UI] Error recreating form: {ex.Message}");
+					}
+				};
+
+				// Initial form creation
+				recreateFormIfNeeded("initial");
+
+				// Now watch for payload changes and add messages to the existing form
 				while (true)
 				{
 					try
@@ -49,37 +129,32 @@ namespace ExecuteCommands_NET
 							// Only process if content has changed
 							if (lastHash != currentHashStr)
 							{
+								NaturalCommands.Helpers.Logger.LogInfo($"[WATCHER] Payload file changed. New hash: {currentHashStr.Substring(0, 8)}...");
 								lastHash = currentHashStr;
 								var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+								NaturalCommands.Helpers.Logger.LogInfo($"[WATCHER] Read {lines.Length} lines from payload");
 
 								if (lines.Length > 0)
 								{
-									try
-									{
-										// Create UI on a separate STA thread to display the ticker
-										System.Threading.Thread uiThread = new System.Threading.Thread(() =>
-										{
-											try
-											{
-												var ticker = new TickerOverlayForm(lines, cycleSeconds: 5, maxCycles: 5, topPosition: false);
-												Application.Run(ticker);
-											}
-											catch (Exception ex)
-											{
-												NaturalCommands.Helpers.Logger.LogError($"Failed to display ticker: {ex.Message}");
-											}
-										})
-										{
-											IsBackground = true
-										};
+									// Recreate form if disposed before processing messages
+									recreateFormIfNeeded("payload received while disposed");
 
-										uiThread.TrySetApartmentState(System.Threading.ApartmentState.STA);
-										uiThread.Start();
-										NaturalCommands.Helpers.Logger.LogInfo($"Ticker overlay displayed with {lines.Length} messages (UI thread spawned)");
-									}
-									catch (Exception ex)
+									lock (_tickerLock)
 									{
-										NaturalCommands.Helpers.Logger.LogError($"Failed to spawn ticker UI thread: {ex.Message}");
+										if (_tickerForm != null && !_tickerForm.IsDisposed)
+										{
+											NaturalCommands.Helpers.Logger.LogInfo("[WATCHER] Adding messages to persistent ticker form");
+											foreach (var line in lines)
+											{
+												var message = TickerOverlayForm.ParseSingleLine(line);
+												_tickerForm.AddMessage(message);
+												NaturalCommands.Helpers.Logger.LogInfo($"[WATCHER] Added message: {message.Text} ({message.Category})");
+											}
+										}
+										else
+										{
+											NaturalCommands.Helpers.Logger.LogWarning("[WATCHER] Ticker form is null or disposed after recreation attempt, will retry next cycle");
+										}
 									}
 								}
 							}
@@ -89,18 +164,18 @@ namespace ExecuteCommands_NET
 					}
 					catch (Exception ex)
 					{
-						NaturalCommands.Helpers.Logger.LogWarning($"Ticker watcher error: {ex.Message}");
+						NaturalCommands.Helpers.Logger.LogError($"[WATCHER] Watcher error: {ex.Message}");
 						System.Threading.Thread.Sleep(1000);
 					}
 				}
 			})
 			{
-				IsBackground = true,
+				IsBackground = false,
 				Name = "TickerPayloadWatcher"
 			};
 
 			watcherThread.Start();
-			NaturalCommands.Helpers.Logger.LogInfo("Ticker payload watcher started in background thread");
+			NaturalCommands.Helpers.Logger.LogInfo("Ticker payload watcher started as foreground thread (keeps app alive)");
 		}
 
 		/// <summary>
@@ -122,16 +197,6 @@ namespace ExecuteCommands_NET
 			catch (Exception ex)
 			{
 				NaturalCommands.Helpers.Logger.LogError($"Failed to load settings: {ex.Message}");
-			}
-
-			// Start background ticker watcher (monitors .ticker_payload file)
-			try
-			{
-				StartTickerWatcher();
-			}
-			catch (Exception ex)
-			{
-				NaturalCommands.Helpers.Logger.LogError($"Failed to start ticker watcher: {ex.Message}");
 			}
 
 			// -------------------------------------------------------------
@@ -188,6 +253,24 @@ namespace ExecuteCommands_NET
 			string textRaw = args.Length > 2 ? string.Join(" ", args.Skip(2)) : "";
 			string mode = modeRaw.TrimStart('/').Trim().ToLower();
 			string text = textRaw.TrimStart('/').Trim();
+			var isStandaloneTickerMode = mode == "ticker" || mode == "ticker-file" || mode == "ticker-test";
+			var hasOtherNaturalCommandsProcess = HasOtherNaturalCommandsProcess();
+
+			if (!isStandaloneTickerMode && !hasOtherNaturalCommandsProcess)
+			{
+				try
+				{
+					StartTickerWatcher();
+				}
+				catch (Exception ex)
+				{
+					NaturalCommands.Helpers.Logger.LogError($"Failed to start ticker watcher: {ex.Message}");
+				}
+			}
+			else if (hasOtherNaturalCommandsProcess)
+			{
+				NaturalCommands.Helpers.Logger.LogInfo($"Skipping ticker watcher startup because another NaturalCommands process is already running (mode: {mode}).");
+			}
 
 			if (mode == "listen")
 			{
@@ -197,9 +280,6 @@ namespace ExecuteCommands_NET
 
 		if (mode == "listen-notifications" || mode == "notifications-listen")
 		{
-			Application.EnableVisualStyles();
-			Application.SetCompatibleTextRenderingDefault(false);
-
 			var listener = new WindowsNotificationListenerService();
 			Console.WriteLine("[listen-notifications] Requesting notification access...");
 			var allowed = listener.Start();  // does RequestAccess + starts poll — all on one STA thread
@@ -248,8 +328,12 @@ namespace ExecuteCommands_NET
 			}
 			catch { }
 
-			Application.EnableVisualStyles();
-			Application.SetCompatibleTextRenderingDefault(false);
+			if (hasOtherNaturalCommandsProcess)
+			{
+				DeliverTickerPayload(lines);
+				return;
+			}
+
 			var ticker = new TickerOverlayForm(lines, cycleSeconds: 5, maxCycles: 5, topPosition: false);
 			Application.Run(ticker);
 			return;
@@ -257,8 +341,6 @@ namespace ExecuteCommands_NET
 
 		if (mode == "ticker-test")
 		{
-			Application.EnableVisualStyles();
-			Application.SetCompatibleTextRenderingDefault(false);
 			var testLines = new[]
 			{
 				"info:Ticker test started",
@@ -266,6 +348,13 @@ namespace ExecuteCommands_NET
 				"warning:Ticker test message",
 				"critical:Ticker test critical alert"
 			};
+
+			if (hasOtherNaturalCommandsProcess)
+			{
+				DeliverTickerPayload(testLines);
+				return;
+			}
+
 			var testTicker = new TickerOverlayForm(testLines, cycleSeconds: 2, maxCycles: 2, topPosition: false);
 			Application.Run(testTicker);
 			return;

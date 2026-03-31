@@ -23,16 +23,17 @@ namespace NaturalCommands
         private int _currentIndex;
         private int _cycleCount;
         private readonly int _maxCycles;
+        private readonly bool _hideOnDismiss;
         private readonly System.Windows.Forms.Timer _cycleTimer;
         private readonly System.Windows.Forms.Timer _criticalPulseTimer;
         private bool _pulseVisible;
 
-        public TickerOverlayForm(IEnumerable<string> lines, int cycleSeconds = 5, int maxCycles = 3, bool topPosition = false)
-            : this(ParseMessages(lines), cycleSeconds, maxCycles, topPosition)
+        public TickerOverlayForm(IEnumerable<string> lines, int cycleSeconds = 5, int maxCycles = 3, bool topPosition = false, bool hideOnDismiss = false)
+            : this(ParseMessages(lines), cycleSeconds, maxCycles, topPosition, hideOnDismiss)
         {
         }
 
-        public TickerOverlayForm(IEnumerable<TickerMessage> messages, int cycleSeconds = 5, int maxCycles = 3, bool topPosition = false)
+        public TickerOverlayForm(IEnumerable<TickerMessage> messages, int cycleSeconds = 5, int maxCycles = 3, bool topPosition = false, bool hideOnDismiss = false)
         {
             _messages = messages?.Where(m => !string.IsNullOrWhiteSpace(m.Text)).ToList() ?? new List<TickerMessage>();
             if (_messages.Count == 0)
@@ -40,17 +41,18 @@ namespace NaturalCommands
                 _messages.Add(new TickerMessage("No notifications", TickerCategory.Info));
             }
 
-            _maxCycles = Math.Max(1, maxCycles);
+            _maxCycles = maxCycles;  // 0 means never auto-close; >0 means auto-close after N cycles
+            _hideOnDismiss = hideOnDismiss;
             InitializeComponent();
 
-            FormBorderStyle = FormBorderStyle.None;
+            FormBorderStyle = FormBorderStyle.FixedToolWindow;
             ShowInTaskbar = false;
             TopMost = true;
             BackColor = Color.FromArgb(30, 30, 30);
 
             var screen = Screen.PrimaryScreen?.WorkingArea ?? Screen.AllScreens[0].WorkingArea;
             Width = screen.Width;
-            Height = 80;
+            Height = 140;
             Left = screen.Left;
             Top = topPosition ? screen.Top : screen.Bottom - Height;
 
@@ -62,7 +64,7 @@ namespace NaturalCommands
             _labelMessage.Click += (s, e) => NextMessage();
             _buttonNext.Click += (s, e) => NextMessage();
             _buttonPrev.Click += (s, e) => PreviousMessage();
-            _buttonDismiss.Click += (s, e) => Close();
+            _buttonDismiss.Click += (s, e) => Dismiss();
 
             KeyPreview = true;
             KeyDown += TickerOverlayForm_KeyDown;
@@ -177,7 +179,7 @@ namespace NaturalCommands
         {
             if (e.KeyCode == Keys.Escape)
             {
-                Close();
+                Dismiss();
             }
             else if (e.KeyCode == Keys.Right)
             {
@@ -201,7 +203,7 @@ namespace NaturalCommands
             // maxCycles == 0 means never auto-close — user must dismiss explicitly
             if (_maxCycles > 0 && _cycleCount > _maxCycles * _messages.Count)
             {
-                Close();
+                Dismiss();
                 return;
             }
 
@@ -240,6 +242,33 @@ namespace NaturalCommands
 
         private void PreviousMessage() => ShowMessage(_currentIndex - 1);
 
+        private void Dismiss()
+        {
+            if (_hideOnDismiss)
+            {
+                Hide();
+                return;
+            }
+
+            Close();
+        }
+
+        private void EnsureVisible()
+        {
+            if (!Visible)
+            {
+                Show();
+            }
+
+            if (WindowState == FormWindowState.Minimized)
+            {
+                WindowState = FormWindowState.Normal;
+            }
+
+            BringToFront();
+            ForceTopmost();
+        }
+
         /// <summary>
         /// Thread-safe: adds a new message to the running ticker and refreshes the display.
         /// Safe to call from any thread.
@@ -255,8 +284,21 @@ namespace NaturalCommands
             _messages.Add(message);
             // Reset cycle counter so the new message gets a full set of cycles
             _cycleCount = 0;
+            EnsureVisible();
             // Show the newly added message immediately
             ShowMessage(_messages.Count - 1);
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (_hideOnDismiss && e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                Hide();
+                return;
+            }
+
+            base.OnFormClosing(e);
         }
 
         protected override void OnPaint(PaintEventArgs e)
