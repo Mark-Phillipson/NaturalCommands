@@ -43,13 +43,12 @@ namespace NaturalCommands
             _maxCycles = Math.Max(1, maxCycles);
             InitializeComponent();
 
-            // Use a tool window title bar for testing so the form can be dragged. For production overlay set to None.
-            FormBorderStyle = FormBorderStyle.FixedToolWindow;
+            FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
             BackColor = Color.FromArgb(30, 30, 30);
 
-            var screen = Screen.PrimaryScreen.WorkingArea;
+            var screen = Screen.PrimaryScreen?.WorkingArea ?? Screen.AllScreens[0].WorkingArea;
             Width = screen.Width;
             Height = 80;
             Left = screen.Left;
@@ -72,7 +71,6 @@ namespace NaturalCommands
             Load += (s, e) => ForceTopmost();
 
             ShowMessage(0);
-            UpdateNavButtons();
             _cycleTimer.Start();
         }
 
@@ -236,17 +234,9 @@ namespace NaturalCommands
             }
 
             Invalidate();
-            UpdateNavButtons();
         }
 
         private void NextMessage() => ShowMessage(_currentIndex + 1);
-
-        private void UpdateNavButtons()
-        {
-            var enableNav = _messages.Count > 1;
-            if (_buttonPrev != null) _buttonPrev.Enabled = enableNav;
-            if (_buttonNext != null) _buttonNext.Enabled = enableNav;
-        }
 
         private void PreviousMessage() => ShowMessage(_currentIndex - 1);
 
@@ -267,7 +257,6 @@ namespace NaturalCommands
             _cycleCount = 0;
             // Show the newly added message immediately
             ShowMessage(_messages.Count - 1);
-            UpdateNavButtons();
         }
 
         protected override void OnPaint(PaintEventArgs e)

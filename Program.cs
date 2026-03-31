@@ -16,12 +16,103 @@ namespace ExecuteCommands_NET
 			return Path.Combine(baseDir, ".quick_clicks_command");
 		}
 
+		private static string GetTickerPayloadFilePath()
+		{
+			var baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NaturalCommands");
+			Directory.CreateDirectory(baseDir);
+			return Path.Combine(baseDir, ".ticker_payload");
+		}
+
+		private static void StartTickerWatcher()
+		{
+			var watcherThread = new System.Threading.Thread(() =>
+			{
+				var payloadPath = GetTickerPayloadFilePath();
+				string? lastHash = null;
+
+				while (true)
+				{
+					try
+					{
+						if (File.Exists(payloadPath))
+						{
+							var content = File.ReadAllText(payloadPath);
+							if (string.IsNullOrWhiteSpace(content))
+							{
+								System.Threading.Thread.Sleep(500);
+								continue;
+							}
+
+							var currentHash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content));
+							var currentHashStr = System.Convert.ToHexString(currentHash);
+
+							// Only process if content has changed
+							if (lastHash != currentHashStr)
+							{
+								lastHash = currentHashStr;
+								var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+								if (lines.Length > 0)
+								{
+									try
+									{
+										// Create UI on a separate STA thread to display the ticker
+										System.Threading.Thread uiThread = new System.Threading.Thread(() =>
+										{
+											try
+											{
+												var ticker = new TickerOverlayForm(lines, cycleSeconds: 5, maxCycles: 5, topPosition: false);
+												Application.Run(ticker);
+											}
+											catch (Exception ex)
+											{
+												NaturalCommands.Helpers.Logger.LogError($"Failed to display ticker: {ex.Message}");
+											}
+										})
+										{
+											IsBackground = true
+										};
+
+										uiThread.TrySetApartmentState(System.Threading.ApartmentState.STA);
+										uiThread.Start();
+										NaturalCommands.Helpers.Logger.LogInfo($"Ticker overlay displayed with {lines.Length} messages (UI thread spawned)");
+									}
+									catch (Exception ex)
+									{
+										NaturalCommands.Helpers.Logger.LogError($"Failed to spawn ticker UI thread: {ex.Message}");
+									}
+								}
+							}
+						}
+
+						System.Threading.Thread.Sleep(500);
+					}
+					catch (Exception ex)
+					{
+						NaturalCommands.Helpers.Logger.LogWarning($"Ticker watcher error: {ex.Message}");
+						System.Threading.Thread.Sleep(1000);
+					}
+				}
+			})
+			{
+				IsBackground = true,
+				Name = "TickerPayloadWatcher"
+			};
+
+			watcherThread.Start();
+			NaturalCommands.Helpers.Logger.LogInfo("Ticker payload watcher started in background thread");
+		}
+
 		/// <summary>
 		///  The main entry point for the application.
 		/// </summary>
 		[STAThread]
 		static void Main()
 		{
+			// Initialize Windows Forms early (only once)
+			Application.EnableVisualStyles();
+			Application.SetCompatibleTextRenderingDefault(false);
+
 			// Initialize settings at startup
 			try
 			{
@@ -31,6 +122,16 @@ namespace ExecuteCommands_NET
 			catch (Exception ex)
 			{
 				NaturalCommands.Helpers.Logger.LogError($"Failed to load settings: {ex.Message}");
+			}
+
+			// Start background ticker watcher (monitors .ticker_payload file)
+			try
+			{
+				StartTickerWatcher();
+			}
+			catch (Exception ex)
+			{
+				NaturalCommands.Helpers.Logger.LogError($"Failed to start ticker watcher: {ex.Message}");
 			}
 
 			// -------------------------------------------------------------
@@ -146,7 +247,8 @@ namespace ExecuteCommands_NET
 				}
 			}
 			catch { }
-			Application.EnableVisualStyles();
+
+			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);
 			var ticker = new TickerOverlayForm(lines, cycleSeconds: 5, maxCycles: 5, topPosition: false);
 			Application.Run(ticker);
