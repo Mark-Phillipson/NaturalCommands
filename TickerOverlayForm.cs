@@ -43,7 +43,8 @@ namespace NaturalCommands
             _maxCycles = Math.Max(1, maxCycles);
             InitializeComponent();
 
-            FormBorderStyle = FormBorderStyle.None;
+            // Use a tool window title bar for testing so the form can be dragged. For production overlay set to None.
+            FormBorderStyle = FormBorderStyle.FixedToolWindow;
             ShowInTaskbar = false;
             TopMost = true;
             BackColor = Color.FromArgb(30, 30, 30);
@@ -71,6 +72,7 @@ namespace NaturalCommands
             Load += (s, e) => ForceTopmost();
 
             ShowMessage(0);
+            UpdateNavButtons();
             _cycleTimer.Start();
         }
 
@@ -198,7 +200,8 @@ namespace NaturalCommands
             _currentIndex = (newIndex + _messages.Count) % _messages.Count;
             _cycleCount++;
 
-            if (_cycleCount > _maxCycles * _messages.Count)
+            // maxCycles == 0 means never auto-close — user must dismiss explicitly
+            if (_maxCycles > 0 && _cycleCount > _maxCycles * _messages.Count)
             {
                 Close();
                 return;
@@ -233,9 +236,17 @@ namespace NaturalCommands
             }
 
             Invalidate();
+            UpdateNavButtons();
         }
 
         private void NextMessage() => ShowMessage(_currentIndex + 1);
+
+        private void UpdateNavButtons()
+        {
+            var enableNav = _messages.Count > 1;
+            if (_buttonPrev != null) _buttonPrev.Enabled = enableNav;
+            if (_buttonNext != null) _buttonNext.Enabled = enableNav;
+        }
 
         private void PreviousMessage() => ShowMessage(_currentIndex - 1);
 
@@ -256,6 +267,7 @@ namespace NaturalCommands
             _cycleCount = 0;
             // Show the newly added message immediately
             ShowMessage(_messages.Count - 1);
+            UpdateNavButtons();
         }
 
         protected override void OnPaint(PaintEventArgs e)

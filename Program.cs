@@ -135,7 +135,18 @@ namespace ExecuteCommands_NET
 				lines = text.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim());
 			}
 
-			Application.EnableVisualStyles();
+			// Diagnostic: log the lines read
+			try
+			{
+				NaturalCommands.Helpers.Logger.LogInfo($"Ticker invoked with {lines.Count()} lines:");
+				int idx = 0;
+				foreach (var l in lines)
+				{
+					NaturalCommands.Helpers.Logger.LogInfo($"  [{++idx}] {l}");
+				}
+			}
+			catch { }
+			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);
 			var ticker = new TickerOverlayForm(lines, cycleSeconds: 5, maxCycles: 5, topPosition: false);
 			Application.Run(ticker);

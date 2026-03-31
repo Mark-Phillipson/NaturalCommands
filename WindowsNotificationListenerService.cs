@@ -218,12 +218,18 @@ namespace NaturalCommands
         {
             lock (_formLock)
             {
-                // Active form exists — add all new messages to it via Invoke (form runs on its own STA thread)
+                // Active form exists — add all new messages to it via Invoke
                 if (_activeForm != null && !_activeForm.IsDisposed)
                 {
+                    bool invokeOk = true;
                     foreach (var line in lines)
-                        _activeForm.AddMessage(TickerOverlayForm.ParseSingleLine(line));
-                    return;
+                    {
+                        try { _activeForm.AddMessage(TickerOverlayForm.ParseSingleLine(line)); }
+                        catch { invokeOk = false; break; }
+                    }
+                    if (invokeOk) return;
+                    // Invoke failed (form closing) — fall through to create new form below
+                    _activeForm = null;
                 }
 
                 // No active form — create one entirely on a new STA thread so the handle
@@ -236,7 +242,8 @@ namespace NaturalCommands
                 {
                     System.Windows.Forms.Application.EnableVisualStyles();
                     System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
-                    var form = new TickerOverlayForm(linesCopy, cycleSeconds: 5, maxCycles: 3, topPosition: false);
+                    // maxCycles=0 → never auto-close; user must press Dismiss
+                    var form = new TickerOverlayForm(linesCopy, cycleSeconds: 5, maxCycles: 0, topPosition: false);
                     form.FormClosed += (s, e) => { lock (_formLock) { _activeForm = null; } };
                     // Force handle creation on this thread before signalling
                     var _ = form.Handle;
