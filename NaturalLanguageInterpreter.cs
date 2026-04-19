@@ -1620,27 +1620,45 @@ namespace NaturalCommands
                         Helpers.Logger.LogDebug($"Visual identify: top candidate is '{candidates[0].Label}' (confidence {candidates[0].Confidence:0.00}, source '{candidates[0].Source}').");
                     }
 
-                    if (candidates.Count >= 1 && candidates[0].Confidence >= workaroundMinConfidence)
+                    if (candidates.Count >= 1)
                     {
-                        // Safer default: require the top candidate to be from UIA before auto-clicking.
-                        // OCR-only high-confidence results can be noisy and cause accidental clicks.
-                        if (string.Equals(candidates[0].Source, "uia", StringComparison.OrdinalIgnoreCase))
+                        bool isSingle = candidates.Count == 1;
+                        double requiredConfidence = isSingle ? confidenceThreshold : workaroundMinConfidence;
+                        if (candidates[0].Confidence >= requiredConfidence)
                         {
-                            shouldAutoClickTop = true;
-                            if (candidates.Count == 1)
+                            if (isSingle)
                             {
-                                autoClickReason = "single candidate workaround (uia)";
+                                // If there's only one candidate and it meets the configured auto-click
+                                // confidence threshold, auto-click it regardless of source (uia/ocr/cloud).
+                                shouldAutoClickTop = true;
+                                autoClickReason = "single candidate (confidence threshold)";
                             }
                             else
                             {
-                                var top = candidates[0];
-                                var second = candidates[1];
-                                autoClickReason = $"top candidate workaround (uia) ({top.Confidence:0.00} vs {second.Confidence:0.00})";
+                                // Safer default for multiple candidates: require the top candidate to be from UIA before auto-clicking.
+                                if (string.Equals(candidates[0].Source, "uia", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    shouldAutoClickTop = true;
+                                    var top = candidates[0];
+                                    var second = candidates.Count > 1 ? candidates[1] : null;
+                                    if (second == null)
+                                    {
+                                        autoClickReason = "single candidate workaround (uia)";
+                                    }
+                                    else
+                                    {
+                                        autoClickReason = $"top candidate workaround (uia) ({top.Confidence:0.00} vs {second.Confidence:0.00})";
+                                    }
+                                }
+                                else
+                                {
+                                    Helpers.Logger.LogInfo($"Visual identify: top candidate source is '{candidates[0].Source}' - skipping auto-click to avoid OCR-only auto-clicks for multi-candidate results.");
+                                }
                             }
                         }
                         else
                         {
-                            Helpers.Logger.LogInfo($"Visual identify: top candidate source is '{candidates[0].Source}' - skipping auto-click to avoid OCR-only auto-clicks.");
+                            Helpers.Logger.LogInfo($"Visual identify: top candidate confidence {candidates[0].Confidence:0.00} below required {requiredConfidence:0.00}; not auto-clicking.");
                         }
                     }
 

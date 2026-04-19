@@ -787,11 +787,14 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                 var dx = ca.X - cb.X;
                 var dy = ca.Y - cb.Y;
                 var distSq = dx * dx + dy * dy;
-                // Use an averaged size-based hint and be slightly more permissive
+                // Use an averaged size-based hint but be less aggressive to avoid merging
+                // distinct nearby tiles (reduce multiplier from 1.5 to 1.0 and clamp).
                 var maxA = Math.Max(a.Bounds.Width, a.Bounds.Height);
                 var maxB = Math.Max(b.Bounds.Width, b.Bounds.Height);
                 var avgMax = (maxA + maxB) / 2.0;
-                var sizeHint = Math.Max(48, (int)Math.Round(avgMax * 1.5));
+                var sizeHint = Math.Max(24, (int)Math.Round(avgMax * 1.0));
+                var maxSizeHint = 160;
+                if (sizeHint > maxSizeHint) sizeHint = maxSizeHint;
 
                 Logger.LogDebug($"ShouldMergeCandidates: labelsSimilar=true, centers distSq={distSq}, sizeHint={sizeHint}");
 

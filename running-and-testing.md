@@ -13,7 +13,7 @@ dotnet publish ./NaturalCommands.csproj -c Release -f net10.0-windows -r win-x64
   --self-contained true -p:PublishSingleFile=true `
   -o "./bin/Release/net10.0-windowsdotnet clean NaturalCommands.csproj/win-x64/publish"
 
-## Publish and register Startup (one command)
+## Publish and No Startup (one command)
 You can publish and create a per-user Startup shortcut with the included script (no admin required for the Startup shortcut):
 
 ```pwsh
