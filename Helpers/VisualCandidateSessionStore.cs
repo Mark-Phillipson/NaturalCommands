@@ -26,6 +26,7 @@ namespace NaturalCommands.Helpers
             public double Confidence { get; set; }
             public string Reason { get; set; } = string.Empty;
             public string Source { get; set; } = "uia";
+            public string CandidateId { get; set; } = string.Empty;
         }
 
         private sealed class PersistedSession
@@ -90,6 +91,23 @@ namespace NaturalCommands.Helpers
             }
         }
 
+        public static bool TryGetCandidate(string candidateId, out VisualTargetCandidate? candidate)
+        {
+            lock (_lock)
+            {
+                candidate = null;
+                var session = GetSession();
+                if (session == null || string.IsNullOrWhiteSpace(candidateId))
+                {
+                    return false;
+                }
+
+                candidate = session.Candidates
+                    .FirstOrDefault(c => string.Equals(c.CandidateId, candidateId, StringComparison.OrdinalIgnoreCase));
+                return candidate != null;
+            }
+        }
+
         private static void SaveToDisk(VisualTargetSession session)
         {
             try
@@ -113,7 +131,8 @@ namespace NaturalCommands.Helpers
                         Height = c.Bounds.Height,
                         Confidence = c.Confidence,
                         Reason = c.Reason,
-                        Source = c.Source
+                        Source = c.Source,
+                        CandidateId = c.CandidateId
                     }).ToList()
                 };
 
@@ -157,7 +176,8 @@ namespace NaturalCommands.Helpers
                         Bounds = new System.Drawing.Rectangle(c.X, c.Y, c.Width, c.Height),
                         Confidence = c.Confidence,
                         Reason = c.Reason,
-                        Source = c.Source
+                        Source = c.Source,
+                        CandidateId = string.IsNullOrWhiteSpace(c.CandidateId) ? Guid.NewGuid().ToString() : c.CandidateId
                     }).ToList()
                 };
             }

@@ -38,6 +38,8 @@ namespace NaturalCommands.Helpers
             public string Label { get; set; } = "";
             public AutomationElement Element { get; set; } = null!;
             public string Name { get; set; } = "";
+            // Additional textual candidates extracted from the element for improved matching
+            public System.Collections.Generic.List<string> TextCandidates { get; set; } = new System.Collections.Generic.List<string>();
             public string ControlType { get; set; } = "";
         }
 
@@ -113,6 +115,13 @@ namespace NaturalCommands.Helpers
                 // Walk the tree and collect clickable elements
                 WalkElements(rootElement, clickableElements, 0, 500); // Limit to 500 elements
 
+                // Post-process to coalesce adjacent/related text elements (conservative merge)
+                try
+                {
+                    clickableElements = MergeAdjacentTextElements(clickableElements);
+                }
+                catch { }
+
                 Logger.LogDebug($"Found {clickableElements.Count} clickable elements.");
             }
             catch (Exception ex)
@@ -121,6 +130,53 @@ namespace NaturalCommands.Helpers
             }
 
             return clickableElements;
+        }
+
+        private static System.Collections.Generic.List<ClickableElement> MergeAdjacentTextElements(System.Collections.Generic.List<ClickableElement> elements)
+        {
+            var merged = new System.Collections.Generic.List<ClickableElement>();
+            if (elements == null || elements.Count == 0) return merged;
+
+            // Sort by vertical then horizontal position
+            var sorted = elements.OrderBy(e => e.Bounds.Top).ThenBy(e => e.Bounds.Left).ToList();
+
+            foreach (var el in sorted)
+            {
+                bool mergedIntoExisting = false;
+                for (int i = merged.Count - 1; i >= 0; i--)
+                {
+                    var m = merged[i];
+                    // conservative criteria: vertical overlap or small vertical gap + small horizontal gap
+                    var verticalOverlap = Math.Max(0, Math.Min(m.Bounds.Bottom, el.Bounds.Bottom) - Math.Max(m.Bounds.Top, el.Bounds.Top));
+                    var vertGap = Math.Abs(m.Bounds.Top - el.Bounds.Top);
+                    var horizGap = Math.Abs((m.Bounds.Right) - el.Bounds.Left);
+                    if (verticalOverlap > 0 || (vertGap <= 16 && horizGap <= 48))
+                    {
+                        // merge
+                        var newBounds = System.Drawing.Rectangle.Union(m.Bounds, el.Bounds);
+                        var newNameParts = new System.Collections.Generic.List<string>();
+                        if (!string.IsNullOrWhiteSpace(m.Name)) newNameParts.Add(m.Name);
+                        if (!string.IsNullOrWhiteSpace(el.Name) && !string.Equals(el.Name, m.Name, StringComparison.OrdinalIgnoreCase)) newNameParts.Add(el.Name);
+                        var newTextCandidates = new System.Collections.Generic.List<string>();
+                        if (m.TextCandidates != null) newTextCandidates.AddRange(m.TextCandidates);
+                        if (el.TextCandidates != null) newTextCandidates.AddRange(el.TextCandidates);
+                        newTextCandidates = newTextCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+                        m.Bounds = newBounds;
+                        m.Name = string.Join(" ", newNameParts).Trim();
+                        m.TextCandidates = newTextCandidates;
+                        mergedIntoExisting = true;
+                        break;
+                    }
+                }
+
+                if (!mergedIntoExisting)
+                {
+                    merged.Add(el);
+                }
+            }
+
+            return merged;
         }
 
         /// <summary>
@@ -233,11 +289,33 @@ namespace NaturalCommands.Helpers
                         var controlType = GetControlTypeName(element.Current.ControlType);
                         if (isTextBox) controlType = "TextBox";
 
+                        var textCandidates = new System.Collections.Generic.List<string>();
+                        try
+                        {
+                            var aid = element.Current.AutomationId;
+                            if (!string.IsNullOrWhiteSpace(aid)) textCandidates.Add(aid);
+                        }
+                        catch { }
+                        try
+                        {
+                            var help = element.GetCurrentPropertyValue(AutomationElement.HelpTextProperty) as string;
+                            if (!string.IsNullOrWhiteSpace(help)) textCandidates.Add(help);
+                        }
+                        catch { }
+                        try
+                        {
+                            var status = element.Current.ItemStatus;
+                            if (!string.IsNullOrWhiteSpace(status)) textCandidates.Add(status);
+                        }
+                        catch { }
+                        if (!string.IsNullOrWhiteSpace(name)) textCandidates.Insert(0, name);
+
                         clickableElements.Add(new ClickableElement
                         {
                             Bounds = bounds,
                             Element = element,
                             Name = name,
+                            TextCandidates = textCandidates,
                             ControlType = controlType
                         });
                     }

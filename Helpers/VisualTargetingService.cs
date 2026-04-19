@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using NaturalCommands.Models;
+using NaturalCommands;
 
 namespace NaturalCommands.Helpers
 {
@@ -30,6 +31,26 @@ namespace NaturalCommands.Helpers
             var currentProcessName = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName() ?? string.Empty;
             Logger.LogInfo($"VisualTargetingService: IdentifyCandidates called - phrase='{phrase}', normalized='{normalizedPhrase}', currentProcess='{currentProcessName}'.");
             
+            // Capture a screenshot once and pass it through to vision/OCR paths
+            ScreenCaptureResult? preCapture = null;
+            try
+            {
+                var fg = WindowUtils.GetForegroundWindowBounds();
+                if (fg != System.Drawing.Rectangle.Empty)
+                {
+                    preCapture = ScreenCaptureService.CaptureRegionJpeg(fg, maxLongEdge: 1400, quality: 60);
+                }
+                else
+                {
+                    preCapture = ScreenCaptureService.CaptureAllScreensJpeg(maxLongEdge: 1400, quality: 60);
+                }
+                Logger.LogDebug($"VisualTargetingService: preCapture VirtualBounds={preCapture.VirtualBounds.Left},{preCapture.VirtualBounds.Top},{preCapture.VirtualBounds.Width}x{preCapture.VirtualBounds.Height}; image={preCapture.Width}x{preCapture.Height}.");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning($"VisualTargetingService: pre-capture failed: {ex.Message}");
+                try { preCapture = ScreenCaptureService.CaptureAllScreensJpeg(maxLongEdge: 1400, quality: 60); } catch { preCapture = null; }
+            }
             var preferOcrForCurrentApp = ShouldPreferOcrForApp(currentProcessName)
                 && !string.Equals(settings.FallbackMode, "uia-only", StringComparison.OrdinalIgnoreCase);
 
@@ -60,7 +81,7 @@ namespace NaturalCommands.Helpers
             List<VisualTargetCandidate> candidates = new();
             if (CanUseCloudVision(settings))
             {
-                candidates = TryFromCloudVision(normalizedPhrase, settings);
+                candidates = TryFromCloudVision(normalizedPhrase, settings, preCapture);
             }
 
             if (candidates.Count == 0)
@@ -81,7 +102,7 @@ namespace NaturalCommands.Helpers
                 if (shouldTryOcr)
                 {
                     Logger.LogDebug($"VisualTargetingService: attempting OCR for phrase '{normalizedPhrase}'.");
-                    var ocrCandidates = TryFromLocalOcr(normalizedPhrase);
+                    var ocrCandidates = TryFromLocalOcr(normalizedPhrase, preCapture);
                     Logger.LogDebug($"VisualTargetingService: OCR returned {ocrCandidates.Count} candidates.");
                     if (candidates.Count == 0)
                     {
@@ -391,9 +412,12 @@ namespace NaturalCommands.Helpers
                 {
                     var sampleNames = elements
                         .Take(20)
-                        .Select(e => string.IsNullOrWhiteSpace(e.Name) ? "<empty>" : e.Name)
+                        .Select(e => {
+                            var tc = (e.TextCandidates != null && e.TextCandidates.Count > 0) ? string.Join("|", e.TextCandidates.Take(3)) : "";
+                            return string.IsNullOrWhiteSpace(e.Name) ? (string.IsNullOrWhiteSpace(tc) ? "<empty>" : $"[{tc}]") : (string.IsNullOrWhiteSpace(tc) ? e.Name : $"{e.Name} [{tc}]");
+                        })
                         .ToList();
-                    Logger.LogDebug($"TryFromUiAutomation: sample element names: {string.Join(", ", sampleNames)}");
+                    Logger.LogDebug($"TryFromUiAutomation: sample element names/candidates: {string.Join(", ", sampleNames)}");
                 }
 
                 var matches = new List<VisualTargetCandidate>();
@@ -469,22 +493,30 @@ namespace NaturalCommands.Helpers
                             }
                         }
 
-                        if (!tokens.All(t => loweredName.Contains(t)))
+                        // Combine Name plus any other textual candidates (AutomationId, HelpText, etc.)
+                        var combinedText = loweredName;
+                        if (element.TextCandidates != null && element.TextCandidates.Count > 0)
                         {
-                            Logger.LogDebug($"TryFromUiAutomation: skipping element '{name}' - not all tokens found. Tokens: {string.Join(", ", tokens)}, Element name: '{loweredName}'.");
+                            combinedText += " " + string.Join(" ", element.TextCandidates).ToLowerInvariant();
+                        }
+
+                        var allowFuzzy = AppSettings.Instance.VisualTargeting.AllowFuzzyMatching;
+                        if (!MatchesTokens(combinedText, loweredPhrase, allowFuzzy))
+                        {
+                            Logger.LogDebug($"TryFromUiAutomation: skipping element '{name}' - not all tokens found. Tokens: {string.Join(", ", tokens)}, Element text: '{combinedText}'.");
                             continue;
                         }
 
                         score = 0.55;
-                        if (string.Equals(loweredName, loweredPhrase, StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(combinedText, loweredPhrase, StringComparison.OrdinalIgnoreCase))
                         {
                             score = 0.95;
                         }
-                        else if (loweredName.StartsWith(loweredPhrase, StringComparison.OrdinalIgnoreCase))
+                        else if (combinedText.StartsWith(loweredPhrase, StringComparison.OrdinalIgnoreCase))
                         {
                             score = 0.86;
                         }
-                        else if (ContainsWholePhrase(loweredName, loweredPhrase))
+                        else if (ContainsWholePhrase(combinedText, loweredPhrase))
                         {
                             score = 0.78;
                         }
@@ -511,13 +543,22 @@ namespace NaturalCommands.Helpers
             }
         }
 
-        private static List<VisualTargetCandidate> TryFromLocalOcr(string phrase)
+        private static List<VisualTargetCandidate> TryFromLocalOcr(string phrase, ScreenCaptureResult? preCapture = null)
         {
             try
             {
                 // Run OCR on a background thread to avoid SynchronizationContext deadlock
                 // The UI thread might be blocked waiting, and OCR operations need to marshal back to UI context
-                var candidates = Task.Run(async () => await LocalOcrService.FindCandidatesAsync(phrase)).GetAwaiter().GetResult();
+                List<VisualTargetCandidate> candidates;
+                if (preCapture != null)
+                {
+                    candidates = Task.Run(async () => await LocalOcrService.FindCandidatesAsync(phrase, preCapture)).GetAwaiter().GetResult();
+                }
+                else
+                {
+                    candidates = Task.Run(async () => await LocalOcrService.FindCandidatesAsync(phrase)).GetAwaiter().GetResult();
+                }
+
                 if (candidates.Count > 0)
                 {
                     Logger.LogDebug($"VisualTargetingService: OCR fallback returned {candidates.Count} candidates for '{phrase}'.");
@@ -675,6 +716,77 @@ namespace NaturalCommands.Helpers
 
             var pattern = $@"\b{Regex.Escape(phrase)}\b";
             return Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase);
+        }
+
+        // Public helper used by tests and matching logic: checks whether all tokens
+        // from the phrase are present in the text. If allowFuzzy is true, small
+        // edit-distance (Levenshtein) matches are accepted for individual tokens.
+        public static bool MatchesTokens(string text, string phrase, bool allowFuzzy = false)
+        {
+            if (string.IsNullOrWhiteSpace(phrase) || string.IsNullOrWhiteSpace(text)) return false;
+
+            var loweredText = text.ToLowerInvariant();
+            var tokens = phrase.ToLowerInvariant()
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Distinct()
+                .ToArray();
+
+            foreach (var token in tokens)
+            {
+                if (string.IsNullOrWhiteSpace(token)) continue;
+
+                // exact whole-word match
+                if (Regex.IsMatch(loweredText, $@"\b{Regex.Escape(token)}\b", RegexOptions.IgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!allowFuzzy)
+                {
+                    return false;
+                }
+
+                // fuzzy: compare token to individual words from the text
+                var words = Regex.Split(loweredText, "\\W+").Where(w => !string.IsNullOrWhiteSpace(w)).ToArray();
+                bool matched = false;
+                foreach (var w in words)
+                {
+                    var dist = LevenshteinDistance(w, token);
+                    if (dist <= 1)
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if (!matched) return false;
+            }
+
+            return true;
+        }
+
+        private static int LevenshteinDistance(string a, string b)
+        {
+            if (a == b) return 0;
+            if (string.IsNullOrEmpty(a)) return b?.Length ?? 0;
+            if (string.IsNullOrEmpty(b)) return a.Length;
+
+            var la = a.Length;
+            var lb = b.Length;
+            var d = new int[la + 1, lb + 1];
+            for (int i = 0; i <= la; i++) d[i, 0] = i;
+            for (int j = 0; j <= lb; j++) d[0, j] = j;
+
+            for (int i = 1; i <= la; i++)
+            {
+                for (int j = 1; j <= lb; j++)
+                {
+                    int cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+                    d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
+                }
+            }
+
+            return d[la, lb];
         }
 
         /// <summary>

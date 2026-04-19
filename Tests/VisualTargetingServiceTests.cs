@@ -46,5 +46,16 @@ namespace NaturalCommands_NET.Tests
             var results = VisualTargetingService.GetCloudVisionCandidates("any phrase");
             Assert.Empty(results);
         }
+
+        [Fact]
+        public void MatchesTokens_BasicAndFuzzy()
+        {
+            // exact tokens present
+            Assert.True(VisualTargetingService.MatchesTokens("File Save As", "save as", false));
+            Assert.False(VisualTargetingService.MatchesTokens("File Save As", "open file", false));
+
+            // small typo allowed when fuzzy matching is enabled
+            Assert.True(VisualTargetingService.MatchesTokens("File Save As", "sve", true));
+        }
     }
 }

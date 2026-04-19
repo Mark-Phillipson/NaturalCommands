@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Runtime.InteropServices;
+using NaturalCommands.Helpers;
 using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Windows.Forms;
@@ -52,6 +54,37 @@ namespace NaturalCommands
             };
         }
 
+        // Low-level keyboard hook to capture numeric key presses while overlay is visible
+        private const int WH_KEYBOARD_LL = 13;
+        private const int WM_KEYDOWN = 0x0100;
+        private const int WM_SYSKEYDOWN = 0x0104;
+
+        private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+        private static LowLevelKeyboardProc? _keyboardProc;
+        private static IntPtr _hookId = IntPtr.Zero;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetCursorPos(int X, int Y);
+
+        [DllImport("user32.dll")]
+        private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, int dwExtraInfo);
+
+        private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+        private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+
         public static void InitializeUIContext()
         {
             _uiContext = System.Threading.SynchronizationContext.Current;
@@ -83,7 +116,8 @@ namespace NaturalCommands
                 {
                     _instance.Show();
                 }
-
+                EnsureKeyboardHookInstalled();
+                
                 _instance.BringToFront();
                 _instance.Invalidate();
             }
@@ -106,6 +140,116 @@ namespace NaturalCommands
 
                 _instance._timeoutTimer.Stop();
                 _instance.Hide();
+                EnsureKeyboardHookRemoved();
+            }
+        }
+
+        private static void EnsureKeyboardHookInstalled()
+        {
+            try
+            {
+                if (_hookId != IntPtr.Zero) return;
+                _keyboardProc = KeyboardHookCallback;
+                using var curProcess = System.Diagnostics.Process.GetCurrentProcess();
+                using var curModule = curProcess.MainModule;
+                var moduleHandle = GetModuleHandle(curModule?.ModuleName ?? string.Empty);
+                _hookId = SetWindowsHookEx(WH_KEYBOARD_LL, _keyboardProc!, moduleHandle, 0);
+                Logger.LogDebug($"VisualCandidateOverlayForm: keyboard hook installed (hookId={_hookId})");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"VisualCandidateOverlayForm: failed to install keyboard hook: {ex.Message}");
+            }
+        }
+
+        private static void EnsureKeyboardHookRemoved()
+        {
+            try
+            {
+                if (_hookId == IntPtr.Zero) return;
+                UnhookWindowsHookEx(_hookId);
+                _hookId = IntPtr.Zero;
+                _keyboardProc = null;
+                Logger.LogDebug("VisualCandidateOverlayForm: keyboard hook removed");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"VisualCandidateOverlayForm: failed to remove keyboard hook: {ex.Message}");
+            }
+        }
+
+        private static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            try
+            {
+                if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
+                {
+                    int vkCode = Marshal.ReadInt32(lParam);
+                    int num = -1;
+                    // Top-row digits '0'..'9'
+                    if (vkCode >= 0x30 && vkCode <= 0x39)
+                        num = vkCode - 0x30;
+                    // Numpad digits
+                    else if (vkCode >= 0x60 && vkCode <= 0x69)
+                        num = vkCode - 0x60;
+
+                    // ESC -> cancel overlay
+                    if (vkCode == 0x1B)
+                    {
+                        _instance?.BeginInvoke(new Action(() => HideOverlay()));
+                        return (IntPtr)1;
+                    }
+
+                    if (num >= 1)
+                    {
+                        // Dispatch to instance to handle safe UI interaction
+                        _instance?.BeginInvoke(new Action(() => _instance?.HandleNumberKey(num)));
+                        // Swallow the key so underlying app doesn't receive it
+                        return (IntPtr)1;
+                    }
+                }
+            }
+            catch { }
+            return CallNextHookEx(_hookId, nCode, wParam, lParam);
+        }
+
+        private void HandleNumberKey(int number)
+        {
+            try
+            {
+                if (!Helpers.VisualCandidateSessionStore.TryGetCandidate(number, out var candidate) || candidate == null)
+                {
+                    // no candidate for this number
+                    Logger.LogDebug($"No visual candidate for number {number}");
+                    return;
+                }
+
+                // Close/hide overlay first so the click reaches underlying window
+                HideOverlay();
+                System.Threading.Thread.Sleep(30);
+
+                var session = Helpers.VisualCandidateSessionStore.GetSession();
+                var point = Helpers.VisualTargetClickPointResolver.Resolve(candidate, session?.Query ?? string.Empty);
+                if (point == System.Drawing.Point.Empty)
+                    point = candidate.Center;
+
+                Logger.LogInfo($"Visual overlay: keyed choose {number} -> click point ({point.X},{point.Y}) for '{candidate.Label}'");
+
+                System.Drawing.Point prev = System.Windows.Forms.Cursor.Position;
+                SetCursorPos(point.X, point.Y);
+                System.Threading.Thread.Sleep(35);
+                mouse_event(MOUSEEVENTF_LEFTDOWN, point.X, point.Y, 0, 0);
+                System.Threading.Thread.Sleep(20);
+                mouse_event(MOUSEEVENTF_LEFTUP, point.X, point.Y, 0, 0);
+                System.Threading.Thread.Sleep(70);
+
+                try { SetCursorPos(prev.X, prev.Y); } catch { }
+
+                Helpers.VisualCandidateSessionStore.Clear();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"HandleNumberKey error: {ex.Message}");
             }
         }
 
@@ -121,10 +265,37 @@ namespace NaturalCommands
             for (int i = 0; i < _candidates.Count; i++)
             {
                 var candidate = _candidates[i];
-                var center = candidate.Center;
-                var centerInOverlay = new Point(center.X - virtualX, center.Y - virtualY);
+                // Position marker near the candidate bounding rect top-right (more visually stable
+                // for grid-like tiles). Compute candidate rect relative to the overlay virtual origin.
+                var candidateRectInOverlay = new Rectangle(
+                    candidate.Bounds.Left - virtualX,
+                    candidate.Bounds.Top - virtualY,
+                    candidate.Bounds.Width,
+                    candidate.Bounds.Height);
 
-                var markerRect = new Rectangle(centerInOverlay.X - 18, centerInOverlay.Y - 18, 36, 36);
+                int markerLeft = Math.Max(2, candidateRectInOverlay.Right - 28);
+                int markerTop = Math.Max(2, candidateRectInOverlay.Top + 6);
+                var markerRect = new Rectangle(markerLeft, markerTop, 36, 36);
+
+                // Draw candidate bounding rect for clarity
+                Color rectColor = string.Equals(candidate.Source, "uia", StringComparison.OrdinalIgnoreCase)
+                    ? Color.FromArgb(200, 0, 200, 0)
+                    : Color.FromArgb(200, 34, 139, 230);
+                using var rectPen = new Pen(rectColor, 2) { DashStyle = DashStyle.Solid };
+                var outlineRect = candidateRectInOverlay;
+                // inflate slightly so the rectangle is visible
+                outlineRect.Inflate(2, 2);
+                graphics.DrawRectangle(rectPen, outlineRect);
+
+                // Draw label snippet near the marker
+                var label = candidate.Label ?? string.Empty;
+                var shortLabel = label.Length > 28 ? label.Substring(0, 25) + "..." : label;
+                var labelSize = graphics.MeasureString(shortLabel, _hintFont);
+                var labelBg = new RectangleF(markerRect.Right + 6, markerRect.Y - 2, labelSize.Width + 8, labelSize.Height + 4);
+                using var labelFill = new SolidBrush(Color.FromArgb(210, 0, 0, 0));
+                graphics.FillRectangle(labelFill, labelBg);
+                graphics.DrawString(shortLabel, _hintFont, Brushes.White, labelBg.X + 4, labelBg.Y + 2);
+
                 using var fill = new SolidBrush(Color.FromArgb(220, 34, 139, 230));
                 using var border = new Pen(Color.FromArgb(240, 255, 255, 255), 2);
                 graphics.FillEllipse(fill, markerRect);

@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Override SmartComponents.LocalEmbeddings defaults to use local files in the repo to avoid network downloads during build -->
+    <LocalEmbeddingsModelPath>$(MSBuildThisFileDirectory).localembeddings\model_quantized.onnx</LocalEmbeddingsModelPath>
+    <LocalEmbeddingsVocabPath>$(MSBuildThisFileDirectory).localembeddings\vocab.txt</LocalEmbeddingsVocabPath>
+  </PropertyGroup>
+</Project>

@@ -10,6 +10,7 @@ namespace NaturalCommands.Models
         public double Confidence { get; set; }
         public string Reason { get; set; } = string.Empty;
         public string Source { get; set; } = "uia";
+        public string CandidateId { get; set; } = Guid.NewGuid().ToString();
 
         public Point Center => new Point(Bounds.Left + (Bounds.Width / 2), Bounds.Top + (Bounds.Height / 2));
     }

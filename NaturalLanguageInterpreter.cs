@@ -1607,13 +1607,8 @@ namespace NaturalCommands
                         return $"No visual match found for '{visualIdentify.TargetPhrase}'.";
                     }
 
-                    var session = new Models.VisualTargetSession
-                    {
-                        Query = visualIdentify.TargetPhrase,
-                        CreatedUtc = DateTime.UtcNow,
-                        Candidates = candidates
-                    };
-                    Helpers.VisualCandidateSessionStore.SetSession(session);
+                    // Session and persisted ordering will be created only if we show the overlay
+                    // (we want the overlay numbering to match the persisted session order).
 
                     bool shouldAutoClickTop = false;
                     string autoClickReason = string.Empty;
@@ -1627,16 +1622,25 @@ namespace NaturalCommands
 
                     if (candidates.Count >= 1 && candidates[0].Confidence >= workaroundMinConfidence)
                     {
-                        shouldAutoClickTop = true;
-                        if (candidates.Count == 1)
+                        // Safer default: require the top candidate to be from UIA before auto-clicking.
+                        // OCR-only high-confidence results can be noisy and cause accidental clicks.
+                        if (string.Equals(candidates[0].Source, "uia", StringComparison.OrdinalIgnoreCase))
                         {
-                            autoClickReason = "single candidate workaround";
+                            shouldAutoClickTop = true;
+                            if (candidates.Count == 1)
+                            {
+                                autoClickReason = "single candidate workaround (uia)";
+                            }
+                            else
+                            {
+                                var top = candidates[0];
+                                var second = candidates[1];
+                                autoClickReason = $"top candidate workaround (uia) ({top.Confidence:0.00} vs {second.Confidence:0.00})";
+                            }
                         }
                         else
                         {
-                            var top = candidates[0];
-                            var second = candidates[1];
-                            autoClickReason = $"top candidate workaround ({top.Confidence:0.00} vs {second.Confidence:0.00})";
+                            Helpers.Logger.LogInfo($"Visual identify: top candidate source is '{candidates[0].Source}' - skipping auto-click to avoid OCR-only auto-clicks.");
                         }
                     }
 
@@ -1663,8 +1667,24 @@ namespace NaturalCommands
                         Helpers.Logger.LogInfo($"ExecuteActionAsync: NOT auto-clicking - confidence too low. Top: {candidates[0].Confidence:0.00} < threshold: {workaroundMinConfidence:0.00}.");
                     }
 
-                    VisualCandidateOverlayForm.ShowCandidates(candidates, AppSettings.Instance.VisualTargeting.OverlayTimeoutMs);
-                    return $"Found {candidates.Count} visual candidates for '{visualIdentify.TargetPhrase}'. Say 'choose 1' to 'choose {candidates.Count}'.";
+                    // Reorder candidates for display (top-to-bottom, left-to-right) so numbering
+                    // follows the visual layout. Persist this ordering in the session so
+                    // spoken "choose N" maps to the displayed numbers.
+                    var displayCandidates = candidates
+                        .OrderBy(c => c.Bounds.Top)
+                        .ThenBy(c => c.Bounds.Left)
+                        .ToList();
+
+                    var session2 = new Models.VisualTargetSession
+                    {
+                        Query = visualIdentify.TargetPhrase,
+                        CreatedUtc = DateTime.UtcNow,
+                        Candidates = displayCandidates
+                    };
+                    Helpers.VisualCandidateSessionStore.SetSession(session2);
+
+                    VisualCandidateOverlayForm.ShowCandidates(displayCandidates, AppSettings.Instance.VisualTargeting.OverlayTimeoutMs);
+                    return $"Found {displayCandidates.Count} visual candidates for '{visualIdentify.TargetPhrase}'. Say 'choose 1' to 'choose {displayCandidates.Count}'.";
                 }
                 catch (Exception ex)
                 {

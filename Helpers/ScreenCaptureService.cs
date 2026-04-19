@@ -39,6 +39,32 @@ namespace NaturalCommands.Helpers
             };
         }
 
+        public static ScreenCaptureResult CaptureRegionJpeg(Rectangle region, int maxLongEdge = 1400, long quality = 55)
+        {
+            if (region.Width <= 0 || region.Height <= 0)
+            {
+                return CaptureAllScreensJpeg(maxLongEdge, quality);
+            }
+
+            using var bitmap = new Bitmap(region.Width, region.Height);
+            using (var graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.CopyFromScreen(region.Left, region.Top, 0, 0, region.Size, CopyPixelOperation.SourceCopy);
+            }
+
+            using var resized = ResizeToMaxLongEdge(bitmap, maxLongEdge);
+            using var memory = new MemoryStream();
+            SaveAsJpeg(resized, memory, quality);
+
+            return new ScreenCaptureResult
+            {
+                VirtualBounds = region,
+                Width = resized.Width,
+                Height = resized.Height,
+                ImageBase64Jpeg = Convert.ToBase64String(memory.ToArray())
+            };
+        }
+
         private static Bitmap ResizeToMaxLongEdge(Bitmap source, int maxLongEdge)
         {
             if (maxLongEdge <= 0)

@@ -465,6 +465,9 @@ namespace NaturalCommands.Models
         /// <summary>Overlay timeout in milliseconds for numbered candidate display.</summary>
         public int OverlayTimeoutMs { get; set; } = 9000;
 
+        /// <summary>Allow small fuzzy matches when matching tokens (may increase false positives).</summary>
+        public bool AllowFuzzyMatching { get; set; } = false;
+
         /// <summary>UTC date (yyyy-MM-dd) when cloud call usage was last tracked.</summary>
         public string CloudUsageDateUtc { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd");
 

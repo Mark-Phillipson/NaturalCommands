@@ -17,6 +17,228 @@ namespace NaturalCommands.Helpers
 {
     public static class LocalOcrService
     {
+        public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string phrase, ScreenCaptureResult preCapture)
+        {
+            Bitmap? screenshot = null;
+            try
+            {
+                var normalized = (phrase ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(normalized))
+                {
+                    return new List<VisualTargetCandidate>();
+                }
+
+                // start with basic word tokens
+                var tokenList = normalized
+                    .ToLowerInvariant()
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Distinct()
+                    .ToList();
+
+                // if this is a card phrase, add useful synonyms (abbreviated rank and suit symbol)
+                var requestedCard = TryParseCardPhrase(normalized);
+                if (requestedCard != null)
+                {
+                    string rankAbbrev = RankToAbbreviation(requestedCard.Value.rank);
+                    if (!string.IsNullOrWhiteSpace(rankAbbrev) && !tokenList.Contains(rankAbbrev))
+                    {
+                        tokenList.Add(rankAbbrev);
+                    }
+
+                    string suitSymbol = SuitToSymbol(requestedCard.Value.suit);
+                    if (!string.IsNullOrWhiteSpace(suitSymbol) && !tokenList.Contains(suitSymbol))
+                    {
+                        tokenList.Add(suitSymbol);
+                    }
+
+                    // also include suit name alone (e.g. "clubs") which may appear on cards
+                    if (!tokenList.Contains(requestedCard.Value.suit))
+                    {
+                        tokenList.Add(requestedCard.Value.suit);
+                    }
+                }
+
+                var tokens = tokenList.ToArray();
+
+                if (tokens.Length == 0)
+                {
+                    return new List<VisualTargetCandidate>();
+                }
+
+                Logger.LogDebug($"LocalOcrService.FindCandidatesAsync (preCapture): searching for '{phrase}' with tokens: {string.Join(", ", tokens)}.");
+
+                OcrResult? ocrResult = null;
+                Rectangle virtualBounds = Rectangle.Empty;
+                
+                try
+                {
+                    // Use provided capture bounds, falling back to foreground window if missing
+                    virtualBounds = preCapture.VirtualBounds;
+                    if (virtualBounds == Rectangle.Empty)
+                    {
+                        virtualBounds = WindowUtils.GetForegroundWindowBounds();
+                    }
+
+                    // Load screenshot bitmap from base64
+                    var bytes = Convert.FromBase64String(preCapture.ImageBase64Jpeg);
+                    using var ms = new MemoryStream(bytes);
+                    screenshot = new Bitmap(ms);
+                    Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: screenshot bitmap loaded, size={screenshot.Width}x{screenshot.Height}.");
+
+                    // Downscale screenshot if it's too large (OCR can hang on very large images)
+                    if (screenshot.Width > 2560 || screenshot.Height > 1440)
+                    {
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: screenshot is large ({screenshot.Width}x{screenshot.Height}), downscaling for OCR...");
+                        double scaleX = 2560.0 / screenshot.Width;
+                        double scaleY = 1440.0 / screenshot.Height;
+                        double scale = Math.Min(scaleX, scaleY);
+                        
+                        int newWidth = (int)(screenshot.Width * scale);
+                        int newHeight = (int)(screenshot.Height * scale);
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: downscaling to {newWidth}x{newHeight} (scale={scale:0.00}).");
+                        
+                        var resized = new Bitmap(newWidth, newHeight);
+                        using (var g = Graphics.FromImage(resized))
+                        {
+                            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            g.DrawImage(screenshot, 0, 0, newWidth, newHeight);
+                        }
+                        screenshot.Dispose();
+                        screenshot = resized;
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: downscaled screenshot ready.");
+                    }
+
+                    Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: calling RunOcrAsync...");
+                    try
+                    {
+                        ocrResult = await RunOcrAsync(screenshot);
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: RunOcrAsync completed successfully.");
+                    }
+                    catch (Exception ocEx)
+                    {
+                        Logger.LogError($"LocalOcrService.FindCandidatesAsync: RunOcrAsync threw exception: {ocEx.GetType().Name}: {ocEx.Message}");
+                        Logger.LogError($"LocalOcrService.FindCandidatesAsync: Stack trace: {ocEx.StackTrace}");
+                        if (ocEx.InnerException != null)
+                        {
+                            Logger.LogError($"LocalOcrService.FindCandidatesAsync: Inner exception: {ocEx.InnerException.Message}");
+                        }
+                        throw;
+                    }
+                    
+                    if (ocrResult == null)
+                    {
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR returned null for phrase '{phrase}'.");
+                        return new List<VisualTargetCandidate>();
+                    }
+
+                    Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR found {ocrResult.Lines.Count} lines of text.");
+                }
+                catch (Exception ocEx)
+                {
+                    Logger.LogError($"LocalOcrService.FindCandidatesAsync: Screenshot/OCR error for phrase '{phrase}': {ocEx.GetType().Name}: {ocEx.Message}");
+                    Logger.LogError($"LocalOcrService.FindCandidatesAsync: Full stack trace: {ocEx.StackTrace}");
+                    return new List<VisualTargetCandidate>();
+                }
+
+                var candidates = new List<VisualTargetCandidate>();
+                Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: starting to process {ocrResult.Lines.Count} OCR lines for phrase '{phrase}'...");
+                // log each OCR line for debugging
+                int lineIndex = 0;
+                foreach (var debugLine in ocrResult.Lines)
+                {
+                    var dl = (debugLine.Text ?? string.Empty).Trim();
+                    Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line #{lineIndex}: '{dl}'");
+                    lineIndex++;
+                }
+                try
+                {
+                    foreach (var line in ocrResult.Lines)
+                    {
+                        var lineText = (line.Text ?? string.Empty).Trim();
+                        if (string.IsNullOrWhiteSpace(lineText))
+                        {
+                            continue;
+                        }
+
+                        var loweredLine = lineText.ToLowerInvariant();
+
+                        if (IsNoiseLine(lineText))
+                        {
+                            Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: skipping noise OCR line '{lineText}'");
+                            continue;
+                        }
+
+                        int matchedTokenCount = tokens.Count(token => loweredLine.Contains(token) || (!string.IsNullOrEmpty(token) && lineText.Contains(token)));
+                        if (matchedTokenCount == 0)
+                        {
+                            continue;
+                        }
+
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line '{lineText}' matched {matchedTokenCount}/{tokens.Length} tokens.");
+                        var tokenCoverage = matchedTokenCount / (double)tokens.Length;
+                        double confidence = 0.45 + (0.5 * tokenCoverage);
+                        if (string.Equals(loweredLine, normalized.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            confidence = 0.97;
+                        }
+                        else if (loweredLine.Contains(normalized, StringComparison.OrdinalIgnoreCase))
+                        {
+                            confidence = Math.Max(confidence, 0.85);
+                        }
+
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: computing bounding rect from {line.Words?.Count ?? 0} words...");
+                        var lineRect = BuildBoundingRectFromWords(line);
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: lineRect={lineRect.X},{lineRect.Y},{lineRect.Width}x{lineRect.Height}.");
+                        var rect = ToScreenRect(lineRect, virtualBounds, screenshot.Size);
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: screen rect={rect.X},{rect.Y},{rect.Width}x{rect.Height}.");
+                        if (rect.Width <= 0 || rect.Height <= 0)
+                        {
+                            Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: rect has invalid dimensions, skipping.");
+                            continue;
+                        }
+
+                        candidates.Add(new VisualTargetCandidate
+                        {
+                            Label = lineText,
+                            Bounds = rect,
+                            Confidence = Math.Max(0, Math.Min(1, confidence)),
+                            Reason = $"OCR line match '{lineText}'",
+                            Source = "ocr"
+                        });
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: added OCR candidate '{lineText}' with confidence {confidence:0.00} at ({rect.X},{rect.Y},{rect.Width}x{rect.Height}).");
+                    }
+                }
+                catch (Exception loopEx)
+                {
+                    Logger.LogError($"LocalOcrService.FindCandidatesAsync: error in line processing loop: {loopEx.GetType().Name}: {loopEx.Message}");
+                    Logger.LogError($"LocalOcrService.FindCandidatesAsync: loop error stack trace: {loopEx.StackTrace}");
+                    throw;
+                }
+
+                Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: completed, found {candidates.Count} OCR candidates for '{phrase}'.");
+
+                // Merge near-duplicate OCR candidates (same/similar label close together or overlapping)
+                var merged = MergeOcrCandidates(candidates);
+                Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: merged OCR candidates: {candidates.Count} -> {merged.Count}.");
+
+                return merged
+                    .OrderByDescending(c => c.Confidence)
+                    .ThenByDescending(c => c.Bounds.Width * c.Bounds.Height)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"LocalOcrService.FindCandidatesAsync failed: {ex}");
+                return new List<VisualTargetCandidate>();
+            }
+            finally
+            {
+                if (screenshot != null)
+                {
+                    screenshot.Dispose();
+                }
+            }
+        }
 public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string phrase)
     {
         Bitmap? screenshot = null;
@@ -181,7 +403,13 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
 
                         var loweredLine = lineText.ToLowerInvariant();
 
-                    int matchedTokenCount = tokens.Count(token => loweredLine.Contains(token) || (!string.IsNullOrEmpty(token) && lineText.Contains(token)));
+                        if (IsNoiseLine(lineText))
+                        {
+                            Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: skipping noise OCR line '{lineText}'");
+                            continue;
+                        }
+
+                        int matchedTokenCount = tokens.Count(token => loweredLine.Contains(token) || (!string.IsNullOrEmpty(token) && lineText.Contains(token)));
                     if (matchedTokenCount == 0)
                     {
                         // Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line '{lineText}' - no tokens matched.");
@@ -203,7 +431,7 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                         Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: computing bounding rect from {line.Words?.Count ?? 0} words...");
                         var lineRect = BuildBoundingRectFromWords(line);
                         Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: lineRect={lineRect.X},{lineRect.Y},{lineRect.Width}x{lineRect.Height}.");
-                        var rect = ToScreenRect(lineRect, virtualBounds);
+                        var rect = ToScreenRect(lineRect, virtualBounds, screenshot.Size);
                         Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: screen rect={rect.X},{rect.Y},{rect.Width}x{rect.Height}.");
                         if (rect.Width <= 0 || rect.Height <= 0)
                         {
@@ -230,7 +458,11 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                 }
 
                 Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: completed, found {candidates.Count} OCR candidates for '{phrase}'.");
-                return candidates
+                // Merge near-duplicate OCR candidates before returning
+                var merged = MergeOcrCandidates(candidates);
+                Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: merged OCR candidates: {candidates.Count} -> {merged.Count}.");
+
+                return merged
                     .OrderByDescending(c => c.Confidence)
                     .ThenByDescending(c => c.Bounds.Width * c.Bounds.Height)
                     .ToList();
@@ -249,13 +481,30 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
             }
         }
 
-        private static Rectangle ToScreenRect(Rect lineRect, Rectangle virtualBounds)
+        private static Rectangle ToScreenRect(Rect lineRect, Rectangle virtualBounds, System.Drawing.Size imageSize)
         {
-            return new Rectangle(
-                virtualBounds.Left + (int)Math.Round(lineRect.X),
-                virtualBounds.Top + (int)Math.Round(lineRect.Y),
-                Math.Max(1, (int)Math.Round(lineRect.Width)),
-                Math.Max(1, (int)Math.Round(lineRect.Height)));
+            if (imageSize.Width <= 0 || imageSize.Height <= 0)
+            {
+                return new Rectangle(
+                    virtualBounds.Left + (int)Math.Round(lineRect.X),
+                    virtualBounds.Top + (int)Math.Round(lineRect.Y),
+                    Math.Max(1, (int)Math.Round(lineRect.Width)),
+                    Math.Max(1, (int)Math.Round(lineRect.Height)));
+            }
+
+            double scaleX = virtualBounds.Width / (double)imageSize.Width;
+            double scaleY = virtualBounds.Height / (double)imageSize.Height;
+            if (Math.Abs(scaleX - 1.0) > 0.001 || Math.Abs(scaleY - 1.0) > 0.001)
+            {
+                Logger.LogDebug($"ToScreenRect: imageSize={imageSize.Width}x{imageSize.Height}, virtualBounds={virtualBounds.Width}x{virtualBounds.Height}, scaleX={scaleX:0.000}, scaleY={scaleY:0.000}");
+            }
+
+            var x = virtualBounds.Left + (int)Math.Round(lineRect.X * scaleX);
+            var y = virtualBounds.Top + (int)Math.Round(lineRect.Y * scaleY);
+            var w = Math.Max(1, (int)Math.Round(lineRect.Width * scaleX));
+            var h = Math.Max(1, (int)Math.Round(lineRect.Height * scaleY));
+
+            return new Rectangle(x, y, w, h);
         }
 
         private static Rect BuildBoundingRectFromWords(OcrLine line)
@@ -425,6 +674,173 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
             }
 
             return tokenList.ToArray();
+        }
+
+        // Merge OCR candidates that are likely duplicates: same/similar label and
+        // overlapping or very close bounding rectangles. This reduces noisy duplicate
+        // hits (e.g., logo text + separate label boxes that refer to the same tile).
+        private static List<VisualTargetCandidate> MergeOcrCandidates(List<VisualTargetCandidate> candidates)
+        {
+            if (candidates == null || candidates.Count <= 1)
+                return candidates ?? new List<VisualTargetCandidate>();
+
+            var used = new bool[candidates.Count];
+            var groups = new System.Collections.Generic.List<System.Collections.Generic.List<int>>();
+
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (used[i]) continue;
+                var g = new System.Collections.Generic.List<int> { i };
+                used[i] = true;
+
+                for (int j = i + 1; j < candidates.Count; j++)
+                {
+                    if (used[j]) continue;
+                    if (ShouldMergeCandidates(candidates[i], candidates[j]))
+                    {
+                        g.Add(j);
+                        used[j] = true;
+                    }
+                }
+
+                groups.Add(g);
+            }
+
+            var result = new System.Collections.Generic.List<VisualTargetCandidate>();
+            foreach (var g in groups)
+            {
+                if (g.Count == 1)
+                {
+                    result.Add(candidates[g[0]]);
+                    continue;
+                }
+
+                // Merge group into a single candidate
+                var union = candidates[g[0]].Bounds;
+                double bestConfidence = candidates[g[0]].Confidence;
+                string bestLabel = candidates[g[0]].Label ?? string.Empty;
+                var reasons = new System.Text.StringBuilder();
+
+                foreach (var idx in g)
+                {
+                    union = Rectangle.Union(union, candidates[idx].Bounds);
+                    if (candidates[idx].Confidence > bestConfidence)
+                    {
+                        bestConfidence = candidates[idx].Confidence;
+                        bestLabel = candidates[idx].Label ?? bestLabel;
+                    }
+                    if (!string.IsNullOrWhiteSpace(candidates[idx].Reason))
+                    {
+                        if (reasons.Length > 0) reasons.Append("; ");
+                        reasons.Append(candidates[idx].Reason);
+                    }
+                }
+                // debug output for merged group
+                try
+                {
+                    var labels = string.Join(", ", g.Select(i => candidates[i].Label));
+                    Logger.LogDebug($"MergeOcrCandidates: merging group indexes [{string.Join(",", g)}] labels [{labels}] into union {union}.");
+                }
+                catch { }
+                result.Add(new VisualTargetCandidate
+                {
+                    Label = bestLabel,
+                    Bounds = union,
+                    Confidence = bestConfidence,
+                    Reason = reasons.ToString(),
+                    Source = "ocr"
+                });
+            }
+
+            return result;
+        }
+
+        private static bool ShouldMergeCandidates(VisualTargetCandidate a, VisualTargetCandidate b)
+        {
+            if (a == null || b == null) return false;
+
+            var la = NormalizeLabelForMerge(a.Label);
+            var lb = NormalizeLabelForMerge(b.Label);
+            if (string.IsNullOrEmpty(la) || string.IsNullOrEmpty(lb)) return false;
+
+            bool labelsSimilar = la == lb || la.Contains(lb) || lb.Contains(la);
+
+            // If rectangles intersect and labels are similar, definitely merge
+            if (labelsSimilar && a.Bounds.IntersectsWith(b.Bounds)) return true;
+
+            // Compute IoU (intersection over union) to detect strong overlap even if edges don't strictly intersect due to rounding
+            try
+            {
+                var inter = Rectangle.Intersect(a.Bounds, b.Bounds);
+                double interArea = (inter.Width > 0 && inter.Height > 0) ? (inter.Width * inter.Height) : 0;
+                double unionArea = (a.Bounds.Width * a.Bounds.Height) + (b.Bounds.Width * b.Bounds.Height) - interArea;
+                double iou = unionArea > 0 ? interArea / unionArea : 0;
+                if (labelsSimilar && iou >= 0.20) return true;
+            }
+            catch { }
+
+            // If labels are similar and centers are very close, merge
+            if (labelsSimilar)
+            {
+                var ca = a.Center;
+                var cb = b.Center;
+                var dx = ca.X - cb.X;
+                var dy = ca.Y - cb.Y;
+                var distSq = dx * dx + dy * dy;
+                // Use an averaged size-based hint and be slightly more permissive
+                var maxA = Math.Max(a.Bounds.Width, a.Bounds.Height);
+                var maxB = Math.Max(b.Bounds.Width, b.Bounds.Height);
+                var avgMax = (maxA + maxB) / 2.0;
+                var sizeHint = Math.Max(48, (int)Math.Round(avgMax * 1.5));
+
+                Logger.LogDebug($"ShouldMergeCandidates: labelsSimilar=true, centers distSq={distSq}, sizeHint={sizeHint}");
+
+                if (distSq <= sizeHint * sizeHint) return true;
+            }
+
+            return false;
+        }
+
+        private static string NormalizeLabelForMerge(string label)
+        {
+            if (string.IsNullOrWhiteSpace(label)) return string.Empty;
+            var cleaned = new System.Text.StringBuilder();
+            foreach (var c in label)
+            {
+                if (char.IsLetterOrDigit(c) || char.IsWhiteSpace(c)) cleaned.Append(c);
+            }
+            return cleaned.ToString().ToLowerInvariant().Trim();
+        }
+
+        private static bool IsNoiseLine(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return true;
+            var t = text.Trim();
+
+            if (System.Text.RegularExpressions.Regex.IsMatch(t, "^\\[?(debug|info|error|warn|trace)\\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                return true;
+
+            if (t.IndexOf("Generating patch", StringComparison.OrdinalIgnoreCase) >= 0
+                || t.IndexOf("Edited", StringComparison.OrdinalIgnoreCase) >= 0
+                || t.IndexOf("Read []", StringComparison.OrdinalIgnoreCase) >= 0
+                || t.IndexOf("dotnet", StringComparison.OrdinalIgnoreCase) >= 0
+                || t.IndexOf("Generating patch", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            if (t.IndexOf("C:\\", StringComparison.OrdinalIgnoreCase) >= 0
+                || t.IndexOf("file://", StringComparison.OrdinalIgnoreCase) >= 0
+                || t.IndexOf("://", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            int alnum = t.Count(char.IsLetterOrDigit);
+            if (t.Length > 0 && (double)alnum / t.Length < 0.4) return true;
+            if (t.Length <= 2 && t.All(char.IsDigit)) return true;
+
+            return false;
         }
 
         private static (string rank, string suit)? TryParseCardPhrase(string text)
