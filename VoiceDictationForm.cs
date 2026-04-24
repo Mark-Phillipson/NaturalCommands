@@ -22,6 +22,7 @@ namespace DictationBoxMSP
         // removed Restart button (use voice phrase "voice typing" to start)
         private Button btnSendCommand = null!;
         private Button btnCopyText = null!;
+        private Button btnClearText = null!;
         private Button btnSearchWeb = null!;
         private Button btnOpenInVsc = null!;
         private Button btnSendToCopilot = null!; // new button for Copilot CLI
@@ -111,6 +112,7 @@ namespace DictationBoxMSP
             // Use Alt+S for Send Command (replaces the removed Submit button)
             this.btnSendCommand = new Button() { Text = "&Send Command", Height = 121 };
             this.btnCopyText = new Button() { Text = "Copy &Text", Height = 121 };
+            this.btnClearText = new Button() { Text = "Clear Text", Height = 121 };
             this.btnSearchWeb = new Button() { Text = "Search &Web", Height = 121 };
             this.btnOpenInVsc = new Button() { Text = "Open in &VS Code", Height = 121 };
             this.btnSendToCopilot = new Button() { Text = "Send to Copi&lot", Height = 121 }; // Copilot CLI
@@ -169,11 +171,13 @@ namespace DictationBoxMSP
             this.btnOpenInVsc.Height = btnHeight;
             this.btnSendToCopilot.Height = btnHeight; // new button height
             this.btnCallAssistant.Height = btnHeight; // new button height
+            this.btnClearText.Height = btnHeight;
             this.btnToggleTransparent = new Button() { Text = "Toggle Trans&parent", Height = btnHeight };
 
             flow.Controls.Add(btnCancel);
             flow.Controls.Add(btnSendCommand);
             flow.Controls.Add(btnCopyText);
+            flow.Controls.Add(btnClearText);
             flow.Controls.Add(btnOpenInVsc);
             flow.Controls.Add(btnSendToCopilot); // add to flow layout
             flow.Controls.Add(btnCallAssistant); // add to flow layout
@@ -181,23 +185,24 @@ namespace DictationBoxMSP
             flow.Controls.Add(btnSearchWeb);
 
             // Keep explicit widths for remaining buttons so text remains visible
-            btnCancel.Width = 140; btnSendCommand.Width = 170; btnCopyText.Width = 160; btnSearchWeb.Width = 160; btnOpenInVsc.Width = 180; btnSendToCopilot.Width = 180; btnCallAssistant.Width = 160; btnToggleTransparent.Width = 180;
+            btnCancel.Width = 140; btnSendCommand.Width = 170; btnCopyText.Width = 160; btnClearText.Width = 140; btnSearchWeb.Width = 160; btnOpenInVsc.Width = 180; btnSendToCopilot.Width = 180; btnCallAssistant.Width = 160; btnToggleTransparent.Width = 180;
 
             // Make button fonts slightly larger so text is easier to read
-            try
-            {
-                var baseSize = Math.Max(this.Font.Size * 0.85f, 10f);
-                var btnFont = new Font(this.Font.FontFamily, baseSize + 1f, FontStyle.Regular);
-                btnCancel.Font = btnFont;
-                btnSendCommand.Font = btnFont;
-                btnCopyText.Font = btnFont;
-                btnSearchWeb.Font = btnFont;
-                btnOpenInVsc.Font = btnFont;
-                btnSendToCopilot.Font = btnFont;
-                btnCallAssistant.Font = btnFont;
-                btnToggleTransparent.Font = btnFont;
-            }
-            catch { }
+                try
+                {
+                    var baseSize = Math.Max(this.Font.Size * 0.85f, 10f);
+                    var btnFont = new Font(this.Font.FontFamily, baseSize + 1f, FontStyle.Regular);
+                    btnCancel.Font = btnFont;
+                    btnSendCommand.Font = btnFont;
+                    btnCopyText.Font = btnFont;
+                    btnClearText.Font = btnFont;
+                    btnSearchWeb.Font = btnFont;
+                    btnOpenInVsc.Font = btnFont;
+                    btnSendToCopilot.Font = btnFont;
+                    btnCallAssistant.Font = btnFont;
+                    btnToggleTransparent.Font = btnFont;
+                }
+                catch { }
 
             buttonsContainer.Controls.Add(flow);
 
@@ -208,15 +213,16 @@ namespace DictationBoxMSP
             {
                 // Ensure text input receives focus first
                 txtInput.TabIndex = 0;
-                // Visual left-to-right order: Search Web, Toggle Transparent, Open in VS Code, Call Assistant, Copilot CLI, Copy Text, Send Command, Cancel
+                // Visual left-to-right order: Search Web, Toggle Transparent, Open in VS Code, Call Assistant, Copilot CLI, Copy Text, Clear Text, Send Command, Cancel
                 btnSearchWeb.TabIndex = 1;
                 btnToggleTransparent.TabIndex = 2;
                 btnOpenInVsc.TabIndex = 3;
                 btnCallAssistant.TabIndex = 4;
                 btnSendToCopilot.TabIndex = 5;
                 btnCopyText.TabIndex = 6;
-                btnSendCommand.TabIndex = 7;
-                btnCancel.TabIndex = 8;
+                btnClearText.TabIndex = 7;
+                btnSendCommand.TabIndex = 8;
+                btnCancel.TabIndex = 9;
             }
             catch { }
 
@@ -305,6 +311,7 @@ namespace DictationBoxMSP
             btnCancel.FlatStyle = FlatStyle.Flat; btnCancel.FlatAppearance.BorderSize = 1; btnCancel.FlatAppearance.BorderColor = SystemColors.ControlDark; btnCancel.Margin = new Padding(6);
             btnSendCommand.FlatStyle = FlatStyle.Flat; btnSendCommand.FlatAppearance.BorderSize = 1; btnSendCommand.FlatAppearance.BorderColor = SystemColors.ControlDark; btnSendCommand.Margin = new Padding(6);
             btnCopyText.FlatStyle = FlatStyle.Flat; btnCopyText.FlatAppearance.BorderSize = 1; btnCopyText.FlatAppearance.BorderColor = SystemColors.ControlDark; btnCopyText.Margin = new Padding(6);
+            btnClearText.FlatStyle = FlatStyle.Flat; btnClearText.FlatAppearance.BorderSize = 1; btnClearText.FlatAppearance.BorderColor = SystemColors.ControlDark; btnClearText.Margin = new Padding(6);
             btnOpenInVsc.FlatStyle = FlatStyle.Flat; btnOpenInVsc.FlatAppearance.BorderSize = 1; btnOpenInVsc.FlatAppearance.BorderColor = SystemColors.ControlDark; btnOpenInVsc.Margin = new Padding(6);
             btnSendToCopilot.FlatStyle = FlatStyle.Flat; btnSendToCopilot.FlatAppearance.BorderSize = 1; btnSendToCopilot.FlatAppearance.BorderColor = SystemColors.ControlDark; btnSendToCopilot.Margin = new Padding(6);
             btnCallAssistant.FlatStyle = FlatStyle.Flat; btnCallAssistant.FlatAppearance.BorderSize = 1; btnCallAssistant.FlatAppearance.BorderColor = SystemColors.ControlDark; btnCallAssistant.Margin = new Padding(6);
@@ -319,11 +326,13 @@ namespace DictationBoxMSP
                 tt.ShowAlways = true;
                 tt.SetToolTip(btnToggleTransparent, "Toggle Transparent (Alt+P)");
                 tt.SetToolTip(btnCopyText, "Copy text to clipboard (Alt+T)");
+                tt.SetToolTip(btnClearText, "Clear text and focus the input");
                 tt.SetToolTip(btnSendToCopilot, "Send text to Copilot CLI in a new terminal");
                 tt.SetToolTip(btnCallAssistant, "Send text to Personal Assistant CLI in a new terminal (Alt+A)");
                 // Ensure mnemonics are enabled explicitly
                 btnToggleTransparent.UseMnemonic = true;
                 btnCopyText.UseMnemonic = true;
+                btnClearText.UseMnemonic = true;
                 btnSendToCopilot.UseMnemonic = true;
                 btnCallAssistant.UseMnemonic = true;
             }
@@ -344,6 +353,7 @@ namespace DictationBoxMSP
             btnSendCommand.GotFocus += BtnSendCommand_GotFocus;
             btnSendCommand.LostFocus += BtnSendCommand_LostFocus;
             btnCopyText.Click += BtnCopyText_Click;
+            btnClearText.Click += BtnClearText_Click;
             btnOpenInVsc.Click += BtnOpenInVsc_Click;
             btnSendToCopilot.Click += BtnSendToCopilot_Click; // copilot handler
             btnCallAssistant.Click += BtnCallAssistant_Click; // personal assistant handler
@@ -702,6 +712,16 @@ namespace DictationBoxMSP
                 catch { }
 
                 try { NaturalCommands.TrayNotificationHelper.ShowNotification("Copied", "Text copied to clipboard", 1200); } catch { }
+            }
+            catch { }
+        }
+
+        private void BtnClearText_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                txtInput.Clear();
+                txtInput.Focus();
             }
             catch { }
         }
