@@ -155,7 +155,7 @@ namespace NaturalCommands
                 }
                 catch (Exception ex)
                 {
-                    NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] RequestAccess failed: {ex.Message}");
+                    NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] RequestAccess failed: {ex}");
                     accessResult = false;
                 }
                 finally
@@ -198,7 +198,7 @@ namespace NaturalCommands
                                 var body  = binding?.GetTextElements()?.Skip(1).FirstOrDefault()?.Text ?? string.Empty;
                                 var message = string.IsNullOrWhiteSpace(body) ? title : $"{title} — {body}";
 
-                                NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] id={notification.Id} app={appName} title={title}");
+                                NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] id={notification.Id} app={appName} title={title} body={body} message={message}");
                                 Console.WriteLine($"[listen-notifications] {appName}: {message}");
 
                                 var category = MapAppToCategory(appName);
@@ -207,7 +207,7 @@ namespace NaturalCommands
                             }
                             catch (Exception ex)
                             {
-                                NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Process id={notification.Id}: {ex.Message}");
+                                NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Process id={notification.Id}: {ex}");
                             }
                         }
 
@@ -215,16 +215,44 @@ namespace NaturalCommands
                         if (newLines.Count > 0)
                             ShowTicker(newLines);
                     }
-                    catch (ObjectDisposedException)
+                    catch (ObjectDisposedException ex)
                     {
-                        // WinRT listener proxy was disposed (e.g. system suspend/resume) — stop the loop
-                        NaturalCommands.Helpers.Logger.LogError("[NotificationListener] Listener disposed — stopping poll loop.");
-                        Console.WriteLine("[listen-notifications] Listener disposed, exiting.");
-                        break;
+                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Listener disposed: {ex}");
+                        Console.WriteLine("[listen-notifications] Listener disposed — attempting reinitialization.");
+
+                        bool reinitSuccess = false;
+                        for (int attempt = 0; attempt < 5 && !token.IsCancellationRequested; attempt++)
+                        {
+                            try
+                            {
+                                Thread.Sleep(1000);
+                                listener = UserNotificationListener.Current;
+                                // Probe the listener to ensure it's usable
+                                var probe = listener.GetNotificationsAsync(NotificationKinds.Toast).GetAwaiter().GetResult();
+                                reinitSuccess = true;
+                                NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] Reinitialized listener after {attempt + 1} attempt(s).");
+                                break;
+                            }
+                            catch (Exception rex)
+                            {
+                                NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Reinit attempt {attempt + 1} failed: {rex.Message}");
+                            }
+                        }
+
+                        if (!reinitSuccess)
+                        {
+                            NaturalCommands.Helpers.Logger.LogError("[NotificationListener] Reinit failed — stopping poll loop.");
+                            Console.WriteLine("[listen-notifications] Listener reinit failed, exiting.");
+                            break;
+                        }
+                        else
+                        {
+                            continue;
+                        }
                     }
                     catch (Exception ex)
                     {
-                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Poll error: {ex.Message}");
+                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Poll error: {ex}");
                     }
 
                     Thread.Sleep(1000);
