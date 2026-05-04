@@ -131,6 +131,7 @@ namespace NaturalCommands
         private readonly HashSet<uint> _seen = new();
         private CancellationTokenSource? _pollCts;
         public event Action<System.Collections.Generic.List<string>>? NotificationsReceived;
+        public event Action? ListenerFailed;
 
         /// <summary>
         /// Starts a dedicated STA thread that owns ALL WinRT access:
@@ -253,7 +254,7 @@ namespace NaturalCommands
                     }
                     catch (ObjectDisposedException ex)
                     {
-                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Listener disposed: {ex}");
+                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Listener disposed: {ex.ToString()} | threadId={Thread.CurrentThread.ManagedThreadId} | tokenCancelled={token.IsCancellationRequested} | seen={_seen.Count} | listenerNull={(listener==null)}");
                         Console.WriteLine("[listen-notifications] Listener disposed — attempting reinitialization.");
 
                         bool reinitSuccess = false;
@@ -262,16 +263,26 @@ namespace NaturalCommands
                             try
                             {
                                 Thread.Sleep(1000);
+                                string probeError = null;
+                                bool probeOk = TryProbeListenerOnSta(timeoutMs: 5000, out probeError);
+                                if (!probeOk)
+                                {
+                                    NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Reinit attempt {attempt + 1} probe failed: {probeError ?? "unknown"}");
+                                    continue;
+                                }
+
+                                // Create a fresh listener proxy on this (polling) STA thread
                                 listener = UserNotificationListener.Current;
-                                // Probe the listener to ensure it's usable
-                                var probe = listener.GetNotificationsAsync(NotificationKinds.Toast).GetAwaiter().GetResult();
+                                // quick sanity-check probe
+                                var check = listener.GetNotificationsAsync(NotificationKinds.Toast).GetAwaiter().GetResult();
+
                                 reinitSuccess = true;
                                 NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] Reinitialized listener after {attempt + 1} attempt(s).");
                                 break;
                             }
                             catch (Exception rex)
                             {
-                                NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Reinit attempt {attempt + 1} failed: {rex.Message}");
+                                NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Reinit attempt {attempt + 1} failed: {rex.ToString()}");
                             }
                         }
 
@@ -279,6 +290,7 @@ namespace NaturalCommands
                         {
                             NaturalCommands.Helpers.Logger.LogError("[NotificationListener] Reinit failed — stopping poll loop.");
                             Console.WriteLine("[listen-notifications] Listener reinit failed, exiting.");
+                            try { ListenerFailed?.Invoke(); } catch { }
                             break;
                         }
                         else
@@ -303,6 +315,54 @@ namespace NaturalCommands
         }
 
         public void Stop() => _pollCts?.Cancel();
+
+        private bool TryProbeListenerOnSta(int timeoutMs, out string? probeError)
+        {
+            probeError = null;
+            bool success = false;
+            var done = new System.Threading.ManualResetEventSlim(false);
+            string localError = null;
+
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    try
+                    {
+                        var status = UserNotificationListener.Current.RequestAccessAsync().GetAwaiter().GetResult();
+                        if (status != UserNotificationListenerAccessStatus.Allowed)
+                        {
+                            localError = $"RequestAccess returned {status}";
+                        }
+                        else
+                        {
+                            var probe = UserNotificationListener.Current.GetNotificationsAsync(NotificationKinds.Toast).GetAwaiter().GetResult();
+                            success = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        localError = ex.ToString();
+                    }
+                }
+                finally
+                {
+                    done.Set();
+                }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.IsBackground = true;
+            thread.Start();
+
+            if (!done.Wait(TimeSpan.FromMilliseconds(timeoutMs)))
+            {
+                probeError = "probe timeout";
+                return false;
+            }
+
+            probeError = localError;
+            return success;
+        }
 
         private TickerOverlayForm? _activeForm;
         private readonly object _formLock = new();

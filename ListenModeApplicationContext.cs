@@ -18,6 +18,63 @@ namespace NaturalCommands
             return System.IO.Path.Combine(baseDir, ".ticker_payload");
         }
 
+        private void StartResidentNotificationListener()
+        {
+            try
+            {
+                try { _notificationListener?.Stop(); } catch { }
+
+                _notificationListener = new WindowsNotificationListenerService();
+                _notificationListener.NotificationsReceived += (lines) =>
+                {
+                    try
+                    {
+                        Helpers.Logger.LogInfo($"ListenMode: NotificationsReceived ({lines.Count} lines)");
+                        ShowTickerLines(lines);
+                    }
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.LogError($"ListenMode: NotificationsReceived handler error: {ex.Message}");
+                    }
+                };
+
+                _notificationListener.ListenerFailed += () =>
+                {
+                    try
+                    {
+                        Helpers.Logger.LogWarning("ListenMode: Notification listener reported failure — scheduling restart.");
+                        // Avoid tight restart loop
+                        System.Threading.Tasks.Task.Delay(1000).ContinueWith(_ => StartResidentNotificationListener());
+                    }
+                    catch { }
+                };
+
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        var allowed = _notificationListener.Start();
+                        if (!allowed)
+                        {
+                            Helpers.Logger.LogWarning("Notification listener access denied. Enable NaturalCommands in Windows Settings > System > Notifications.");
+                        }
+                        else
+                        {
+                            Helpers.Logger.LogInfo("Resident notification listener started.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.LogError($"Failed to start resident notification listener: {ex.Message}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Helpers.Logger.LogError($"ListenMode: Failed to initialize notification listener: {ex.Message}");
+            }
+        }
+
         private readonly HotkeyRegistrar _hotkeyRegistrar;
         private readonly Commands _commands;
         private bool _dictationOpen;
@@ -162,46 +219,7 @@ namespace NaturalCommands
             }
 
             // Start resident notification listener and forward notifications to the ticker
-            try
-            {
-                _notificationListener = new WindowsNotificationListenerService();
-                _notificationListener.NotificationsReceived += (lines) =>
-                {
-                    try
-                    {
-                        Helpers.Logger.LogInfo($"ListenMode: NotificationsReceived ({lines.Count} lines)");
-                        ShowTickerLines(lines);
-                    }
-                    catch (Exception ex)
-                    {
-                        Helpers.Logger.LogError($"ListenMode: NotificationsReceived handler error: {ex.Message}");
-                    }
-                };
-
-                System.Threading.Tasks.Task.Run(() =>
-                {
-                    try
-                    {
-                        var allowed = _notificationListener.Start();
-                        if (!allowed)
-                        {
-                            Helpers.Logger.LogWarning("Notification listener access denied. Enable NaturalCommands in Windows Settings > System > Notifications.");
-                        }
-                        else
-                        {
-                            Helpers.Logger.LogInfo("Resident notification listener started.");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Helpers.Logger.LogError($"Failed to start resident notification listener: {ex.Message}");
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                Helpers.Logger.LogError($"ListenMode: Failed to initialize notification listener: {ex.Message}");
-            }
+            StartResidentNotificationListener();
 
         }
 
