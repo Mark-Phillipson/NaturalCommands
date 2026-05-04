@@ -20,6 +20,17 @@ namespace NaturalCommands
             _ignoreApps = LoadIgnoreRules();
         }
 
+        /// <summary>
+        /// Test-only constructor: injects pre-built rule maps so that WinRT is never touched.
+        /// </summary>
+        internal WindowsNotificationListenerService(
+            Dictionary<string, TickerCategory> appCategoryMap,
+            HashSet<string> ignoreApps)
+        {
+            _appCategoryMap = appCategoryMap;
+            _ignoreApps = ignoreApps;
+        }
+
         private static Dictionary<string, TickerCategory> LoadCategoryRules()
         {
             var filePath = Path.Combine(AppContext.BaseDirectory, "notification-category-rules.json");
@@ -34,37 +45,7 @@ namespace NaturalCommands
             try
             {
                 var json = File.ReadAllText(filePath);
-                var raw = JsonSerializer.Deserialize<List<Dictionary<string, string>>>(json);
-                if (raw == null)
-                {
-                    return new Dictionary<string, TickerCategory>(StringComparer.OrdinalIgnoreCase)
-                    {
-                        ["default"] = TickerCategory.Info
-                    };
-                }
-
-                var map = new Dictionary<string, TickerCategory>(StringComparer.OrdinalIgnoreCase);
-                foreach (var item in raw)
-                {
-                    if (item.TryGetValue("app", out var app) && item.TryGetValue("category", out var categoryText))
-                    {
-                        if (Enum.TryParse<TickerCategory>(categoryText, true, out var category))
-                        {
-                            map[app] = category;
-                        }
-                    }
-                    else if (item.TryGetValue("default", out var defaultCategory) && Enum.TryParse<TickerCategory>(defaultCategory, true, out var defaultCat))
-                    {
-                        map["default"] = defaultCat;
-                    }
-                }
-
-                if (!map.ContainsKey("default"))
-                {
-                    map["default"] = TickerCategory.Info;
-                }
-
-                return map;
+                return ParseCategoryRulesJson(json);
             }
             catch
             {
@@ -73,6 +54,45 @@ namespace NaturalCommands
                     ["default"] = TickerCategory.Info
                 };
             }
+        }
+
+        /// <summary>
+        /// Parses a JSON string (array of {app, category} or {default} objects) into a category map.
+        /// Exposed as <c>internal</c> so unit tests can exercise the parsing logic directly.
+        /// </summary>
+        internal static Dictionary<string, TickerCategory> ParseCategoryRulesJson(string json)
+        {
+            var raw = JsonSerializer.Deserialize<List<Dictionary<string, string>>>(json);
+            if (raw == null)
+            {
+                return new Dictionary<string, TickerCategory>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["default"] = TickerCategory.Info
+                };
+            }
+
+            var map = new Dictionary<string, TickerCategory>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in raw)
+            {
+                if (item.TryGetValue("app", out var app) && item.TryGetValue("category", out var categoryText))
+                {
+                    if (Enum.TryParse<TickerCategory>(categoryText, true, out var category))
+                    {
+                        map[app] = category;
+                    }
+                }
+                else if (item.TryGetValue("default", out var defaultCategory) && Enum.TryParse<TickerCategory>(defaultCategory, true, out var defaultCat))
+                {
+                    map["default"] = defaultCat;
+                }
+            }
+
+            if (!map.ContainsKey("default"))
+            {
+                map["default"] = TickerCategory.Info;
+            }
+
+            return map;
         }
 
         private static HashSet<string> LoadIgnoreRules()
@@ -86,17 +106,26 @@ namespace NaturalCommands
             try
             {
                 var json = File.ReadAllText(filePath);
-                var raw = JsonSerializer.Deserialize<List<Dictionary<string, string>>>(json);
-                if (raw == null) return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                return raw
-                    .Where(i => i.TryGetValue("app", out _))
-                    .Select(i => i["app"])
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                return ParseIgnoreRulesJson(json);
             }
             catch
             {
                 return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             }
+        }
+
+        /// <summary>
+        /// Parses a JSON string (array of {app} objects) into a set of ignored app names.
+        /// Exposed as <c>internal</c> so unit tests can exercise the parsing logic directly.
+        /// </summary>
+        internal static HashSet<string> ParseIgnoreRulesJson(string json)
+        {
+            var raw = JsonSerializer.Deserialize<List<Dictionary<string, string>>>(json);
+            if (raw == null) return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return raw
+                .Where(i => i.TryGetValue("app", out _))
+                .Select(i => i["app"])
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
         private readonly HashSet<uint> _seen = new();
@@ -127,7 +156,7 @@ namespace NaturalCommands
                 }
                 catch (Exception ex)
                 {
-                    NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] RequestAccess failed: {ex.Message}");
+                    NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] RequestAccess failed: {ex}");
                     accessResult = false;
                 }
                 finally
@@ -185,7 +214,7 @@ namespace NaturalCommands
                                 var body  = binding?.GetTextElements()?.Skip(1).FirstOrDefault()?.Text ?? string.Empty;
                                 var message = string.IsNullOrWhiteSpace(body) ? title : $"{title} — {body}";
 
-                                NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] id={notification.Id} app={appName} title={title}");
+                                NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] id={notification.Id} app={appName} title={title} body={body} message={message}");
                                 Console.WriteLine($"[listen-notifications] {appName}: {message}");
 
                                 var category = MapAppToCategory(appName);
@@ -194,7 +223,7 @@ namespace NaturalCommands
                             }
                             catch (Exception ex)
                             {
-                                NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Process id={notification.Id}: {ex.Message}");
+                                NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Process id={notification.Id}: {ex}");
                             }
                         }
 
@@ -222,16 +251,44 @@ namespace NaturalCommands
                             }
                         }
                     }
-                    catch (ObjectDisposedException)
+                    catch (ObjectDisposedException ex)
                     {
-                        // WinRT listener proxy was disposed (e.g. system suspend/resume) — stop the loop
-                        NaturalCommands.Helpers.Logger.LogError("[NotificationListener] Listener disposed — stopping poll loop.");
-                        Console.WriteLine("[listen-notifications] Listener disposed, exiting.");
-                        break;
+                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Listener disposed: {ex}");
+                        Console.WriteLine("[listen-notifications] Listener disposed — attempting reinitialization.");
+
+                        bool reinitSuccess = false;
+                        for (int attempt = 0; attempt < 5 && !token.IsCancellationRequested; attempt++)
+                        {
+                            try
+                            {
+                                Thread.Sleep(1000);
+                                listener = UserNotificationListener.Current;
+                                // Probe the listener to ensure it's usable
+                                var probe = listener.GetNotificationsAsync(NotificationKinds.Toast).GetAwaiter().GetResult();
+                                reinitSuccess = true;
+                                NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] Reinitialized listener after {attempt + 1} attempt(s).");
+                                break;
+                            }
+                            catch (Exception rex)
+                            {
+                                NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Reinit attempt {attempt + 1} failed: {rex.Message}");
+                            }
+                        }
+
+                        if (!reinitSuccess)
+                        {
+                            NaturalCommands.Helpers.Logger.LogError("[NotificationListener] Reinit failed — stopping poll loop.");
+                            Console.WriteLine("[listen-notifications] Listener reinit failed, exiting.");
+                            break;
+                        }
+                        else
+                        {
+                            continue;
+                        }
                     }
                     catch (Exception ex)
                     {
-                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Poll error: {ex.Message}");
+                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Poll error: {ex}");
                     }
 
                     Thread.Sleep(1000);
@@ -297,7 +354,7 @@ namespace NaturalCommands
             }
         }
 
-        private TickerCategory MapAppToCategory(string appName)
+        internal TickerCategory MapAppToCategory(string? appName)
         {
             if (string.IsNullOrWhiteSpace(appName))
                 return TickerCategory.Info;
