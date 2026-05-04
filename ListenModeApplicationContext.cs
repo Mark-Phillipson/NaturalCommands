@@ -25,12 +25,19 @@ namespace NaturalCommands
         private System.Windows.Forms.Timer? _tickerCheckTimer;
         private WindowsNotificationListenerService? _notificationListener;
 
+        // Eye tracker dwell-click support
+        private System.Windows.Forms.Timer? _dwellClickTimer;
+        private ToolStripMenuItem? _dwellItem;
+        private const int DwellClickDelayMs = 800;
+
         public ListenModeApplicationContext()
         {
             _commands = new Commands(new HandleProcesses());
 
             var menu = new ContextMenuStrip();
             menu.ShowImageMargin = true;
+            menu.ImageScalingSize = new Size(48, 48);
+            menu.Padding = new Padding(0, 8, 0, 8);
 
             var openItem = new ToolStripMenuItem($"Open Voice Dictation ({HotkeyText})");
             openItem.Click += (_, __) => OpenVoiceDictation();
@@ -44,17 +51,23 @@ namespace NaturalCommands
             var exitItem = new ToolStripMenuItem("Exit");
             exitItem.Click += (_, __) => ExitThread();
 
-            // Generate and attach small icons for clarity in the tray menu
+            // Configure menu items for eye tracker: bigger font, more spacing
+            ConfigureMenuItemForEyeTracker(openItem);
+            ConfigureMenuItemForEyeTracker(stopAutoClickItem);
+            ConfigureMenuItemForEyeTracker(settingsItem);
+            ConfigureMenuItemForEyeTracker(exitItem);
+
+            // Generate and attach icons for clarity in the tray menu
             Image? openIcon = null;
             Image? stopIcon = null;
             Image? settingsIcon = null;
             Image? exitIcon = null;
             try
             {
-                openIcon = MenuIconGenerator.CreateMicrophoneImage();
-                stopIcon = MenuIconGenerator.CreateStopImage();
-                settingsIcon = MenuIconGenerator.CreateSettingsImage();
-                exitIcon = MenuIconGenerator.CreateExitImage();
+                openIcon = MenuIconGenerator.CreateMicrophoneImage(48);
+                stopIcon = MenuIconGenerator.CreateStopImage(48);
+                settingsIcon = MenuIconGenerator.CreateSettingsImage(48);
+                exitIcon = MenuIconGenerator.CreateExitImage(48);
 
                 openItem.Image = openIcon;
                 stopAutoClickItem.Image = stopIcon;
@@ -67,12 +80,52 @@ namespace NaturalCommands
             menu.Items.Add(stopAutoClickItem);
             menu.Items.Add(settingsItem);
 
-            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(new ToolStripSeparator { Margin = new Padding(0, 6, 0, 6) });
             menu.Items.Add(exitItem);
+
+            // Set up dwell-click timer for eye tracker support
+            _dwellClickTimer = new System.Windows.Forms.Timer();
+            _dwellClickTimer.Interval = DwellClickDelayMs;
+            _dwellClickTimer.Tick += (s, e) =>
+            {
+                try
+                {
+                    _dwellClickTimer.Stop();
+                    if (_dwellItem != null)
+                    {
+                        _dwellItem.HideDropDown();
+                        _dwellItem.PerformClick();
+                    }
+                }
+                catch { }
+            };
+
+            // Add mouse tracking for dwell-click
+            menu.MouseMove += (s, e) =>
+            {
+                var itemUnderMouse = menu.GetItemAt(e.Location) as ToolStripMenuItem;
+                if (itemUnderMouse != _dwellItem)
+                {
+                    ResetDwellClick();
+                    _dwellItem = itemUnderMouse;
+                    if (itemUnderMouse != null && itemUnderMouse.Enabled)
+                    {
+                        _dwellClickTimer.Start();
+                        // Visual feedback: highlight the item
+                        itemUnderMouse.BackColor = Color.FromArgb(230, 240, 255);
+                    }
+                }
+            };
+
+            menu.MouseLeave += (s, e) =>
+            {
+                ResetDwellClick();
+            };
 
             // Dispose the generated images when the menu is disposed
             menu.Disposed += (_, __) =>
             {
+                try { _dwellClickTimer?.Stop(); } catch { }
                 try { openIcon?.Dispose(); } catch { }
                 try { stopIcon?.Dispose(); } catch { }
                 try { settingsIcon?.Dispose(); } catch { }
@@ -150,6 +203,24 @@ namespace NaturalCommands
                 Helpers.Logger.LogError($"ListenMode: Failed to initialize notification listener: {ex.Message}");
             }
 
+        }
+
+        private void ResetDwellClick()
+        {
+            _dwellClickTimer?.Stop();
+            if (_dwellItem != null)
+            {
+                _dwellItem.BackColor = Color.Transparent;
+            }
+            _dwellItem = null;
+        }
+
+        private void ConfigureMenuItemForEyeTracker(ToolStripMenuItem item)
+        {
+            item.Font = new Font("Segoe UI", 14f, FontStyle.Regular);
+            item.Padding = new Padding(12, 12, 12, 12);
+            item.Margin = new Padding(0, 8, 0, 8);
+            item.TextImageRelation = TextImageRelation.ImageBeforeText;
         }
 
         private void OpenVoiceDictation()
@@ -290,7 +361,18 @@ namespace NaturalCommands
                 }
             }
             catch { }
-            
+
+            // Stop and dispose dwell-click timer
+            try
+            {
+                if (_dwellClickTimer != null)
+                {
+                    _dwellClickTimer.Stop();
+                    _dwellClickTimer.Dispose();
+                }
+            }
+            catch { }
+
             // Kill all NaturalCommands processes to ensure clean shutdown
             try
             {
