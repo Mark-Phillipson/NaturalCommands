@@ -23,6 +23,7 @@ namespace NaturalCommands
         private bool _dictationOpen;
         private SettingsForm? _settingsForm;
         private System.Windows.Forms.Timer? _tickerCheckTimer;
+        private WindowsNotificationListenerService? _notificationListener;
 
         public ListenModeApplicationContext()
         {
@@ -105,6 +106,48 @@ namespace NaturalCommands
             catch (Exception ex)
             {
                 Helpers.Logger.LogWarning($"ListenMode: Failed to start ticker payload watcher: {ex.Message}");
+            }
+
+            // Start resident notification listener and forward notifications to the ticker
+            try
+            {
+                _notificationListener = new WindowsNotificationListenerService();
+                _notificationListener.NotificationsReceived += (lines) =>
+                {
+                    try
+                    {
+                        Helpers.Logger.LogInfo($"ListenMode: NotificationsReceived ({lines.Count} lines)");
+                        ShowTickerLines(lines);
+                    }
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.LogError($"ListenMode: NotificationsReceived handler error: {ex.Message}");
+                    }
+                };
+
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        var allowed = _notificationListener.Start();
+                        if (!allowed)
+                        {
+                            Helpers.Logger.LogWarning("Notification listener access denied. Enable NaturalCommands in Windows Settings > System > Notifications.");
+                        }
+                        else
+                        {
+                            Helpers.Logger.LogInfo("Resident notification listener started.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Helpers.Logger.LogError($"Failed to start resident notification listener: {ex.Message}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Helpers.Logger.LogError($"ListenMode: Failed to initialize notification listener: {ex.Message}");
             }
 
         }
@@ -204,6 +247,7 @@ namespace NaturalCommands
             // Similar to WindowsNotificationListenerService.ShowTicker
             lock (this)
             {
+                try { Helpers.Logger.LogInfo($"ListenMode: ShowTickerLines called ({lines.Count} lines)"); } catch { }
                 // Create a new form on its own STA thread so it can be invoked later for additions
                 var linesCopy = new System.Collections.Generic.List<string>(lines);
                 NaturalCommands.TickerOverlayForm? created = null;
@@ -258,6 +302,16 @@ namespace NaturalCommands
                     {
                         try { process.Kill(); } catch { }
                     }
+                }
+            }
+            catch { }
+
+            // Stop resident notification listener if running
+            try
+            {
+                if (_notificationListener != null)
+                {
+                    try { _notificationListener.Stop(); } catch { }
                 }
             }
             catch { }

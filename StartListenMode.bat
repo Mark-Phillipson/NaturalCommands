@@ -11,4 +11,4 @@ echo   - Settings
 echo   - Exit
 echo.
 
-start "" "%~dp0bin\Release\net10.0-windows\NaturalCommands.exe" /listen
+start "" powershell.exe -NoExit -Command "Set-Location '%~dp0'; dotnet run -c Release --framework net10.0-windows -- listen"

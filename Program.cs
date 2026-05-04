@@ -66,6 +66,7 @@ namespace ExecuteCommands_NET
 									// Thread will exit naturally when we exit this method
 								}
 
+								var handleReady = new System.Threading.ManualResetEventSlim(false);
 								uiThread = new System.Threading.Thread(() =>
 								{
 									try
@@ -74,7 +75,10 @@ namespace ExecuteCommands_NET
 										lock (_tickerLock)
 										{
 											_tickerForm = new TickerOverlayForm(new[] { "Ticker ready" }, cycleSeconds: 5, maxCycles: 0, topPosition: false, hideOnDismiss: true);
+											// Force handle creation now so the parent thread can wait for it
+											var _ = _tickerForm.Handle;
 										}
+										try { handleReady.Set(); } catch { }
 										NaturalCommands.Helpers.Logger.LogInfo("[TICKER-UI] Persistent ticker form created, entering message pump");
 										Application.Run(_tickerForm);
 										NaturalCommands.Helpers.Logger.LogInfo("[TICKER-UI] Message pump exited");
@@ -91,7 +95,20 @@ namespace ExecuteCommands_NET
 								uiThread.TrySetApartmentState(System.Threading.ApartmentState.STA);
 								uiThread.Start();
 								NaturalCommands.Helpers.Logger.LogInfo("[TICKER-UI] UI thread spawned");
-								System.Threading.Thread.Sleep(500); // Give thread time to create form
+								// Wait for the UI thread to create the form handle so we avoid races where
+								// multiple creator threads attempt to make windows and hit "Window handle already exists".
+								try
+								{
+									if (!handleReady.Wait(TimeSpan.FromSeconds(5)))
+									{
+										NaturalCommands.Helpers.Logger.LogWarning("[TICKER-UI] Timed out waiting for ticker form handle");
+									}
+								}
+							catch { }
+							finally
+							{
+								try { handleReady.Dispose(); } catch { }
+							}
 							}
 						}
 					}
@@ -182,6 +199,9 @@ namespace ExecuteCommands_NET
 			// Initialize Windows Forms early (only once)
 			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);
+
+            // Ensure console uses UTF-8 so emoji and dashes render correctly in terminal
+            try { Console.OutputEncoding = System.Text.Encoding.UTF8; Console.InputEncoding = System.Text.Encoding.UTF8; } catch { }
 
 			// Initialize settings at startup
 			try
@@ -366,10 +386,10 @@ namespace ExecuteCommands_NET
 			string result = "";
 			// Use centralized Logger for startup logging
 			NaturalCommands.Helpers.Logger.LogDebug($"Log file path: {NaturalCommands.Helpers.Logger.LogPath}"); // Diagnostic: print log path
-			// Clear log file on startup
+			// Clear log file on startup (write as UTF-8 with BOM)
 			try {
 				if (System.IO.File.Exists(NaturalCommands.Helpers.Logger.LogPath))
-					System.IO.File.WriteAllText(NaturalCommands.Helpers.Logger.LogPath, "");
+					System.IO.File.WriteAllText(NaturalCommands.Helpers.Logger.LogPath, string.Empty, new System.Text.UTF8Encoding(true));
 			} catch(Exception ex) { NaturalCommands.Helpers.Logger.LogError($"Could not clear log file: {ex.Message}"); }
 
 			NaturalCommands.Helpers.Logger.LogDebug($"Args: {string.Join(", ", args)}");

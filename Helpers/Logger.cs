@@ -29,7 +29,8 @@ namespace NaturalCommands.Helpers
             {
                 EnsureLogDirExists();
                 // Truncate or create the log file so we begin fresh on each process start.
-                File.WriteAllText(s_logPath, string.Empty);
+                // Write initial file explicitly as UTF-8 with BOM so editors detect encoding.
+                File.WriteAllText(s_logPath, string.Empty, new System.Text.UTF8Encoding(true));
             }
             catch { }
         }
@@ -53,7 +54,7 @@ namespace NaturalCommands.Helpers
             {
                 EnsureLogDirExists();
                 using var fs = new FileStream(s_logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-                using var sw = new StreamWriter(fs);
+                using var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false));
                 sw.Write(message);
             }
             catch { }

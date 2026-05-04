@@ -244,12 +244,15 @@ namespace NaturalCommands
 
         private void Dismiss()
         {
+            try { NaturalCommands.Helpers.Logger.LogInfo($"[TICKER-FORM] Dismiss invoked - hideOnDismiss={_hideOnDismiss}, Visible={Visible}"); } catch { }
             if (_hideOnDismiss)
             {
+                try { NaturalCommands.Helpers.Logger.LogInfo("[TICKER-FORM] Hiding ticker (hideOnDismiss=true)"); } catch { }
                 Hide();
                 return;
             }
 
+            try { NaturalCommands.Helpers.Logger.LogInfo("[TICKER-FORM] Closing ticker (hideOnDismiss=false)"); } catch { }
             Close();
         }
 
@@ -257,7 +260,8 @@ namespace NaturalCommands
         {
             if (!Visible)
             {
-                Show();
+                try { NaturalCommands.Helpers.Logger.LogInfo("[TICKER-FORM] EnsureVisible: showing ticker (was hidden)"); } catch { }
+                try { Show(); } catch { }
             }
 
             if (WindowState == FormWindowState.Minimized)
@@ -265,8 +269,21 @@ namespace NaturalCommands
                 WindowState = FormWindowState.Normal;
             }
 
-            BringToFront();
-            ForceTopmost();
+            try
+            {
+                // Make sure the window is topmost and in front. Try to activate if possible.
+                TopMost = true;
+                BringToFront();
+                ForceTopmost();
+                try { Activate(); } catch { }
+            }
+            catch { }
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            try { NaturalCommands.Helpers.Logger.LogInfo($"[TICKER-FORM] Visible changed -> {Visible}"); } catch { }
         }
 
         /// <summary>
@@ -277,11 +294,12 @@ namespace NaturalCommands
         {
             if (InvokeRequired)
             {
-                Invoke(new Action(() => AddMessage(message)));
+                try { BeginInvoke(new Action(() => AddMessage(message))); } catch { }
                 return;
             }
 
             _messages.Add(message);
+            try { NaturalCommands.Helpers.Logger.LogInfo($"[TICKER-FORM] AddMessage: queued message '{message.Text}' (Category={message.Category})"); } catch { }
             // Reset cycle counter so the new message gets a full set of cycles
             _cycleCount = 0;
             EnsureVisible();
@@ -291,8 +309,10 @@ namespace NaturalCommands
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            try { NaturalCommands.Helpers.Logger.LogInfo($"[TICKER-FORM] OnFormClosing: reason={e.CloseReason}, hideOnDismiss={_hideOnDismiss}"); } catch { }
             if (_hideOnDismiss && e.CloseReason == CloseReason.UserClosing)
             {
+                try { NaturalCommands.Helpers.Logger.LogInfo("[TICKER-FORM] OnFormClosing: canceling close and hiding instead"); } catch { }
                 e.Cancel = true;
                 Hide();
                 return;

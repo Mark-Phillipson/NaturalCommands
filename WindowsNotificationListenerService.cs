@@ -101,6 +101,7 @@ namespace NaturalCommands
 
         private readonly HashSet<uint> _seen = new();
         private CancellationTokenSource? _pollCts;
+        public event Action<System.Collections.Generic.List<string>>? NotificationsReceived;
 
         /// <summary>
         /// Starts a dedicated STA thread that owns ALL WinRT access:
@@ -156,10 +157,25 @@ namespace NaturalCommands
                             if (!_seen.Add(notification.Id)) continue;
                             try
                             {
-                                // AppInfo cast throws for unpackaged/Win32 apps — guard separately
+                                // AppInfo may be null for unpackaged/Win32 apps — guard and log for diagnostics
                                 string appName;
-                                try { appName = notification.AppInfo?.DisplayInfo?.DisplayName ?? "Unknown"; }
-                                catch { appName = "Unknown"; }
+                                try
+                                {
+                                    if (notification.AppInfo != null)
+                                    {
+                                        appName = notification.AppInfo.DisplayInfo?.DisplayName ?? "Unknown";
+                                    }
+                                    else
+                                    {
+                                        appName = "Unknown";
+                                        NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] AppInfo is null for id={notification.Id}");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    appName = "Unknown";
+                                    NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Failed to read AppInfo for id={notification.Id}: {ex}");
+                                }
 
                                 if (_ignoreApps.Contains(appName)) continue;
 
@@ -182,9 +198,29 @@ namespace NaturalCommands
                             }
                         }
 
-                        // Show all notifications from this cycle in a single form
+                        // Show or forward all notifications from this cycle
                         if (newLines.Count > 0)
-                            ShowTicker(newLines);
+                        {
+                            try
+                            {
+                                if (NotificationsReceived != null)
+                                {
+                                    NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] Forwarding {newLines.Count} lines; HasForwarder=True");
+                                    NotificationsReceived.Invoke(newLines);
+                                }
+                                else
+                                {
+                                    NaturalCommands.Helpers.Logger.LogInfo("[NotificationListener] No forwarder subscribed; showing local ticker.");
+                                    ShowTicker(newLines);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Error forwarding notifications: {ex}");
+                                // Fallback to local display
+                                try { ShowTicker(newLines); } catch { }
+                            }
+                        }
                     }
                     catch (ObjectDisposedException)
                     {
