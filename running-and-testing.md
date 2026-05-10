@@ -110,3 +110,7 @@ dotnet run --framework net10.0-windows -- natural "close tab"
 dotnet run --framework net10.0-windows -- natural "format document"
 ```
 
+Target for a Windows Shortcut:
+```
+"C:\Users\MPhil\source\repos\NaturalCommands\bin\Release\net10.0-windows\NaturalCommands.exe" listen 
+```
