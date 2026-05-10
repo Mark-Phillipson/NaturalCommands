@@ -293,23 +293,8 @@ namespace ExecuteCommands_NET
 				return;
 			}
 
-		if (mode == "listen-notifications" || mode == "notifications-listen")
-		{
-			var listener = new WindowsNotificationListenerService();
-			Console.WriteLine("[listen-notifications] Requesting notification access...");
-			var allowed = listener.Start();  // does RequestAccess + starts poll — all on one STA thread
-			if (!allowed)
-			{
-				NaturalCommands.Helpers.Logger.LogError("Notification listener access denied. Go to Windows Settings > System > Notifications, enable NaturalCommands.");
-				Console.Error.WriteLine("[listen-notifications] ACCESS DENIED — enable NaturalCommands in Windows Settings > System > Notifications.");
-				return;
-			}
-
-			NaturalCommands.Helpers.Logger.LogInfo("Windows notification listener started.");
-			Console.WriteLine("[listen-notifications] Listening for Windows notifications...");
-			Application.Run(new ApplicationContext());
-			return;
-		}
+		// Note: the standalone "listen-notifications" CLI mode has been removed.
+		// Notification listening is started automatically by resident listen mode (`listen`).
 
 		if (mode == "ticker" || mode == "ticker-file")
 		{

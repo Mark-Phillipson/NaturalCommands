@@ -28,7 +28,7 @@ dotnet run --project .\NaturalCommands.csproj --framework net10.0-windows -- lis
 
 ## High-level architecture
 
-- `Program.cs` is the mode dispatcher. It handles `natural`, `listen`, `listen-notifications`, `ticker`, `ticker-file`, `ticker-test`, and `export-vs-commands`.
+- `Program.cs` is the mode dispatcher. It handles `natural`, `listen`, `ticker`, `ticker-file`, `ticker-test`, and `export-vs-commands`.
 - `Commands.HandleNaturalAsync()` is only a thin wrapper; the real command pipeline lives in `NaturalLanguageInterpreter`.
 - `NaturalLanguageInterpreter.InterpretAsync()` does deterministic parsing first: normalize input, apply `word_replacements.json`, match built-in commands, multi-actions, Visual Studio / Windows Terminal / Explorer shortcuts, quick-click commands, voice dictation, show-letters, and visual targeting. `HandleNaturalAsync()` only falls back to Talon matching and then OpenAI if deterministic parsing returns no action.
 - Action shapes are centralized in `ActionModels.cs`. Execution is centralized in `NaturalLanguageInterpreter.ExecuteActionAsync(...)`, which is where new action records are wired into actual behavior.

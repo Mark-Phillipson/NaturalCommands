@@ -42,9 +42,10 @@ namespace NaturalCommands
                 {
                     try
                     {
-                        Helpers.Logger.LogWarning("ListenMode: Notification listener reported failure — scheduling restart.");
-                        // Avoid tight restart loop
-                        System.Threading.Tasks.Task.Delay(1000).ContinueWith(_ => StartResidentNotificationListener());
+                        _notificationListenerFailureCount++;
+                        int delayMs = Math.Min(1000 * (1 << Math.Max(0, _notificationListenerFailureCount - 1)), 60000);
+                        Helpers.Logger.LogWarning($"ListenMode: Notification listener reported failure — scheduling restart in {delayMs}ms (failure #{_notificationListenerFailureCount}).");
+                        System.Threading.Tasks.Task.Delay(delayMs).ContinueWith(_ => StartResidentNotificationListener());
                     }
                     catch { }
                 };
@@ -61,6 +62,8 @@ namespace NaturalCommands
                         else
                         {
                             Helpers.Logger.LogInfo("Resident notification listener started.");
+                            // Reset failure count after a successful start
+                            _notificationListenerFailureCount = 0;
                         }
                     }
                     catch (Exception ex)
@@ -81,6 +84,8 @@ namespace NaturalCommands
         private SettingsForm? _settingsForm;
         private System.Windows.Forms.Timer? _tickerCheckTimer;
         private WindowsNotificationListenerService? _notificationListener;
+        // Count consecutive notification listener failures to apply exponential backoff
+        private int _notificationListenerFailureCount = 0;
 
         // Eye tracker dwell-click support
         private System.Windows.Forms.Timer? _dwellClickTimer;
@@ -157,7 +162,6 @@ namespace NaturalCommands
                 catch { }
             };
 
-            // Add mouse tracking for dwell-click
             menu.MouseMove += (s, e) =>
             {
                 var itemUnderMouse = menu.GetItemAt(e.Location) as ToolStripMenuItem;

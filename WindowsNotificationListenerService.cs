@@ -157,7 +157,14 @@ namespace NaturalCommands
                 }
                 catch (Exception ex)
                 {
-                    NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] RequestAccess failed: {ex}");
+                    if (ex is System.Runtime.InteropServices.COMException cex)
+                    {
+                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] RequestAccess failed: {cex.Message} (HR: 0x{cex.HResult:X8}). This may indicate the notification manager or COM server is unavailable.");
+                    }
+                    else
+                    {
+                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] RequestAccess failed: {ex.Message}");
+                    }
                     accessResult = false;
                 }
                 finally
@@ -201,10 +208,15 @@ namespace NaturalCommands
                                         NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] AppInfo is null for id={notification.Id}");
                                     }
                                 }
+                                catch (InvalidCastException icex)
+                                {
+                                    appName = "Unknown";
+                                    NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] AppInfo cast failed for id={notification.Id}: {icex.Message}");
+                                }
                                 catch (Exception ex)
                                 {
                                     appName = "Unknown";
-                                    NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Failed to read AppInfo for id={notification.Id}: {ex}");
+                                    NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Failed to read AppInfo for id={notification.Id}: {ex.Message}");
                                 }
 
                                 if (_ignoreApps.Contains(appName)) continue;
@@ -268,6 +280,12 @@ namespace NaturalCommands
                                 if (!probeOk)
                                 {
                                     NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Reinit attempt {attempt + 1} probe failed: {probeError ?? "unknown"}");
+                                    // If the probe indicates the COM server is not connected, abort early
+                                    if (!string.IsNullOrEmpty(probeError) && (probeError.Contains("0x800401FD") || probeError.Contains("CO_E_OBJNOTCONNECTED") || probeError.Contains("Object is not connected to server")))
+                                    {
+                                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Reinit unrecoverable: {probeError}. Aborting reinit.");
+                                        break;
+                                    }
                                     continue;
                                 }
 
@@ -342,7 +360,14 @@ namespace NaturalCommands
                     }
                     catch (Exception ex)
                     {
-                        localError = ex.ToString();
+                        if (ex is System.Runtime.InteropServices.COMException cex)
+                        {
+                            localError = $"{cex.Message} (HR: 0x{cex.HResult:X8})";
+                        }
+                        else
+                        {
+                            localError = ex.ToString();
+                        }
                     }
                 }
                 finally

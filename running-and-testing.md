@@ -114,3 +114,11 @@ Target for a Windows Shortcut:
 ```
 "C:\Users\MPhil\source\repos\NaturalCommands\bin\Release\net10.0-windows\NaturalCommands.exe" listen 
 ```
+
+## Notifications
+
+- The resident notification listener uses the WinRT `UserNotificationListener` API which requires user permission and (in many cases) package identity. If the listener cannot access the notification manager you may see errors such as `RequestAccess failed: ... CO_E_OBJNOTCONNECTED` or occasional `AppInfo` cast failures.
+- Quick troubleshooting:
+  - Run the app in `listen` mode (`dotnet run --framework net10.0-windows -- listen`) and check Windows Settings > System > Notifications to see if `NaturalCommands` appears and can be enabled.
+  - For robust support, grant package identity to the app (use a Packaging Project with "Package with External Location" or create a lightweight identity package). See the Microsoft docs: https://learn.microsoft.com/windows/apps/desktop/modernize/grant-identity-to-nonpackaged-apps-overview
+- Note: The code was updated to handle these failures more gracefully and to apply exponential backoff for automatic restarts — rebuild the app to pick up the changes.
