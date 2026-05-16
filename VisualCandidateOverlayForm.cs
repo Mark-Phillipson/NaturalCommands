@@ -246,6 +246,13 @@ namespace NaturalCommands
                 if (point == System.Drawing.Point.Empty)
                     point = candidate.Center;
 
+                var foregroundBounds = WindowUtils.GetForegroundWindowBounds();
+                if (foregroundBounds != System.Drawing.Rectangle.Empty && !foregroundBounds.Contains(point))
+                {
+                    Logger.LogWarning($"Visual overlay: blocked choose {number} because point ({point.X},{point.Y}) is outside foreground window {foregroundBounds.Left},{foregroundBounds.Top},{foregroundBounds.Width}x{foregroundBounds.Height}.");
+                    return;
+                }
+
                 Logger.LogInfo($"Visual overlay: keyed choose {number} -> click point ({point.X},{point.Y}) for '{candidate.Label}'");
 
                 System.Drawing.Point prev = System.Windows.Forms.Cursor.Position;
@@ -275,9 +282,15 @@ namespace NaturalCommands
             int virtualX = SystemInformation.VirtualScreen.Left;
             int virtualY = SystemInformation.VirtualScreen.Top;
 
+            int renderedIndex = 0;
             for (int i = 0; i < _candidates.Count; i++)
             {
                 var candidate = _candidates[i];
+                if (candidate.Bounds.Width <= 0 || candidate.Bounds.Height <= 0)
+                {
+                    continue;
+                }
+
                 // Position marker near the candidate bounding rect top-right (more visually stable
                 // for grid-like tiles). Compute candidate rect relative to the overlay virtual origin.
                 var candidateRectInOverlay = new Rectangle(
@@ -286,8 +299,20 @@ namespace NaturalCommands
                     candidate.Bounds.Width,
                     candidate.Bounds.Height);
 
+                if (candidateRectInOverlay.Right < 0
+                    || candidateRectInOverlay.Bottom < 0
+                    || candidateRectInOverlay.Left > Width
+                    || candidateRectInOverlay.Top > Height)
+                {
+                    continue;
+                }
+
+                renderedIndex++;
+
                 int markerLeft = Math.Max(2, candidateRectInOverlay.Right - 28);
                 int markerTop = Math.Max(2, candidateRectInOverlay.Top + 6);
+                markerLeft = Math.Min(Math.Max(2, Width - 38), markerLeft);
+                markerTop = Math.Min(Math.Max(2, Height - 38), markerTop);
                 var markerRect = new Rectangle(markerLeft, markerTop, 36, 36);
 
                 // Draw candidate bounding rect for clarity
@@ -314,7 +339,7 @@ namespace NaturalCommands
                 graphics.FillEllipse(fill, markerRect);
                 graphics.DrawEllipse(border, markerRect);
 
-                string text = (i + 1).ToString();
+                string text = renderedIndex.ToString();
                 var textSize = graphics.MeasureString(text, _numberFont);
                 graphics.DrawString(text, _numberFont, Brushes.White,
                     markerRect.X + (markerRect.Width - textSize.Width) / 2,
