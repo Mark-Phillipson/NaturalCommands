@@ -31,6 +31,17 @@ conventions when editing or adding C# files.
   mode. When enabled the app will avoid launching real terminals or other external
   programs (useful for CI and local unit tests).
 
+Close procedure for issues
+-------------------------
+
+When closing an issue that you resolved locally, follow this checklist:
+
+- Add a short closing comment summarizing the fix and pointing to commits or PRs.
+- Close the GitHub issue.
+- Update the local TODOs using the repository TODO list (or leave a follow-up if larger work remains).
+- Optionally add a `.github/ISSUE_TEMPLATE/` file for common closing messages.
+
+
 
 If you have a specific interop scenario that requires a different approach, add a
 brief comment at the call site explaining why the exception was made.

@@ -63,6 +63,7 @@ obj/Debug/net10.0-windows/
  .NETCoreApp,Version=v10.0.AssemblyAttributes.cs
  NaturalCommands_NET.Tests.AssemblyInfo.cs
 TalonCommandRouterTests.cs
+VisualIdentifyActionTests.cs
 VisualTargetingServiceTests.cs
 VoiceDictationBehaviorTests.cs
 WebsiteNavigatorUnitTests.cs

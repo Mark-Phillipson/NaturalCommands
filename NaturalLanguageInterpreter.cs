@@ -555,6 +555,10 @@ namespace NaturalCommands
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern IntPtr WindowFromPoint(System.Drawing.Point Point);
 
+        // Test hooks: allow unit tests to inject candidate lists and intercept clicks.
+        public static System.Func<string, System.Collections.Generic.List<NaturalCommands.Models.VisualTargetCandidate>>? VisualIdentifyCandidatesOverride;
+        public static System.Action<System.Drawing.Point>? ClickOverride;
+
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, int dwExtraInfo);
 
@@ -567,6 +571,11 @@ namespace NaturalCommands
 
         private static void PerformLeftClickAtPoint(System.Drawing.Point point)
         {
+            if (ClickOverride != null)
+            {
+                try { ClickOverride(point); } catch { }
+                return;
+            }
             System.Drawing.Point previous;
             try { GetCursorPos(out previous); } catch { previous = System.Windows.Forms.Cursor.Position; }
 
@@ -1521,7 +1530,15 @@ namespace NaturalCommands
                         return "Visual targeting is disabled in settings.";
                     }
 
-                    var candidates = Helpers.VisualTargetingService.IdentifyCandidates(visualIdentify.TargetPhrase);
+                    System.Collections.Generic.List<VisualTargetCandidate> candidates;
+                    if (VisualIdentifyCandidatesOverride != null)
+                    {
+                        candidates = VisualIdentifyCandidatesOverride(visualIdentify.TargetPhrase) ?? new System.Collections.Generic.List<VisualTargetCandidate>();
+                    }
+                    else
+                    {
+                        candidates = Helpers.VisualTargetingService.IdentifyCandidates(visualIdentify.TargetPhrase);
+                    }
                     Helpers.Logger.LogInfo($"ExecuteActionAsync VisualIdentifyClickAction: got {candidates.Count} candidates for '{visualIdentify.TargetPhrase}'.");
 
                     if (candidates.Count == 0)
@@ -1547,42 +1564,38 @@ namespace NaturalCommands
                     if (candidates.Count >= 1)
                     {
                         bool isSingle = candidates.Count == 1;
-                        double requiredConfidence = isSingle ? confidenceThreshold : workaroundMinConfidence;
-                        if (candidates[0].Confidence >= requiredConfidence)
+                        if (isSingle)
                         {
-                            if (isSingle)
+                            // If there is exactly one visual match, click it directly instead of
+                            // showing a numbered overlay prompt.
+                            shouldAutoClickTop = true;
+                            autoClickReason = "single candidate";
+                        }
+                        else if (candidates[0].Confidence >= workaroundMinConfidence)
+                        {
+                            // Safer default for multiple candidates: require the top candidate to be from UIA before auto-clicking.
+                            if (string.Equals(candidates[0].Source, "uia", StringComparison.OrdinalIgnoreCase))
                             {
-                                // If there's only one candidate and it meets the configured auto-click
-                                // confidence threshold, auto-click it regardless of source (uia/ocr/cloud).
                                 shouldAutoClickTop = true;
-                                autoClickReason = "single candidate (confidence threshold)";
-                            }
-                            else
-                            {
-                                // Safer default for multiple candidates: require the top candidate to be from UIA before auto-clicking.
-                                if (string.Equals(candidates[0].Source, "uia", StringComparison.OrdinalIgnoreCase))
+                                var top = candidates[0];
+                                var second = candidates.Count > 1 ? candidates[1] : null;
+                                if (second == null)
                                 {
-                                    shouldAutoClickTop = true;
-                                    var top = candidates[0];
-                                    var second = candidates.Count > 1 ? candidates[1] : null;
-                                    if (second == null)
-                                    {
-                                        autoClickReason = "single candidate workaround (uia)";
-                                    }
-                                    else
-                                    {
-                                        autoClickReason = $"top candidate workaround (uia) ({top.Confidence:0.00} vs {second.Confidence:0.00})";
-                                    }
+                                    autoClickReason = "single candidate workaround (uia)";
                                 }
                                 else
                                 {
-                                    Helpers.Logger.LogInfo($"Visual identify: top candidate source is '{candidates[0].Source}' - skipping auto-click to avoid OCR-only auto-clicks for multi-candidate results.");
+                                    autoClickReason = $"top candidate workaround (uia) ({top.Confidence:0.00} vs {second.Confidence:0.00})";
                                 }
+                            }
+                            else
+                            {
+                                Helpers.Logger.LogInfo($"Visual identify: top candidate source is '{candidates[0].Source}' - skipping auto-click to avoid OCR-only auto-clicks for multi-candidate results.");
                             }
                         }
                         else
                         {
-                            Helpers.Logger.LogInfo($"Visual identify: top candidate confidence {candidates[0].Confidence:0.00} below required {requiredConfidence:0.00}; not auto-clicking.");
+                            Helpers.Logger.LogInfo($"Visual identify: top candidate confidence {candidates[0].Confidence:0.00} below required {workaroundMinConfidence:0.00}; not auto-clicking.");
                         }
                     }
 
