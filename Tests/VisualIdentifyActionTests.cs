@@ -111,5 +111,43 @@ namespace NaturalCommands_NET.Tests
                 NaturalLanguageInterpreter.ClickOverride = null;
             }
         }
+
+        [Fact]
+        public void VisualIdentify_SingleOcrSemanticLabel_AutoClicks()
+        {
+            AppSettings.Instance.VisualTargeting.Enabled = true;
+            AppSettings.Instance.VisualTargeting.AutoClickConfidenceThreshold = 0.97;
+
+            NaturalLanguageInterpreter.VisualIdentifyCandidatesOverride = (phrase) => new List<VisualTargetCandidate>
+            {
+                new VisualTargetCandidate
+                {
+                    Label = "Ollama",
+                    Bounds = new Rectangle(120, 180, 80, 24),
+                    Confidence = 0.95,
+                    Source = "ocr"
+                }
+            };
+
+            bool clicked = false;
+            NaturalLanguageInterpreter.ClickOverride = (pt) => { clicked = true; };
+
+            var interpreter = new NaturalLanguageInterpreter();
+
+            try
+            {
+                var result = interpreter.ExecuteActionAsync(new VisualIdentifyClickAction("llama"));
+
+                Assert.True(clicked, "Expected OCR single semantic label match to auto-click.");
+                Assert.Contains("Clicked visual target", result);
+                Assert.Contains("Ollama", result);
+            }
+            finally
+            {
+                VisualCandidateSessionStore.Clear();
+                NaturalLanguageInterpreter.VisualIdentifyCandidatesOverride = null;
+                NaturalLanguageInterpreter.ClickOverride = null;
+            }
+        }
     }
 }

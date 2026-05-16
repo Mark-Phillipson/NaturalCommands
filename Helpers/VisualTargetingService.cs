@@ -750,10 +750,22 @@ namespace NaturalCommands.Helpers
             if (string.IsNullOrWhiteSpace(phrase) || string.IsNullOrWhiteSpace(text)) return false;
 
             var loweredText = text.ToLowerInvariant();
+            var compactText = Regex.Replace(loweredText, "[^a-z0-9]+", string.Empty);
+            var compactPhrase = Regex.Replace(phrase.ToLowerInvariant(), "[^a-z0-9]+", string.Empty);
+            var words = Regex.Split(loweredText, "\\W+").Where(w => !string.IsNullOrWhiteSpace(w)).ToArray();
             var tokens = phrase.ToLowerInvariant()
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Distinct()
                 .ToArray();
+
+            // Handle compact/camel labels where separators are missing in UI text,
+            // e.g. phrase "natural commands" vs label "NaturalCommands".
+            if (tokens.Length >= 2
+                && !string.IsNullOrWhiteSpace(compactPhrase)
+                && compactText.Contains(compactPhrase, StringComparison.Ordinal))
+            {
+                return true;
+            }
 
             foreach (var token in tokens)
             {
@@ -765,13 +777,26 @@ namespace NaturalCommands.Helpers
                     continue;
                 }
 
+                // For single-word app targets, allow a close word-level match even when fuzzy is off.
+                // This handles common cases like "llama"/"lama" targeting "Ollama".
+                if (tokens.Length == 1 && token.Length >= 4)
+                {
+                    bool closeWordMatch = words.Any(w =>
+                        (w.Contains(token, StringComparison.OrdinalIgnoreCase) && (w.Length - token.Length) <= 2)
+                        || LevenshteinDistance(w, token) <= 1);
+
+                    if (closeWordMatch)
+                    {
+                        continue;
+                    }
+                }
+
                 if (!allowFuzzy)
                 {
                     return false;
                 }
 
                 // fuzzy: compare token to individual words from the text
-                var words = Regex.Split(loweredText, "\\W+").Where(w => !string.IsNullOrWhiteSpace(w)).ToArray();
                 bool matched = false;
                 foreach (var w in words)
                 {

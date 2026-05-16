@@ -1610,15 +1610,18 @@ namespace NaturalCommands
                             var startsWithWholeTarget = !string.IsNullOrWhiteSpace(target)
                                 && topLabel.StartsWith(target + " ", StringComparison.OrdinalIgnoreCase);
                             var boundedLength = topLabel.Length <= Math.Max(24, target.Length + 12);
+                            var semanticLabelMatch = Helpers.VisualTargetingService.MatchesTokens(topLabel, target, false);
+                            var isShortUiLabel = topLabel.Length <= Math.Max(40, target.Length + 20)
+                                && topLabel.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length <= 4;
 
-                            if (!isOcr || (top.Confidence >= 0.92 && (exactLabelMatch || (startsWithWholeTarget && boundedLength))))
+                            if (!isOcr || (top.Confidence >= 0.92 && (exactLabelMatch || (startsWithWholeTarget && boundedLength) || (isShortUiLabel && semanticLabelMatch))))
                             {
                                 shouldAutoClickTop = true;
                                 autoClickReason = isOcr ? "single candidate (safe ocr)" : "single candidate";
                             }
                             else
                             {
-                                Helpers.Logger.LogInfo($"Visual identify: single OCR candidate '{topLabel}' rejected for auto-click (target='{target}', confidence={top.Confidence:0.00}).");
+                                Helpers.Logger.LogInfo($"Visual identify: single OCR candidate '{topLabel}' rejected for auto-click (target='{target}', confidence={top.Confidence:0.00}, semanticLabelMatch={semanticLabelMatch}, isShortUiLabel={isShortUiLabel}).");
                             }
                         }
                         else if (candidates[0].Confidence >= workaroundMinConfidence)

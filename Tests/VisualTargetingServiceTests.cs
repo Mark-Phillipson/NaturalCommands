@@ -54,6 +54,13 @@ namespace NaturalCommands_NET.Tests
             Assert.True(VisualTargetingService.MatchesTokens("File Save As", "save as", false));
             Assert.False(VisualTargetingService.MatchesTokens("File Save As", "open file", false));
 
+            // compact/camel-cased labels should match spaced phrase tokens
+            Assert.True(VisualTargetingService.MatchesTokens("NaturalCommands", "natural commands", false));
+
+            // common app-name variants should still match a compact app label
+            Assert.True(VisualTargetingService.MatchesTokens("Ollama", "llama", false));
+            Assert.True(VisualTargetingService.MatchesTokens("Ollama", "lama", false));
+
             // small typo allowed when fuzzy matching is enabled
             Assert.True(VisualTargetingService.MatchesTokens("File Save As", "sve", true));
         }
