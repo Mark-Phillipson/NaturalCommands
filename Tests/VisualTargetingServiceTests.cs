@@ -30,6 +30,13 @@ namespace NaturalCommands_NET.Tests
         }
 
         [Fact]
+        public void NormalizePhrase_StripsTrailingPunctuation()
+        {
+            var normalized = VisualTargetingService.NormalizePhrase("message.");
+            Assert.Equal("message", normalized, ignoreCase: true);
+        }
+
+        [Fact]
         public void IdentifyCandidates_SpaceAndSpadesAreEquivalent()
         {
             var r1 = VisualTargetingService.IdentifyCandidates("queen of space");
@@ -63,6 +70,14 @@ namespace NaturalCommands_NET.Tests
 
             // small typo allowed when fuzzy matching is enabled
             Assert.True(VisualTargetingService.MatchesTokens("File Save As", "sve", true));
+        }
+
+        [Fact]
+        public void BuildTokenListForPhrase_StripsTokenPunctuation()
+        {
+            var tokens = LocalOcrService.BuildTokenListForPhrase("message.");
+            Assert.Contains("message", tokens);
+            Assert.DoesNotContain("message.", tokens);
         }
     }
 }

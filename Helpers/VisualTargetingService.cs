@@ -851,6 +851,7 @@ namespace NaturalCommands.Helpers
             }
 
             var text = phrase.Trim();
+            text = text.Trim('"', '\'', '.', ',', '!', '?', ';', ':');
 
             // fix common mis-hearings of the connector
             text = NormalizeCardConnectorMisrecognitions(text);

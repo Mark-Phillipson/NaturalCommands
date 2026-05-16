@@ -28,37 +28,7 @@ namespace NaturalCommands.Helpers
                     return new List<VisualTargetCandidate>();
                 }
 
-                // start with basic word tokens
-                var tokenList = normalized
-                    .ToLowerInvariant()
-                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                    .Distinct()
-                    .ToList();
-
-                // if this is a card phrase, add useful synonyms (abbreviated rank and suit symbol)
-                var requestedCard = TryParseCardPhrase(normalized);
-                if (requestedCard != null)
-                {
-                    string rankAbbrev = RankToAbbreviation(requestedCard.Value.rank);
-                    if (!string.IsNullOrWhiteSpace(rankAbbrev) && !tokenList.Contains(rankAbbrev))
-                    {
-                        tokenList.Add(rankAbbrev);
-                    }
-
-                    string suitSymbol = SuitToSymbol(requestedCard.Value.suit);
-                    if (!string.IsNullOrWhiteSpace(suitSymbol) && !tokenList.Contains(suitSymbol))
-                    {
-                        tokenList.Add(suitSymbol);
-                    }
-
-                    // also include suit name alone (e.g. "clubs") which may appear on cards
-                    if (!tokenList.Contains(requestedCard.Value.suit))
-                    {
-                        tokenList.Add(requestedCard.Value.suit);
-                    }
-                }
-
-                var tokens = tokenList.ToArray();
+                var tokens = BuildTokenListForPhrase(normalized);
 
                 if (tokens.Length == 0)
                 {
@@ -250,37 +220,7 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                 return new List<VisualTargetCandidate>();
             }
 
-            // start with basic word tokens
-            var tokenList = normalized
-                .ToLowerInvariant()
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                .Distinct()
-                .ToList();
-
-            // if this is a card phrase, add useful synonyms (abbreviated rank and suit symbol)
-            var requestedCard = TryParseCardPhrase(normalized);
-            if (requestedCard != null)
-            {
-                string rankAbbrev = RankToAbbreviation(requestedCard.Value.rank);
-                if (!string.IsNullOrWhiteSpace(rankAbbrev) && !tokenList.Contains(rankAbbrev))
-                {
-                    tokenList.Add(rankAbbrev);
-                }
-
-                string suitSymbol = SuitToSymbol(requestedCard.Value.suit);
-                if (!string.IsNullOrWhiteSpace(suitSymbol) && !tokenList.Contains(suitSymbol))
-                {
-                    tokenList.Add(suitSymbol);
-                }
-
-                // also include suit name alone (e.g. "clubs") which may appear on cards
-                if (!tokenList.Contains(requestedCard.Value.suit))
-                {
-                    tokenList.Add(requestedCard.Value.suit);
-                }
-            }
-
-            var tokens = tokenList.ToArray();
+            var tokens = BuildTokenListForPhrase(normalized);
 
             if (tokens.Length == 0)
             {
@@ -646,9 +586,12 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
         public static string[] BuildTokenListForPhrase(string phrase)
         {
             var normalized = (phrase ?? string.Empty).Trim();
+            var punctuation = new[] { '.', ',', '!', '?', ';', ':', '"', '\'', '(', ')', '[', ']', '{', '}' };
             var tokenList = normalized
                 .ToLowerInvariant()
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(token => token.Trim(punctuation))
+                .Where(token => !string.IsNullOrWhiteSpace(token))
                 .Distinct()
                 .ToList();
 
