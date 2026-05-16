@@ -27,6 +27,12 @@ namespace NaturalCommands
         private readonly System.Windows.Forms.Timer _cycleTimer;
         private readonly System.Windows.Forms.Timer _criticalPulseTimer;
         private bool _pulseVisible;
+        // Hotkey IDs for global Alt+Key accelerators
+        private const int HOTKEY_ID_PREV = 0xB001;
+        private const int HOTKEY_ID_NEXT = 0xB002;
+        private const int HOTKEY_ID_DISMISS = 0xB003;
+        private const uint MOD_ALT = 0x0001;
+        private const int WM_HOTKEY = 0x0312;
 
         public TickerOverlayForm(IEnumerable<string> lines, int cycleSeconds = 5, int maxCycles = 3, bool topPosition = false, bool hideOnDismiss = false)
             : this(ParseMessages(lines), cycleSeconds, maxCycles, topPosition, hideOnDismiss)
@@ -70,7 +76,7 @@ namespace NaturalCommands
             KeyDown += TickerOverlayForm_KeyDown;
             MouseEnter += (s, e) => _cycleTimer.Stop();
             MouseLeave += (s, e) => StartCycleTimerIfNotCritical();
-            Load += (s, e) => ForceTopmost();
+            Load += (s, e) => { ForceTopmost(); TryRegisterHotkeys(); };
 
             ShowMessage(0);
             _cycleTimer.Start();
@@ -191,6 +197,50 @@ namespace NaturalCommands
             }
         }
 
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        private void TryRegisterHotkeys()
+        {
+            try
+            {
+                // Ensure we start clean
+                UnregisterHotkeys();
+                RegisterHotKey(Handle, HOTKEY_ID_PREV, MOD_ALT, (uint)Keys.P);
+                RegisterHotKey(Handle, HOTKEY_ID_NEXT, MOD_ALT, (uint)Keys.N);
+                RegisterHotKey(Handle, HOTKEY_ID_DISMISS, MOD_ALT, (uint)Keys.D);
+                try { NaturalCommands.Helpers.Logger.LogInfo("[TICKER-FORM] Hotkeys registered (Alt+P, Alt+N, Alt+D)"); } catch { }
+            }
+            catch (Exception ex)
+            {
+                try { NaturalCommands.Helpers.Logger.LogWarning($"[TICKER-FORM] RegisterHotkeys failed: {ex.Message}"); } catch { }
+            }
+        }
+
+        private void UnregisterHotkeys()
+        {
+            try
+            {
+                UnregisterHotKey(Handle, HOTKEY_ID_PREV);
+            }
+            catch { }
+
+            try
+            {
+                UnregisterHotKey(Handle, HOTKEY_ID_NEXT);
+            }
+            catch { }
+
+            try
+            {
+                UnregisterHotKey(Handle, HOTKEY_ID_DISMISS);
+            }
+            catch { }
+        }
+
         private TickerMessage CurrentMessage => _messages[_currentIndex];
 
         private TickerCategory CurrentCategory => CurrentMessage.Category;
@@ -256,6 +306,35 @@ namespace NaturalCommands
             Close();
         }
 
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_HOTKEY)
+            {
+                try
+                {
+                    var id = m.WParam.ToInt32();
+                    if (id == HOTKEY_ID_PREV)
+                    {
+                        PreviousMessage();
+                        return;
+                    }
+                    if (id == HOTKEY_ID_NEXT)
+                    {
+                        NextMessage();
+                        return;
+                    }
+                    if (id == HOTKEY_ID_DISMISS)
+                    {
+                        Dismiss();
+                        return;
+                    }
+                }
+                catch { }
+            }
+
+            base.WndProc(ref m);
+        }
+
         private void EnsureVisible()
         {
             if (!Visible)
@@ -284,6 +363,14 @@ namespace NaturalCommands
         {
             base.OnVisibleChanged(e);
             try { NaturalCommands.Helpers.Logger.LogInfo($"[TICKER-FORM] Visible changed -> {Visible}"); } catch { }
+            if (Visible)
+            {
+                TryRegisterHotkeys();
+            }
+            else
+            {
+                UnregisterHotkeys();
+            }
         }
 
         /// <summary>
@@ -309,6 +396,8 @@ namespace NaturalCommands
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            // Ensure hotkeys are unregistered when the form is closing
+            UnregisterHotkeys();
             try { NaturalCommands.Helpers.Logger.LogInfo($"[TICKER-FORM] OnFormClosing: reason={e.CloseReason}, hideOnDismiss={_hideOnDismiss}"); } catch { }
             if (_hideOnDismiss && e.CloseReason == CloseReason.UserClosing)
             {

@@ -69,9 +69,8 @@ namespace NaturalCommands
             {
                 // Dispose old icon
                 var oldIcon = _appIcon;
-                
                 // Create new icon with appropriate color
-                _appIcon = AppIconGenerator.CreateAppIcon(isActive);
+                _appIcon = AppIconGenerator.CreateAppIcon(isActive ? AppIconGenerator.IconState.AutoClickActive : AppIconGenerator.IconState.Normal);
                 if (_notifyIcon != null)
                 {
                     _notifyIcon.Icon = _appIcon;
@@ -93,6 +92,26 @@ namespace NaturalCommands
                 // Log but don't crash
                 System.Diagnostics.Debug.WriteLine($"Failed to update tray icon: {ex.Message}");
             }
+        }
+
+        public static void SetStatusIcon(AppIconGenerator.IconState state)
+        {
+            EnsureNotifyIcon();
+            try
+            {
+                try { NaturalCommands.Helpers.Logger.LogInfo($"[Tray] SetStatusIcon -> {state}"); } catch { }
+                var oldIcon = _appIcon;
+                _appIcon = AppIconGenerator.CreateAppIcon(state);
+                if (_notifyIcon != null)
+                {
+                    _notifyIcon.Icon = _appIcon;
+                }
+                if (oldIcon != null && oldIcon != _appIcon)
+                {
+                    oldIcon.Dispose();
+                }
+            }
+            catch { }
         }
 
         public static void ShowNotification(string title, string message, int timeout = 5000)

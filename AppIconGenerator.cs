@@ -10,10 +10,24 @@ namespace NaturalCommands
     /// </summary>
     public static class AppIconGenerator
     {
+        public enum IconState
+        {
+            Normal,
+            AutoClickActive,
+            ListenerOk,
+            ListenerWarning,
+            ListenerError,
+            Unknown
+        }
         /// <summary>
         /// Creates a custom icon for the system tray with a microphone design.
         /// </summary>
         public static Icon CreateAppIcon(bool isAutoClickActive = false)
+        {
+            return CreateAppIcon(isAutoClickActive ? IconState.AutoClickActive : IconState.Normal);
+        }
+
+        public static Icon CreateAppIcon(IconState state)
         {
             // Create a bitmap for the icon (32x32 for high quality)
             using (Bitmap bmp = new Bitmap(32, 32, PixelFormat.Format32bppArgb))
@@ -21,15 +35,35 @@ namespace NaturalCommands
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.Clear(Color.Transparent);
-
-                // Define colors - blue for normal, green for auto-click active
-                Color primaryColor = isAutoClickActive 
-                    ? Color.FromArgb(16, 185, 129)  // Green for active
-                    : Color.FromArgb(0, 120, 215);   // Blue for normal
+                // Map icon state to colors
+                Color primaryColor;
+                Color accentColor;
                 Color secondaryColor = Color.White;
-                Color accentColor = isAutoClickActive 
-                    ? Color.FromArgb(5, 150, 105)    // Darker green
-                    : Color.FromArgb(0, 90, 158);     // Darker blue
+                switch (state)
+                {
+                    case IconState.AutoClickActive:
+                    case IconState.ListenerOk:
+                        primaryColor = Color.FromArgb(16, 185, 129); // green
+                        accentColor = Color.FromArgb(5, 150, 105);
+                        break;
+                    case IconState.ListenerWarning:
+                        primaryColor = Color.FromArgb(245, 158, 11); // amber
+                        accentColor = Color.FromArgb(202, 102, 0);
+                        break;
+                    case IconState.ListenerError:
+                        primaryColor = Color.FromArgb(239, 68, 68); // red
+                        accentColor = Color.FromArgb(180, 30, 30);
+                        break;
+                    case IconState.Unknown:
+                        primaryColor = Color.FromArgb(120, 120, 120); // gray
+                        accentColor = Color.FromArgb(90, 90, 90);
+                        break;
+                    case IconState.Normal:
+                    default:
+                        primaryColor = Color.FromArgb(0, 120, 215); // blue
+                        accentColor = Color.FromArgb(0, 90, 158);
+                        break;
+                }
 
                 // Draw microphone body
                 using (var brush = new SolidBrush(primaryColor))

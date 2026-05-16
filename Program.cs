@@ -96,11 +96,37 @@ namespace ExecuteCommands_NET
         }
 
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             // Minimal, safe startup to keep build/tests happy. Real CLI behavior is preserved elsewhere.
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            // If asked to run in listen mode, start the resident application context
+            try
+            {
+                var listenMode = args != null && args.Any(a => string.Equals(a, "listen", StringComparison.OrdinalIgnoreCase));
+                if (listenMode)
+                {
+                    if (HasOtherNaturalCommandsProcess())
+                    {
+                        try { NaturalCommands.Helpers.Logger.LogInfo("Skipping listen-mode startup because another NaturalCommands process is already running."); } catch { }
+                        return;
+                    }
+
+                    try
+                    {
+                        Application.Run(new ListenModeApplicationContext());
+                    }
+                    catch (Exception ex)
+                    {
+                        try { NaturalCommands.Helpers.Logger.LogError($"Failed to start ListenModeApplicationContext: {ex.Message}"); } catch { }
+                    }
+
+                    return;
+                }
+            }
+            catch { }
 
             // Start the watcher if this is the resident mode runner and no other process is active
             try

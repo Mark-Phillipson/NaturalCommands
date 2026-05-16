@@ -53,8 +53,8 @@ namespace NaturalCommands
             _buttonPrev.BackColor = Color.FromArgb(64, 64, 64);
             _buttonPrev.Location = new Point(880, 50);
             _buttonPrev.Size = new Size(100, 35);
-            _buttonPrev.Text = "◀ Prev";
-            _buttonPrev.TabStop = false;
+            _buttonPrev.Text = "&Previous";
+            _buttonPrev.TabStop = true;
 
             // _buttonNext
             _buttonNext.FlatStyle = FlatStyle.Flat;
@@ -63,8 +63,8 @@ namespace NaturalCommands
             _buttonNext.BackColor = Color.FromArgb(64, 64, 64);
             _buttonNext.Location = new Point(985, 50);
             _buttonNext.Size = new Size(100, 35);
-            _buttonNext.Text = "Next ▶";
-            _buttonNext.TabStop = false;
+            _buttonNext.Text = "&Next";
+            _buttonNext.TabStop = true;
 
             // _buttonDismiss
             _buttonDismiss.FlatStyle = FlatStyle.Flat;
@@ -73,8 +73,8 @@ namespace NaturalCommands
             _buttonDismiss.BackColor = Color.FromArgb(244, 67, 54);
             _buttonDismiss.Location = new Point(1090, 50);
             _buttonDismiss.Size = new Size(100, 35);
-            _buttonDismiss.Text = "✕ Dismiss";
-            _buttonDismiss.TabStop = false;
+            _buttonDismiss.Text = "&Dismiss";
+            _buttonDismiss.TabStop = true;
 
             // TickerOverlayForm
             AutoScaleMode = AutoScaleMode.None;

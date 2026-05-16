@@ -270,49 +270,58 @@ namespace NaturalCommands
                         Console.WriteLine("[listen-notifications] Listener disposed — attempting reinitialization.");
 
                         bool reinitSuccess = false;
-                        for (int attempt = 0; attempt < 5 && !token.IsCancellationRequested; attempt++)
+                        int attempt = 0;
+                        // Keep retrying in the background with exponential backoff; notify owner periodically
+                        while (!token.IsCancellationRequested && !reinitSuccess)
                         {
+                            attempt++;
                             try
                             {
-                                Thread.Sleep(1000);
+                                // Probe the listener on a fresh STA helper thread
                                 string probeError = null;
                                 bool probeOk = TryProbeListenerOnSta(timeoutMs: 5000, out probeError);
                                 if (!probeOk)
                                 {
-                                    NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Reinit attempt {attempt + 1} probe failed: {probeError ?? "unknown"}");
-                                    // If the probe indicates the COM server is not connected, abort early
-                                    if (!string.IsNullOrEmpty(probeError) && (probeError.Contains("0x800401FD") || probeError.Contains("CO_E_OBJNOTCONNECTED") || probeError.Contains("Object is not connected to server")))
-                                    {
-                                        NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] Reinit unrecoverable: {probeError}. Aborting reinit.");
-                                        break;
-                                    }
-                                    continue;
+                                    NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Reinit attempt {attempt} probe failed: {probeError ?? "unknown"}");
                                 }
-
-                                // Create a fresh listener proxy on this (polling) STA thread
-                                listener = UserNotificationListener.Current;
-                                // quick sanity-check probe
-                                var check = listener.GetNotificationsAsync(NotificationKinds.Toast).GetAwaiter().GetResult();
-
-                                reinitSuccess = true;
-                                NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] Reinitialized listener after {attempt + 1} attempt(s).");
-                                break;
+                                else
+                                {
+                                    // Recreate listener proxy on this STA polling thread
+                                    listener = UserNotificationListener.Current;
+                                    var check = listener.GetNotificationsAsync(NotificationKinds.Toast).GetAwaiter().GetResult();
+                                    reinitSuccess = true;
+                                    NaturalCommands.Helpers.Logger.LogInfo($"[NotificationListener] Reinitialized listener after {attempt} attempt(s).");
+                                    break;
+                                }
                             }
                             catch (Exception rex)
                             {
-                                NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Reinit attempt {attempt + 1} failed: {rex.ToString()}");
+                                NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Reinit attempt {attempt} failed: {rex.ToString()}");
                             }
+
+                            if (attempt % 6 == 0)
+                            {
+                                // Periodically notify the owner that listener is struggling but still retrying
+                                try { ListenerFailed?.Invoke(); } catch { }
+                            }
+
+                            if (token.IsCancellationRequested) break;
+
+                            // Exponential backoff between 1s and 60s
+                            int delayMs = Math.Min(1000 * (1 << Math.Min(attempt - 1, 6)), 60000);
+                            Thread.Sleep(delayMs);
                         }
 
                         if (!reinitSuccess)
                         {
-                            NaturalCommands.Helpers.Logger.LogError("[NotificationListener] Reinit failed — stopping poll loop.");
+                            NaturalCommands.Helpers.Logger.LogError("[NotificationListener] Reinit attempts exhausted or cancelled — exiting poll loop.");
                             Console.WriteLine("[listen-notifications] Listener reinit failed, exiting.");
                             try { ListenerFailed?.Invoke(); } catch { }
                             break;
                         }
                         else
                         {
+                            // successfully reinitialized; continue polling
                             continue;
                         }
                     }
