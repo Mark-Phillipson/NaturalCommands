@@ -224,6 +224,7 @@ namespace NaturalCommands
             ("natural dictate", "Open the voice dictation form (speak or type natural language commands)"),
             ("show letters", "Display letter labels on clickable UI elements for voice-based navigation"),
             ("identify <target>", "Identify a visual target and click when confident, otherwise show numbered options"),
+            ("id <target>", "Shorthand for identify: identify a visual target (e.g. id telegram)"),
             ("show candidates", "Show numbered candidates from the latest visual identify command"),
             ("choose <number>", "Choose a numbered visual target candidate"),
             ("emoji set <name> <emoji>", "Set an emoji for a named shortcut (e.g. emoji set happy 😀)"),
@@ -1090,9 +1091,11 @@ namespace NaturalCommands
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
 
-            if (text.StartsWith("identify ", StringComparison.InvariantCultureIgnoreCase))
+            if (text.StartsWith("identify ", StringComparison.InvariantCultureIgnoreCase)
+                || text.StartsWith("id ", StringComparison.InvariantCultureIgnoreCase))
             {
-                var targetPhrase = text.Substring("identify ".Length).Trim();
+                var prefix = text.StartsWith("identify ", StringComparison.InvariantCultureIgnoreCase) ? "identify " : "id ";
+                var targetPhrase = text.Substring(prefix.Length).Trim();
                 if (!string.IsNullOrWhiteSpace(targetPhrase))
                 {
                     var action = new VisualIdentifyClickAction(targetPhrase);
@@ -1545,6 +1548,36 @@ namespace NaturalCommands
                     {
                         Helpers.VisualCandidateSessionStore.Clear();
                         VisualCandidateOverlayForm.HideOverlay();
+
+                        // Show debug overlay with screenshot for troubleshooting
+                        try
+                        {
+                            var fgBounds = WindowUtils.GetForegroundWindowBounds();
+                            var screenshot = fgBounds != Rectangle.Empty
+                                ? Helpers.ScreenCaptureService.CaptureRegionJpeg(fgBounds, maxLongEdge: 1400, quality: 60)
+                                : Helpers.ScreenCaptureService.CaptureAllScreensJpeg(maxLongEdge: 1400, quality: 60);
+                            var debugMsg = $"Searching for: '{visualIdentify.TargetPhrase}'\n" +
+                                           $"No visual matches found.\n" +
+                                           $"Try 'show letters' to see clickable UI elements.";
+                            Image? img = null;
+                            if (!string.IsNullOrEmpty(screenshot.ImageBase64Jpeg))
+                            {
+                                byte[] imageBytes = Convert.FromBase64String(screenshot.ImageBase64Jpeg);
+                                using (var ms = new System.IO.MemoryStream(imageBytes))
+                                {
+                                    using (var tempImg = Image.FromStream(ms))
+                                    {
+                                        img = new Bitmap(tempImg);
+                                    }
+                                }
+                            }
+                            VisualTargetDebugOverlayForm.ShowDebug(visualIdentify.TargetPhrase, img, debugMsg, timeoutMs: 4000);
+                        }
+                        catch (Exception ex)
+                        {
+                            Helpers.Logger.LogError($"Failed to show debug overlay: {ex.Message}");
+                        }
+
                         return $"No visual match found for '{visualIdentify.TargetPhrase}'.";
                     }
 
@@ -1566,10 +1599,27 @@ namespace NaturalCommands
                         bool isSingle = candidates.Count == 1;
                         if (isSingle)
                         {
-                            // If there is exactly one visual match, click it directly instead of
-                            // showing a numbered overlay prompt.
-                            shouldAutoClickTop = true;
-                            autoClickReason = "single candidate";
+                            var top = candidates[0];
+                            var topLabel = (top.Label ?? string.Empty).Trim();
+                            var target = (visualIdentify.TargetPhrase ?? string.Empty).Trim();
+
+                            // For OCR single candidates, require a tight textual match to avoid
+                            // clicking long sentence fragments that merely contain the token.
+                            var isOcr = string.Equals(top.Source, "ocr", StringComparison.OrdinalIgnoreCase);
+                            var exactLabelMatch = topLabel.Equals(target, StringComparison.OrdinalIgnoreCase);
+                            var startsWithWholeTarget = !string.IsNullOrWhiteSpace(target)
+                                && topLabel.StartsWith(target + " ", StringComparison.OrdinalIgnoreCase);
+                            var boundedLength = topLabel.Length <= Math.Max(24, target.Length + 12);
+
+                            if (!isOcr || (top.Confidence >= 0.92 && (exactLabelMatch || (startsWithWholeTarget && boundedLength))))
+                            {
+                                shouldAutoClickTop = true;
+                                autoClickReason = isOcr ? "single candidate (safe ocr)" : "single candidate";
+                            }
+                            else
+                            {
+                                Helpers.Logger.LogInfo($"Visual identify: single OCR candidate '{topLabel}' rejected for auto-click (target='{target}', confidence={top.Confidence:0.00}).");
+                            }
                         }
                         else if (candidates[0].Confidence >= workaroundMinConfidence)
                         {

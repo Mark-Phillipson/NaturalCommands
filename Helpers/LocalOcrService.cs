@@ -819,9 +819,29 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
         {
             if (string.IsNullOrWhiteSpace(text)) return true;
             var t = text.Trim();
+            var lower = t.ToLowerInvariant();
 
             if (System.Text.RegularExpressions.Regex.IsMatch(t, "^\\[?(debug|info|error|warn|trace)\\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
                 return true;
+
+            // Ignore command-line/log echo content that often includes the spoken phrase itself.
+            if (lower.Contains("program.main")
+                || lower.Contains("handlenaturalasync")
+                || lower.Contains("interpreta")
+                || lower.Contains("visualidentifyclickaction")
+                || lower.Contains("dotnet run")
+                || lower.Contains("dotnet build")
+                || lower.Contains("get-content")
+                || lower.Contains("remove-item")
+                || lower.Contains("erroraction")
+                || lower.Contains("cannot find path")
+                || lower.Contains("ps c:\\")
+                || lower.Contains("identify ")
+                || lower.Contains(" -- natural ")
+                || lower.Contains(" -tail "))
+            {
+                return true;
+            }
 
             if (t.IndexOf("Generating patch", StringComparison.OrdinalIgnoreCase) >= 0
                 || t.IndexOf("Edited", StringComparison.OrdinalIgnoreCase) >= 0

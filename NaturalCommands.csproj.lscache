@@ -133,6 +133,7 @@ TickerOverlayManager.cs
 TrayNotificationHelper.cs
 UIElementOverlayForm.cs
 VisualCandidateOverlayForm.cs
+VisualTargetDebugOverlayForm.cs
 VoiceDictationForm.cs
 WinCursors.cs
 WindowsNotificationListenerService.cs

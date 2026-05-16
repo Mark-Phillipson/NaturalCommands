@@ -94,32 +94,45 @@ namespace NaturalCommands
 
         public static void ShowCandidates(List<VisualTargetCandidate> candidates, int timeoutMs)
         {
-            if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
+            try
             {
-                _uiContext.Post(_ => ShowCandidates(candidates, timeoutMs), null);
-                return;
-            }
-
-            lock (_lock)
-            {
-                if (_instance == null || _instance.IsDisposed)
-                {
-                    _instance = new VisualCandidateOverlayForm();
-                }
-
-                _instance._candidates = candidates ?? new List<VisualTargetCandidate>();
-                _instance._timeoutTimer.Stop();
-                _instance._timeoutTimer.Interval = Math.Max(1000, timeoutMs);
-                _instance._timeoutTimer.Start();
-
-                if (!_instance.Visible)
-                {
-                    _instance.Show();
-                }
-                EnsureKeyboardHookInstalled();
+                NaturalCommands.Helpers.Logger.LogInfo($"ShowCandidates called with {candidates?.Count ?? 0} candidates, timeout={timeoutMs}ms");
                 
-                _instance.BringToFront();
-                _instance.Invalidate();
+                if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
+                {
+                    NaturalCommands.Helpers.Logger.LogInfo("ShowCandidates: posting to UI context");
+                    _uiContext.Post(_ => ShowCandidates(candidates, timeoutMs), null);
+                    return;
+                }
+
+                lock (_lock)
+                {
+                    if (_instance == null || _instance.IsDisposed)
+                    {
+                        _instance = new VisualCandidateOverlayForm();
+                        NaturalCommands.Helpers.Logger.LogInfo("ShowCandidates: created new form instance");
+                    }
+
+                    _instance._candidates = candidates ?? new List<VisualTargetCandidate>();
+                    _instance._timeoutTimer.Stop();
+                    _instance._timeoutTimer.Interval = Math.Max(1000, timeoutMs);
+                    _instance._timeoutTimer.Start();
+
+                    if (!_instance.Visible)
+                    {
+                        _instance.Show();
+                        NaturalCommands.Helpers.Logger.LogInfo("ShowCandidates: form shown");
+                    }
+                    EnsureKeyboardHookInstalled();
+                    
+                    _instance.BringToFront();
+                    _instance.Invalidate();
+                    NaturalCommands.Helpers.Logger.LogInfo("ShowCandidates: form brought to front and invalidated");
+                }
+            }
+            catch (Exception ex)
+            {
+                NaturalCommands.Helpers.Logger.LogError($"ShowCandidates exception: {ex.Message}\n{ex.StackTrace}");
             }
         }
 

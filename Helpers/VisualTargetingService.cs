@@ -30,26 +30,24 @@ namespace NaturalCommands.Helpers
 
             var currentProcessName = NaturalCommands.CurrentApplicationHelper.GetCurrentProcessName() ?? string.Empty;
             Logger.LogInfo($"VisualTargetingService: IdentifyCandidates called - phrase='{phrase}', normalized='{normalizedPhrase}', currentProcess='{currentProcessName}'.");
+            var foregroundBounds = WindowUtils.GetForegroundWindowBounds();
+            if (foregroundBounds == System.Drawing.Rectangle.Empty)
+            {
+                Logger.LogWarning("VisualTargetingService: foreground window bounds unavailable; refusing off-window matching.");
+                return new List<VisualTargetCandidate>();
+            }
             
             // Capture a screenshot once and pass it through to vision/OCR paths
             ScreenCaptureResult? preCapture = null;
             try
             {
-                var fg = WindowUtils.GetForegroundWindowBounds();
-                if (fg != System.Drawing.Rectangle.Empty)
-                {
-                    preCapture = ScreenCaptureService.CaptureRegionJpeg(fg, maxLongEdge: 1400, quality: 60);
-                }
-                else
-                {
-                    preCapture = ScreenCaptureService.CaptureAllScreensJpeg(maxLongEdge: 1400, quality: 60);
-                }
+                preCapture = ScreenCaptureService.CaptureRegionJpeg(foregroundBounds, maxLongEdge: 1400, quality: 60);
                 Logger.LogDebug($"VisualTargetingService: preCapture VirtualBounds={preCapture.VirtualBounds.Left},{preCapture.VirtualBounds.Top},{preCapture.VirtualBounds.Width}x{preCapture.VirtualBounds.Height}; image={preCapture.Width}x{preCapture.Height}.");
             }
             catch (Exception ex)
             {
                 Logger.LogWarning($"VisualTargetingService: pre-capture failed: {ex.Message}");
-                try { preCapture = ScreenCaptureService.CaptureAllScreensJpeg(maxLongEdge: 1400, quality: 60); } catch { preCapture = null; }
+                return new List<VisualTargetCandidate>();
             }
             var preferOcrForCurrentApp = ShouldPreferOcrForApp(currentProcessName)
                 && !string.Equals(settings.FallbackMode, "uia-only", StringComparison.OrdinalIgnoreCase);
@@ -62,6 +60,7 @@ namespace NaturalCommands.Helpers
             var localUiCandidates = string.Equals(settings.FallbackMode, "ocr-only", StringComparison.OrdinalIgnoreCase) || preferOcrForCurrentApp
                 ? new List<VisualTargetCandidate>()
                 : TryFromUiAutomation(normalizedPhrase);
+            localUiCandidates = FilterCandidatesToBounds(localUiCandidates, foregroundBounds, "UIA");
             Logger.LogDebug($"VisualTargetingService: localUiCandidates.Count={localUiCandidates.Count} for phrase '{normalizedPhrase}'.");
             if (localUiCandidates.Count > 0)
             {
@@ -103,6 +102,7 @@ namespace NaturalCommands.Helpers
                 {
                     Logger.LogDebug($"VisualTargetingService: attempting OCR for phrase '{normalizedPhrase}'.");
                     var ocrCandidates = TryFromLocalOcr(normalizedPhrase, preCapture);
+                    ocrCandidates = FilterCandidatesToBounds(ocrCandidates, foregroundBounds, "OCR");
                     Logger.LogDebug($"VisualTargetingService: OCR returned {ocrCandidates.Count} candidates.");
                     if (candidates.Count == 0)
                     {
@@ -119,6 +119,8 @@ namespace NaturalCommands.Helpers
                 }
             }
 
+            candidates = FilterCandidatesToBounds(candidates, foregroundBounds, "final");
+
             var maxCandidates = Math.Max(1, settings.MaxCandidates);
             var finalResult = candidates
                 .OrderByDescending(c => c.Confidence)
@@ -134,6 +136,28 @@ namespace NaturalCommands.Helpers
             }
             Logger.LogInfo($"VisualTargetingService.IdentifyCandidates complete: returning {finalResult.Count} candidates for '{normalizedPhrase}'.");
             return finalResult;
+        }
+
+        private static List<VisualTargetCandidate> FilterCandidatesToBounds(
+            List<VisualTargetCandidate> candidates,
+            System.Drawing.Rectangle foregroundBounds,
+            string source)
+        {
+            if (candidates == null || candidates.Count == 0)
+            {
+                return new List<VisualTargetCandidate>();
+            }
+
+            var filtered = candidates
+                .Where(c => c.Bounds.Width > 0 && c.Bounds.Height > 0 && foregroundBounds.IntersectsWith(c.Bounds))
+                .ToList();
+
+            if (filtered.Count != candidates.Count)
+            {
+                Logger.LogDebug($"VisualTargetingService: {source} bounds filter kept {filtered.Count}/{candidates.Count} candidates inside foreground window {foregroundBounds.Left},{foregroundBounds.Top},{foregroundBounds.Width}x{foregroundBounds.Height}.");
+            }
+
+            return filtered;
         }
 
         private static bool CanUseCloudVision(VisualTargetingSettings settings)

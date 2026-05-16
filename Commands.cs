@@ -44,6 +44,11 @@ namespace NaturalCommands
 		/// </summary>
 		public string HandleNaturalAsync(string text)
 		{
+			try
+			{
+				Helpers.Logger.LogInfo($"Commands.HandleNaturalAsync received: '{text}'");
+			}
+			catch { }
 			return _naturalInterpreter.HandleNaturalAsync(text);
 		}
 		

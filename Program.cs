@@ -102,10 +102,116 @@ namespace ExecuteCommands_NET
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            try
+            {
+                var argsText = args == null
+                    ? "<null>"
+                    : string.Join(" | ", args.Select((a, i) => $"[{i}]='{a}'"));
+                NaturalCommands.Helpers.Logger.LogInfo($"Program.Main startup. Args: {argsText}. LogPath: {NaturalCommands.Helpers.Logger.LogPath}");
+            }
+            catch { }
+
+            // Handle natural command mode: execute a single command and display any overlays
+            try
+            {
+                string NormalizeModeToken(string value)
+                {
+                    var t = (value ?? string.Empty).Trim();
+                    if (t.StartsWith("/") || t.StartsWith("-"))
+                    {
+                        t = t.Substring(1).Trim();
+                    }
+                    return t;
+                }
+
+                string NormalizeCommandSegment(string value)
+                {
+                    var t = (value ?? string.Empty).Trim();
+                    if (string.IsNullOrWhiteSpace(t))
+                    {
+                        return string.Empty;
+                    }
+
+                    // Talon may prefix command tokens with '/' (e.g. /identify activity)
+                    if (t.StartsWith("/") || t.StartsWith("-"))
+                    {
+                        t = t.Substring(1).TrimStart();
+                    }
+
+                    return t;
+                }
+
+                var knownModes = new[] { "listen", "natural", "ticker", "ticker-file", "ticker-test", "export-vs-commands" };
+                var cleanedArgs = (args ?? Array.Empty<string>())
+                    .Select(a => (a ?? string.Empty).Trim())
+                    .Where(a => !string.IsNullOrWhiteSpace(a))
+                    .ToArray();
+
+                var firstArg = cleanedArgs.Length > 0 ? cleanedArgs[0] : string.Empty;
+                var firstModeToken = NormalizeModeToken(firstArg);
+                var explicitNaturalMode = !string.IsNullOrEmpty(firstModeToken) && string.Equals(firstModeToken, "natural", StringComparison.OrdinalIgnoreCase);
+                var implicitNaturalMode = !string.IsNullOrEmpty(firstModeToken) && !knownModes.Contains(firstModeToken, StringComparer.OrdinalIgnoreCase);
+                var naturalMode = explicitNaturalMode || implicitNaturalMode;
+                if (naturalMode)
+                {
+                    try
+                    {
+                        // Initialize UI context for overlays
+                        VisualCandidateOverlayForm.InitializeUIContext();
+                        
+                        // Talon may invoke as either:
+                        // 1) NaturalCommands.exe natural identify telegram
+                        // 2) NaturalCommands.exe identify telegram
+                        var commandSegments = explicitNaturalMode
+                            ? cleanedArgs.Skip(1).Select(NormalizeCommandSegment)
+                            : cleanedArgs.Select(NormalizeCommandSegment);
+                        var commandText = string.Join(" ", commandSegments.Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
+
+                        try
+                        {
+                            NaturalCommands.Helpers.Logger.LogInfo($"Program.Main natural command text: '{commandText}' (explicitNaturalMode={explicitNaturalMode}, implicitNaturalMode={implicitNaturalMode}, firstModeToken='{firstModeToken}')");
+                        }
+                        catch { }
+                        
+                        // Create interpreter and execute
+                        var interpreter = new NaturalLanguageInterpreter();
+                        var result = interpreter.HandleNaturalAsync(commandText);
+                        
+                        // Keep a message pump alive for 15 seconds so UI overlays (candidates, debug)
+                        // can display and auto-close. The overlay forms have their own timeouts (9s).
+                        var exitTimer = new System.Timers.Timer(15000);
+                        exitTimer.Elapsed += (s, e) =>
+                        {
+                            exitTimer.Stop();
+                            exitTimer.Dispose();
+                            Application.Exit();
+                        };
+                        exitTimer.AutoReset = false;
+                        exitTimer.Start();
+
+                        // UI message pump to allow overlays to render
+                        while (exitTimer.Enabled)
+                        {
+                            Application.DoEvents();
+                            System.Threading.Thread.Sleep(50);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        try { NaturalCommands.Helpers.Logger.LogError($"Natural command error: {ex.Message}"); } catch { }
+                    }
+                    return;
+                }
+            }
+            catch { }
+
             // If asked to run in listen mode, start the resident application context
             try
             {
-                var listenMode = args != null && args.Any(a => string.Equals(a, "listen", StringComparison.OrdinalIgnoreCase));
+                var listenMode = (args ?? Array.Empty<string>())
+                    .Select(a => (a ?? string.Empty).Trim())
+                    .Any(a => string.Equals(a, "listen", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(a.TrimStart('/', '-'), "listen", StringComparison.OrdinalIgnoreCase));
                 if (listenMode)
                 {
                     if (HasOtherNaturalCommandsProcess())

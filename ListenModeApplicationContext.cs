@@ -319,7 +319,9 @@ namespace NaturalCommands
                     {
                         if (!string.IsNullOrWhiteSpace(commandText))
                         {
+                            try { Helpers.Logger.LogInfo($"ListenMode received dictation command: '{commandText}'"); } catch { }
                             var processedText = Helpers.WordReplacementHelper.ApplyWordReplacements(commandText);
+                            try { Helpers.Logger.LogInfo($"ListenMode processed command text: '{processedText}'"); } catch { }
                             _commands.HandleNaturalAsync(processedText);
                         }
                     }
