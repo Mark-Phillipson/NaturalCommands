@@ -337,32 +337,18 @@ namespace NaturalCommands
         // Show the ticker lines in a new STA thread (re-usable by notification listener and ticker payload watcher)
         private void ShowTickerLines(System.Collections.Generic.List<string> lines)
         {
-            // Similar to WindowsNotificationListenerService.ShowTicker
             lock (this)
             {
                 try { Helpers.Logger.LogInfo($"ListenMode: ShowTickerLines called ({lines.Count} lines)"); } catch { }
-                // Create a new form on its own STA thread so it can be invoked later for additions
-                var linesCopy = new System.Collections.Generic.List<string>(lines);
-                NaturalCommands.TickerOverlayForm? created = null;
-                var handleReady = new System.Threading.ManualResetEventSlim(false);
-
-                var thread = new System.Threading.Thread(() =>
+                try
                 {
-                    System.Windows.Forms.Application.EnableVisualStyles();
-                    System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
-                    var form = new NaturalCommands.TickerOverlayForm(linesCopy, cycleSeconds: 5, maxCycles: 0, topPosition: false);
-                    form.FormClosed += (s, e) => { /* nothing to do */ };
-                    var _ = form.Handle; // ensure handle created
-                    created = form;
-                    handleReady.Set();
-                    System.Windows.Forms.Application.Run(form);
-                });
-                thread.SetApartmentState(System.Threading.ApartmentState.STA);
-                thread.IsBackground = true;
-                thread.Start();
-
-                // Wait briefly for the form to be ready
-                handleReady.Wait(TimeSpan.FromSeconds(3));
+                    // Ensure a persistent ticker exists and append the provided lines
+                    TickerOverlayManager.EnsurePersistentTicker(lines, cycleSeconds: 5, maxCycles: 0, topPosition: false, hideOnDismiss: false);
+                }
+                catch (Exception ex)
+                {
+                    try { Helpers.Logger.LogError($"ListenMode: ShowTickerLines failed: {ex.Message}"); } catch { }
+                }
             }
         }
 

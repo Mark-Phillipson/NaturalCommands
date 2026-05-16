@@ -389,53 +389,16 @@ namespace NaturalCommands
             return success;
         }
 
-        private TickerOverlayForm? _activeForm;
-        private readonly object _formLock = new();
-
         private void ShowTicker(System.Collections.Generic.List<string> lines)
         {
-            lock (_formLock)
+            try
             {
-                // Active form exists — add all new messages to it via Invoke
-                if (_activeForm != null && !_activeForm.IsDisposed)
-                {
-                    bool invokeOk = true;
-                    foreach (var line in lines)
-                    {
-                        try { _activeForm.AddMessage(TickerOverlayForm.ParseSingleLine(line)); }
-                        catch { invokeOk = false; break; }
-                    }
-                    if (invokeOk) return;
-                    // Invoke failed (form closing) — fall through to create new form below
-                    _activeForm = null;
-                }
-
-                // No active form — create one entirely on a new STA thread so the handle
-                // is owned by that thread (required for Invoke to work on future AddMessage calls)
-                var linesCopy = new System.Collections.Generic.List<string>(lines);
-                TickerOverlayForm? created = null;
-                var handleReady = new ManualResetEventSlim(false);
-
-                var thread = new Thread(() =>
-                {
-                    System.Windows.Forms.Application.EnableVisualStyles();
-                    System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
-                    // maxCycles=0 → never auto-close; user must press Dismiss
-                    var form = new TickerOverlayForm(linesCopy, cycleSeconds: 5, maxCycles: 0, topPosition: false);
-                    form.FormClosed += (s, e) => { lock (_formLock) { _activeForm = null; } };
-                    // Force handle creation on this thread before signalling
-                    var _ = form.Handle;
-                    created = form;
-                    handleReady.Set();
-                    System.Windows.Forms.Application.Run(form);
-                });
-                thread.SetApartmentState(ApartmentState.STA);
-                thread.IsBackground = true;
-                thread.Start();
-
-                // Wait for handle to be ready so Invoke works for subsequent AddMessage calls
-                handleReady.Wait(TimeSpan.FromSeconds(3));
-                _activeForm = created;
+                // Delegate to centralized manager which ensures a single persistent form
+                TickerOverlayManager.EnsurePersistentTicker(lines, cycleSeconds: 5, maxCycles: 0, topPosition: false, hideOnDismiss: false);
+            }
+            catch (Exception ex)
+            {
+                try { NaturalCommands.Helpers.Logger.LogError($"[NotificationListener] ShowTicker failed: {ex.Message}"); } catch { }
             }
         }
 

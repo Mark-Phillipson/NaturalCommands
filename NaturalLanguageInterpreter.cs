@@ -70,6 +70,7 @@ namespace NaturalCommands
             { "windows terminal", "wt.exe" },
             { "cmd", "wt.exe" }, // Always prefer Windows Terminal
             { "command prompt", "wt.exe" },
+            { "steam", "steam://open/main" },
             { "skype", "skype.exe" },
             { "zoom", "zoom.exe" },
             { "slack", "slack.exe" }
