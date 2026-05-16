@@ -181,6 +181,13 @@ namespace NaturalCommands
 
                 while (!token.IsCancellationRequested)
                 {
+                    // Guard against the unlikely case where the WinRT listener proxy is null
+                    if (listener == null)
+                    {
+                        try { NaturalCommands.Helpers.Logger.LogWarning("[NotificationListener] Listener proxy is null before polling; retrying shortly."); } catch { }
+                        Thread.Sleep(1000);
+                        continue;
+                    }
                     try
                     {
                         var notifications = listener
@@ -221,8 +228,7 @@ namespace NaturalCommands
 
                                 if (_ignoreApps.Contains(appName)) continue;
 
-                                var binding = notification.Notification.Visual
-                                    .GetBinding(KnownNotificationBindings.ToastGeneric);
+                                var binding = notification.Notification?.Visual?.GetBinding(KnownNotificationBindings.ToastGeneric);
                                 var title = binding?.GetTextElements()?.FirstOrDefault()?.Text ?? appName;
                                 var body  = binding?.GetTextElements()?.Skip(1).FirstOrDefault()?.Text ?? string.Empty;
                                 var message = string.IsNullOrWhiteSpace(body) ? title : $"{title} — {body}";
@@ -278,7 +284,7 @@ namespace NaturalCommands
                             try
                             {
                                 // Probe the listener on a fresh STA helper thread
-                                string probeError = null;
+                                string? probeError = null;
                                 bool probeOk = TryProbeListenerOnSta(timeoutMs: 5000, out probeError);
                                 if (!probeOk)
                                 {
@@ -348,7 +354,7 @@ namespace NaturalCommands
             probeError = null;
             bool success = false;
             var done = new System.Threading.ManualResetEventSlim(false);
-            string localError = null;
+            string? localError = null;
 
             var thread = new Thread(() =>
             {

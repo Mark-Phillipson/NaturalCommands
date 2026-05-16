@@ -126,6 +126,7 @@ Properties/AssemblyInfo.cs
 SearchVisualStudioCommandsWPF.xaml.cs
 SettingsForm.cs
 ShowMouse.cs
+TestMode.cs
 TickerOverlayForm.cs
 TickerOverlayForm.Designer.cs
 TickerOverlayManager.cs

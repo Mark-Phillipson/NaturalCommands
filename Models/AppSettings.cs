@@ -360,6 +360,13 @@ namespace NaturalCommands.Models
         /// Show debug input dialog on startup (debug mode only).
         /// </summary>
         public bool ShowDebugDialog { get; set; } = false;
+
+        /// <summary>
+        /// When true, the application runs in test-only mode. In test-only mode the
+        /// runtime avoids launching external UIs or terminals. This can also be
+        /// enabled via the `NATURALCOMMANDS_TEST_MODE` environment variable.
+        /// </summary>
+        public bool TestMode { get; set; } = false;
     }
 
     public class HotkeySettings

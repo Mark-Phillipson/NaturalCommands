@@ -948,6 +948,12 @@ namespace DictationBoxMSP
         {
             try
             {
+                // Respect centralized test-only mode so test runs do not open terminals.
+                if (NaturalCommands.TestMode.IsEnabled)
+                {
+                    try { NaturalCommands.Helpers.Logger.LogInfo("[VoiceDictationForm] Skipping terminal launch due to test-only mode"); } catch { }
+                    return;
+                }
                 // Try Windows Terminal (wt.exe) first
                 var wtPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", "wt.exe");
                 if (File.Exists(wtPath))
