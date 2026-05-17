@@ -101,7 +101,7 @@ namespace NaturalCommands
                 if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
                 {
                     NaturalCommands.Helpers.Logger.LogInfo("ShowCandidates: posting to UI context");
-                    _uiContext.Post(_ => ShowCandidates(candidates, timeoutMs), null);
+                    _uiContext.Post(_ => ShowCandidates(candidates ?? new System.Collections.Generic.List<VisualTargetCandidate>(), timeoutMs), null);
                     return;
                 }
 

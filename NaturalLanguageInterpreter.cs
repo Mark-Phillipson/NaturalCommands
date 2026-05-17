@@ -1655,7 +1655,7 @@ namespace NaturalCommands
                     if (shouldAutoClickTop)
                     {
                         Helpers.Logger.LogInfo($"ExecuteActionAsync: AUTO-CLICKING candidate '{candidates[0].Label}' via {autoClickReason}.");
-                        var point = Helpers.VisualTargetClickPointResolver.Resolve(candidates[0], visualIdentify.TargetPhrase);
+                        var point = Helpers.VisualTargetClickPointResolver.Resolve(candidates[0], visualIdentify.TargetPhrase ?? string.Empty);
                         if (point == System.Drawing.Point.Empty)
                         {
                             point = candidates[0].Center;
@@ -1685,7 +1685,7 @@ namespace NaturalCommands
 
                     var session2 = new Models.VisualTargetSession
                     {
-                        Query = visualIdentify.TargetPhrase,
+                        Query = visualIdentify.TargetPhrase ?? string.Empty,
                         CreatedUtc = DateTime.UtcNow,
                         Candidates = displayCandidates
                     };
