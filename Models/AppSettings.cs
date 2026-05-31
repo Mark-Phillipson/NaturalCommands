@@ -324,6 +324,12 @@ namespace NaturalCommands.Models
         public bool Enabled { get; set; } = true;
 
         /// <summary>
+        /// Show system tray icon and context menu on application startup.
+        /// Default: true.
+        /// </summary>
+        public bool ShowTrayOnStartup { get; set; } = true;
+
+        /// <summary>
         /// Enable ticker overlay (notification ticker). Default is false (disabled).
         /// </summary>
         public bool TickerEnabled { get; set; } = false;

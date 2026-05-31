@@ -200,23 +200,24 @@ namespace ExecuteCommands_NET
                     {
                         try { NaturalCommands.Helpers.Logger.LogError($"Natural command error: {ex.Message}"); } catch { }
                     }
-                    return;
+                    // Note: do not return here — continue startup so the tray/menu
+                    // can be shown by default (resident behavior on startup).
                 }
             }
             catch { }
 
-            // If asked to run in listen mode, start the resident application context
+            // Start resident tray/menu by default when enabled in settings.
             try
             {
-                var listenMode = (args ?? Array.Empty<string>())
-                    .Select(a => (a ?? string.Empty).Trim())
-                    .Any(a => string.Equals(a, "listen", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(a.TrimStart('/', '-'), "listen", StringComparison.OrdinalIgnoreCase));
-                if (listenMode)
+                var settings = NaturalCommands.Models.AppSettings.Instance;
+                var showTray = settings?.Notifications?.ShowTrayOnStartup ?? true;
+                var testMode = settings?.Behavior?.TestMode ?? false;
+
+                if (showTray && !testMode)
                 {
                     if (HasOtherNaturalCommandsProcess())
                     {
-                        try { NaturalCommands.Helpers.Logger.LogInfo("Skipping listen-mode startup because another NaturalCommands process is already running."); } catch { }
+                        try { NaturalCommands.Helpers.Logger.LogInfo("Skipping resident tray startup because another NaturalCommands process is already running."); } catch { }
                         return;
                     }
 
