@@ -30,7 +30,7 @@ namespace NaturalCommands
                     try
                     {
                         Helpers.Logger.LogInfo($"ListenMode: NotificationsReceived ({lines.Count} lines)");
-                        try { _trayMenu?.BeginInvoke((Action)(() => { if (_listenerStatusItem != null) _listenerStatusItem.Text = $"Listener: OK ({lines.Count})"; })); } catch { }
+                        try { _trayMenu?.BeginInvoke((Action)(() => { _listenerStatusText = $"Listener: OK ({lines.Count})"; })); } catch { }
                         try { TrayNotificationHelper.SetStatusIcon(AppIconGenerator.IconState.ListenerOk); } catch { }
                         ShowTickerLines(lines);
                     }
@@ -47,7 +47,7 @@ namespace NaturalCommands
                         _notificationListenerFailureCount++;
                         int delayMs = Math.Min(1000 * (1 << Math.Max(0, _notificationListenerFailureCount - 1)), 60000);
                         Helpers.Logger.LogWarning($"ListenMode: Notification listener reported failure — scheduling restart in {delayMs}ms (failure #{_notificationListenerFailureCount}).");
-                        try { _trayMenu?.BeginInvoke((Action)(() => { if (_listenerStatusItem != null) _listenerStatusItem.Text = $"Listener: Failed ({_notificationListenerFailureCount}) - restarting"; })); } catch { }
+                        try { _trayMenu?.BeginInvoke((Action)(() => { _listenerStatusText = $"Listener: Failed ({_notificationListenerFailureCount}) - restarting"; })); } catch { }
                         try { TrayNotificationHelper.SetStatusIcon(AppIconGenerator.IconState.ListenerWarning); } catch { }
                         System.Threading.Tasks.Task.Delay(delayMs).ContinueWith(_ => StartResidentNotificationListener());
                     }
@@ -62,7 +62,7 @@ namespace NaturalCommands
                         if (!allowed)
                         {
                             Helpers.Logger.LogWarning("Notification listener access denied. Enable NaturalCommands in Windows Settings > System > Notifications.");
-                            try { _trayMenu?.BeginInvoke((Action)(() => { if (_listenerStatusItem != null) _listenerStatusItem.Text = "Listener: No access"; })); } catch { }
+                            try { _trayMenu?.BeginInvoke((Action)(() => { _listenerStatusText = "Listener: No access"; })); } catch { }
                             try { TrayNotificationHelper.SetStatusIcon(AppIconGenerator.IconState.ListenerError); } catch { }
                         }
                         else
@@ -70,7 +70,7 @@ namespace NaturalCommands
                             Helpers.Logger.LogInfo("Resident notification listener started.");
                             // Reset failure count after a successful start
                             _notificationListenerFailureCount = 0;
-                            try { _trayMenu?.BeginInvoke((Action)(() => { if (_listenerStatusItem != null) _listenerStatusItem.Text = "Listener: OK"; })); } catch { }
+                            try { _trayMenu?.BeginInvoke((Action)(() => { _listenerStatusText = "Listener: OK"; })); } catch { }
                             try { TrayNotificationHelper.SetStatusIcon(AppIconGenerator.IconState.ListenerOk); } catch { }
                         }
                     }
@@ -94,7 +94,8 @@ namespace NaturalCommands
         private System.Windows.Forms.Timer? _heartbeatTimer;
         private WindowsNotificationListenerService? _notificationListener;
         private ContextMenuStrip? _trayMenu;
-        private ToolStripMenuItem? _listenerStatusItem;
+        // Replaced the disabled menu item with a simple status string used by the tray tooltip.
+        private string _listenerStatusText = "Listener: starting...";
         // Count consecutive notification listener failures to apply exponential backoff
         private int _notificationListenerFailureCount = 0;
 
@@ -154,31 +155,8 @@ namespace NaturalCommands
             menu.Items.Add(stopAutoClickItem);
             menu.Items.Add(settingsItem);
 
-            // Listener status menu (disabled label + actionable test item)
-            try
-            {
-                _listenerStatusItem = new ToolStripMenuItem("Listener: starting...") { Enabled = false };
-                var sendTestItem = new ToolStripMenuItem("Send test notification");
-                sendTestItem.Click += (_, __) =>
-                {
-                    try
-                    {
-                        var lines = new System.Collections.Generic.List<string>
-                        {
-                            $"info:Manual test notification {DateTime.Now:s}"
-                        };
-                        ShowTickerLines(lines);
-                        TrayNotificationHelper.ShowNotification("Test notification sent", "Manual test delivered to ticker", 3000);
-                    }
-                    catch (Exception ex)
-                    {
-                        try { Helpers.Logger.LogError($"Send test notification failed: {ex.Message}"); } catch { }
-                    }
-                };
-                _listenerStatusItem.DropDownItems.Add(sendTestItem);
-                menu.Items.Add(_listenerStatusItem);
-            }
-            catch { }
+            // Listener status is stored in `_listenerStatusText` and displayed in the tray tooltip.
+            // The previous disabled menu label and its "Send test notification" action were removed.
 
             menu.Items.Add(new ToolStripSeparator { Margin = new Padding(0, 6, 0, 6) });
             menu.Items.Add(exitItem);
@@ -272,7 +250,7 @@ namespace NaturalCommands
                 {
                     try
                     {
-                        var status = _listenerStatusItem?.Text ?? "Listener: unknown";
+                        var status = _listenerStatusText ?? "Listener: unknown";
                         var tooltip = $"NaturalCommands - {status} - {DateTime.Now:HH:mm:ss}";
                         TrayNotificationHelper.SetTooltip(tooltip);
                     }
