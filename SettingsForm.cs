@@ -20,6 +20,7 @@ namespace NaturalCommands
         
         // General Tab
         private CheckBox chkEnableNotifications = null!;
+        private CheckBox chkEnableTicker = null!;
         private NumericUpDown numNotificationDuration = null!;
         private CheckBox chkDebugMode = null!;
         private CheckBox chkShowDebugDialog = null!;
@@ -238,6 +239,8 @@ namespace NaturalCommands
             panel.Controls.Add(CreateLabel("Notifications", ref yPos, true));
             chkEnableNotifications = CreateCheckBox("Enable notifications", ref yPos);
             panel.Controls.Add(chkEnableNotifications);
+            chkEnableTicker = CreateCheckBox("Enable ticker overlay (notification overlay)", ref yPos);
+            panel.Controls.Add(chkEnableTicker);
             panel.Controls.Add(CreateLabel("Notification duration (ms):", ref yPos));
             numNotificationDuration = CreateNumericUpDown(1000, 30000, ref yPos);
             panel.Controls.Add(numNotificationDuration);
@@ -683,6 +686,7 @@ namespace NaturalCommands
             
             // General
             chkEnableNotifications.Checked = settings.Notifications.Enabled;
+            chkEnableTicker.Checked = settings.Notifications.TickerEnabled;
             numNotificationDuration.Value = settings.Notifications.DisplayDurationMs;
             chkDebugMode.Checked = settings.Behavior.DebugMode;
             chkShowDebugDialog.Checked = settings.Behavior.ShowDebugDialog;
@@ -743,6 +747,7 @@ namespace NaturalCommands
             
             // General
             settings.Notifications.Enabled = chkEnableNotifications.Checked;
+            settings.Notifications.TickerEnabled = chkEnableTicker.Checked;
             settings.Notifications.DisplayDurationMs = (int)numNotificationDuration.Value;
             settings.Behavior.DebugMode = chkDebugMode.Checked;
             settings.Behavior.ShowDebugDialog = chkShowDebugDialog.Checked;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+using NaturalCommands.Models;
 
 namespace NaturalCommands
 {
@@ -21,9 +22,26 @@ namespace NaturalCommands
         /// Ensure a persistent ticker form exists and seed it with the provided lines.
         /// If the form already exists, the lines are appended instead of recreating.
         /// </summary>
-        public static void EnsurePersistentTicker(IEnumerable<string> initialLines, int cycleSeconds = 5, int maxCycles = 0, bool topPosition = false, bool hideOnDismiss = true)
+        public static void EnsurePersistentTicker(IEnumerable<string> initialLines, int cycleSeconds = 5, int maxCycles = 0, bool topPosition = false, bool hideOnDismiss = true, bool force = false)
         {
             if (initialLines == null) initialLines = Array.Empty<string>();
+
+            // Respect user setting to disable the ticker by default. Allow callers to override with `force=true`.
+            if (!force)
+            {
+                try
+                {
+                    if (!AppSettings.Instance.Notifications.TickerEnabled)
+                    {
+                        try { Helpers.Logger.LogInfo("[TICKER-MGR] Ticker disabled in settings; skipping creation"); } catch { }
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    try { Helpers.Logger.LogWarning($"[TICKER-MGR] Failed to read settings: {ex.Message}"); } catch { }
+                }
+            }
 
             lock (_lock)
             {

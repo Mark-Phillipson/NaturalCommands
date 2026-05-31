@@ -324,6 +324,11 @@ namespace NaturalCommands.Models
         public bool Enabled { get; set; } = true;
 
         /// <summary>
+        /// Enable ticker overlay (notification ticker). Default is false (disabled).
+        /// </summary>
+        public bool TickerEnabled { get; set; } = false;
+
+        /// <summary>
         /// Maximum tooltip text length.
         /// </summary>
         public int MaxTooltipLength { get; set; } = 60;

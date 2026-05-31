@@ -154,3 +154,16 @@ You can edit this file directly (while the app is not running) or use the Settin
   }
 }
 ```
+
+Default notification settings (new):
+
+```json
+{
+  "Notifications": {
+    "DisplayDurationMs": 5000,
+    "Enabled": true,
+    "TickerEnabled": false,
+    "MaxTooltipLength": 60
+  }
+}
+```
