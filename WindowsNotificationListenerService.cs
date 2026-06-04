@@ -11,6 +11,7 @@ namespace NaturalCommands
 {
     internal sealed class WindowsNotificationListenerService
     {
+        private Thread? _pollThread;
         private readonly Dictionary<string, TickerCategory> _appCategoryMap;
         private readonly HashSet<string> _ignoreApps;
 
@@ -341,13 +342,41 @@ namespace NaturalCommands
             });
             thread.SetApartmentState(ApartmentState.STA);
             thread.IsBackground = true;
+            _pollThread = thread;
             thread.Start();
 
             accessKnown.Wait(TimeSpan.FromSeconds(10));
             return accessResult == true;
         }
 
-        public void Stop() => _pollCts?.Cancel();
+        public void Stop()
+        {
+            try
+            {
+                _pollCts?.Cancel();
+            }
+            catch { }
+
+            try
+            {
+                // Wait briefly for the poll thread to exit to avoid transient COM errors in logs
+                if (_pollThread != null && _pollThread.IsAlive)
+                {
+                    if (!_pollThread.Join(5000))
+                    {
+                        try { NaturalCommands.Helpers.Logger.LogWarning("[NotificationListener] Poll thread did not exit within timeout after cancel."); } catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { NaturalCommands.Helpers.Logger.LogWarning($"[NotificationListener] Stop join error: {ex.Message}"); } catch { }
+            }
+            finally
+            {
+                _pollThread = null;
+            }
+        }
 
         private bool TryProbeListenerOnSta(int timeoutMs, out string? probeError)
         {

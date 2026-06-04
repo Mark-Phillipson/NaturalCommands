@@ -1,4 +1,4 @@
- ## Build the Application
+## Build the Application
 ```pwsh
 # Build the main project (requires .NET 10)
 dotnet clean NaturalCommands.csproj 
@@ -6,18 +6,17 @@ dotnet clean NaturalCommands.csproj
 dotnet build NaturalCommands.csproj  
 dotnet build NaturalCommands.csproj  
 dotnet build NaturalCommands.csproj  -c Release
-dotnet run --framework net10.0-windows -- listen -c Release
 dotnet run --framework net10.0-windows -c Release
 
 dotnet publish ./NaturalCommands.csproj -c Release -f net10.0-windows -r win-x64
   --self-contained true -p:PublishSingleFile=true `
   -o "./bin/Release/net10.0-windowsdotnet clean NaturalCommands.csproj/win-x64/publish"
-
+```
 ## Publish and No Startup (one command)
 You can publish and create a per-user Startup shortcut with the included script (no admin required for the Startup shortcut):
 
 ```pwsh
-# Publish self-contained and add a Startup shortcut that runs the app with `-- listen`
+# Publish self-contained and add a Startup shortcut that runs the app (no extra args required)
 powershell -ExecutionPolicy Bypass -File .\scripts\publish-and-register-startup.ps1 -SelfContained -CreateStartupShortcut
 ```
 
@@ -50,12 +49,12 @@ dotnet run --framework net10.0-windows -- natural "show letters"  # Display lett
 dotnet run --framework net10.0-windows -- natural "show taskbar"  # Focus the Taskbar then display letters for taskbar elements
 ```
 
-## Listen mode (resident hotkey)
+-## Resident mode (tray hotkey)
 
-Start the app in resident mode to show a tray icon and register a global hotkey:
+Start the app to show a tray icon and register a global hotkey. By default the app will create the tray/menu at startup when `Settings -> Notifications -> ShowTrayOnStartup` is enabled.
 
 ```pwsh
-dotnet run --framework net10.0-windows -- listen
+dotnet run --framework net10.0-windows
 ```
 
 - Hotkey: **Win+Ctrl+H** (opens the existing voice dictation form)
@@ -112,13 +111,13 @@ dotnet run --framework net10.0-windows -- natural "format document"
 
 Target for a Windows Shortcut:
 ```
-"C:\Users\MPhil\source\repos\NaturalCommands\bin\Release\net10.0-windows\NaturalCommands.exe" listen 
+"C:\Users\MPhil\source\repos\NaturalCommands\bin\Release\net10.0-windows\NaturalCommands.exe"
 ```
 
 ## Notifications
 
 - The resident notification listener uses the WinRT `UserNotificationListener` API which requires user permission and (in many cases) package identity. If the listener cannot access the notification manager you may see errors such as `RequestAccess failed: ... CO_E_OBJNOTCONNECTED` or occasional `AppInfo` cast failures.
 - Quick troubleshooting:
-  - Run the app in `listen` mode (`dotnet run --framework net10.0-windows -- listen`) and check Windows Settings > System > Notifications to see if `NaturalCommands` appears and can be enabled.
+  - Run the app (no args) (`dotnet run --framework net10.0-windows`) and check Windows Settings > System > Notifications to see if `NaturalCommands` appears and can be enabled.
   - For robust support, grant package identity to the app (use a Packaging Project with "Package with External Location" or create a lightweight identity package). See the Microsoft docs: https://learn.microsoft.com/windows/apps/desktop/modernize/grant-identity-to-nonpackaged-apps-overview
 - Note: The code was updated to handle these failures more gracefully and to apply exponential backoff for automatic restarts — rebuild the app to pick up the changes.

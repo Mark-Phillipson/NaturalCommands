@@ -23,17 +23,17 @@ powershell -ExecutionPolicy Bypass -File .\Tests\cli\focus-properties-tool-windo
 
 # Run the app in its main modes
 dotnet run --project .\NaturalCommands.csproj --framework net10.0-windows -- natural "show letters"
-dotnet run --project .\NaturalCommands.csproj --framework net10.0-windows -- listen
+dotnet run --project .\NaturalCommands.csproj --framework net10.0-windows
 ```
 
 ## High-level architecture
 
-- `Program.cs` is the mode dispatcher. It handles `natural`, `listen`, `ticker`, `ticker-file`, `ticker-test`, and `export-vs-commands`.
+- `Program.cs` is the mode dispatcher. It handles `natural`, `ticker`, `ticker-file`, `ticker-test`, and `export-vs-commands`.
 - `Commands.HandleNaturalAsync()` is only a thin wrapper; the real command pipeline lives in `NaturalLanguageInterpreter`.
 - `NaturalLanguageInterpreter.InterpretAsync()` does deterministic parsing first: normalize input, apply `word_replacements.json`, match built-in commands, multi-actions, Visual Studio / Windows Terminal / Explorer shortcuts, quick-click commands, voice dictation, show-letters, and visual targeting. `HandleNaturalAsync()` only falls back to Talon matching and then OpenAI if deterministic parsing returns no action.
 - Action shapes are centralized in `ActionModels.cs`. Execution is centralized in `NaturalLanguageInterpreter.ExecuteActionAsync(...)`, which is where new action records are wired into actual behavior.
 - Resident mode is implemented by `ListenModeApplicationContext`. It owns the tray icon, the `Win+Ctrl+H` hotkey, Quick Clicks menu actions, and the file watchers used for resident-process coordination.
-- Cross-process coordination is file-based under `%LOCALAPPDATA%\NaturalCommands`: listen mode watches `.quick_clicks_command`, and ticker messages are delivered through `.ticker_payload`.
+- Cross-process coordination is file-based under `%LOCALAPPDATA%\NaturalCommands`: the resident process watches `.quick_clicks_command`, and ticker messages are delivered through `.ticker_payload`.
 - Visual targeting is a layered subsystem: `VisualTargetingService` tries local UI Automation first, can escalate to cloud vision when enabled, and can fall back to local OCR before `VisualCandidateOverlayForm` presents numbered choices.
 
 ## Key conventions

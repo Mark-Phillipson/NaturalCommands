@@ -3,12 +3,16 @@ using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using NaturalCommands.Models;
 
 namespace NaturalCommands
 {
     public sealed class ListenModeApplicationContext : ApplicationContext
     {
         public const string HotkeyText = "Win+Ctrl+H";
+
+        // Singleton-like reference to the resident context so settings UI can control it at runtime
+        public static ListenModeApplicationContext? Instance { get; private set; }
 
         // Path used by external processes to send ticker payloads to a running listen-mode instance.
         private static string GetTickerPayloadFilePath()
@@ -86,6 +90,53 @@ namespace NaturalCommands
             }
         }
 
+        /// <summary>
+        /// Public API to start the resident notification listener if settings allow it.
+        /// Safe to call multiple times.
+        /// </summary>
+        public void StartNotificationListener()
+        {
+            try
+            {
+                if (!AppSettings.Instance.Notifications.Enabled)
+                {
+                    try { Helpers.Logger.LogInfo("ListenMode: Notification listener disabled in settings; not starting."); } catch { }
+                    _listenerStatusText = "Listener: disabled";
+                    try { _trayMenu?.BeginInvoke((Action)(() => { _listenerStatusText = "Listener: disabled"; })); } catch { }
+                    return;
+                }
+
+                StartResidentNotificationListener();
+            }
+            catch (Exception ex)
+            {
+                try { Helpers.Logger.LogError($"ListenMode: StartNotificationListener failed: {ex.Message}"); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Public API to stop the resident notification listener.
+        /// </summary>
+        public void StopNotificationListener()
+        {
+            try
+            {
+                if (_notificationListener != null)
+                {
+                    _notificationListener.Stop();
+                    try { Helpers.Logger.LogInfo("ListenMode: Notification listener stopped via settings."); } catch { }
+                    _notificationListener = null;
+                    _listenerStatusText = "Listener: stopped";
+                    try { _trayMenu?.BeginInvoke((Action)(() => { _listenerStatusText = "Listener: stopped"; })); } catch { }
+                    try { TrayNotificationHelper.SetStatusIcon(AppIconGenerator.IconState.ListenerError); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { Helpers.Logger.LogError($"ListenMode: StopNotificationListener failed: {ex.Message}"); } catch { }
+            }
+        }
+
         private readonly HotkeyRegistrar _hotkeyRegistrar;
         private readonly Commands _commands;
         private bool _dictationOpen;
@@ -107,6 +158,7 @@ namespace NaturalCommands
         public ListenModeApplicationContext()
         {
             _commands = new Commands(new HandleProcesses());
+            Instance = this;
 
             var menu = new ContextMenuStrip();
             _trayMenu = menu;
@@ -240,7 +292,7 @@ namespace NaturalCommands
             }
 
             // Start resident notification listener and forward notifications to the ticker
-            StartResidentNotificationListener();
+            StartNotificationListener();
 
             // Start a tray heartbeat to update the tooltip with listener status and time
             try
@@ -456,6 +508,7 @@ namespace NaturalCommands
                 }
             }
             catch { }
+            try { Instance = null; } catch { }
             
             base.ExitThreadCore();
         }

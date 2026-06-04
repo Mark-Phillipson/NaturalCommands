@@ -744,6 +744,7 @@ namespace NaturalCommands
         private void SaveSettings()
         {
             var settings = AppSettings.Instance;
+            var oldNotificationsEnabled = settings.Notifications.Enabled;
             
             // General
             settings.Notifications.Enabled = chkEnableNotifications.Checked;
@@ -803,6 +804,25 @@ namespace NaturalCommands
             try
             {
                 settings.Save();
+                // Apply notification listener toggle immediately if resident context exists
+                try
+                {
+                    if (oldNotificationsEnabled != settings.Notifications.Enabled && ListenModeApplicationContext.Instance != null)
+                    {
+                        if (settings.Notifications.Enabled)
+                        {
+                            ListenModeApplicationContext.Instance.StartNotificationListener();
+                        }
+                        else
+                        {
+                            ListenModeApplicationContext.Instance.StopNotificationListener();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning($"Failed to apply notification listener setting at runtime: {ex.Message}");
+                }
                 MessageBox.Show("Settings saved successfully!", "Success", 
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 Logger.LogInfo("Settings saved successfully");

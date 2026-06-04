@@ -12,7 +12,7 @@ applyTo: '**'
 This is a **.NET 10 Windows Forms/WPF hybrid** app that translates natural language voice commands into Windows automation actions.
 
 ### Core Data Flow
-1. **Entry:** `Program.cs` parses CLI args (`natural <command>` or `listen` mode)
+1. **Entry:** `Program.cs` parses CLI args (e.g. `natural <command>`, ticker modes)
 2. **Interpretation:** `NaturalLanguageInterpreter.cs` matches text → `ActionBase` (see `ActionModels.cs`)
 3. **Execution:** Each action type has execution logic in `NaturalLanguageInterpreter` or `Helpers/` classes
 4. **AI Fallback:** Unrecognized commands go to OpenAI API (requires `OPENAI_API_KEY` env var)
@@ -39,8 +39,8 @@ This is a **.NET 10 Windows Forms/WPF hybrid** app that translates natural langu
 dotnet build NaturalCommands.csproj -c Release
 # Run a command:
 .\bin\Release\net10.0-windows\NaturalCommands.exe natural "maximize window"
-# Resident listen mode:
-.\bin\Release\net10.0-windows\NaturalCommands.exe listen
+# Resident (tray) mode — run the app without extra args to start the tray and hotkey
+.\bin\Release\net10.0-windows\NaturalCommands.exe
 ```
 
 ## Adding New Commands

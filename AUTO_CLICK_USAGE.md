@@ -5,26 +5,26 @@ The auto-click feature automatically performs a left-click when your mouse stays
 
 ## How to Use
 
-### Starting the Application in Listen Mode
+### Starting the Application (resident tray/menu)
 
-**IMPORTANT**: The auto-click feature requires the application to run in **listen mode** to work properly.
+**IMPORTANT**: The auto-click feature requires the application to be running in resident/tray mode (the app shows a system tray icon and registers the hotkey). By default the app creates the tray/menu at startup when `Settings -> Notifications -> ShowTrayOnStartup` is enabled.
 
-#### Option 1: Run with `/listen` argument
+#### Option 1: Run with no arguments (default resident mode)
 ```powershell
-.\NaturalCommands.exe /listen
+.\NaturalCommands.exe
 ```
 
-#### Option 2: Create a shortcut for listen mode
+#### Option 2: Create a shortcut that starts the app
 1. Right-click on `NaturalCommands.exe` → Create Shortcut
 2. Right-click the shortcut → Properties
-3. In the "Target" field, add `/listen` at the end:
-   ```
-   "C:\Path\To\NaturalCommands.exe" /listen
-   ```
+3. Ensure the "Target" field points to the exe (no extra args required):
+  ```
+  "C:\Path\To\NaturalCommands.exe"
+  ```
 4. Click OK
-5. Double-click the shortcut to start in listen mode
+5. Double-click the shortcut to start the app and show the tray icon
 
-When running in listen mode, you'll see:
+When running in resident/tray mode, you'll see:
 - **System tray icon** in the notification area (bottom-right of screen)
 - Right-click the icon to access:
   - **Open Voice Dictation** - Voice command interface
@@ -33,7 +33,7 @@ When running in listen mode, you'll see:
 
 ### Enabling Auto-Click
 
-Once the application is running in listen mode, you can enable auto-click in two ways:
+Once the application is running in resident/tray mode, you can enable auto-click in two ways:
 
 #### Method 1: Voice Command
 1. Press **Win+Ctrl+H** to open voice dictation
@@ -73,16 +73,16 @@ When auto-click is active and the mouse is idle:
 - Displays **remaining milliseconds**
 - The overlay disappears when you move the mouse
 
-## Troubleshooting
+### Troubleshooting
 
 ### Auto-click not working:
-- ✓ Ensure you're running in **listen mode** (`/listen`), not direct command mode
+- ✓ Ensure the app is running in resident/tray mode (no extra args required)
 - ✓ Check that the tray icon is visible in the system notification area
 - ✓ Verify auto-click is enabled (use voice command "auto click")
 - ✓ Test with the overlay visible to see the countdown
 
 ### Tray icon not showing:
-- ✓ Run with `/listen` argument
+- ✓ Run the app (no extra args required)
 - ✓ Check if hidden in the overflow area (click ^ icon in tray)
 - ✓ Restart the application
 - ✓ Check Windows notification area settings
@@ -94,15 +94,15 @@ When auto-click is active and the mouse is idle:
 
 ## Advanced Usage
 
-### Starting Listen Mode on Windows Startup
+### Starting Resident Mode on Windows Startup
 
 1. Press **Win+R**, type `shell:startup`, press Enter
-2. Create a shortcut to `NaturalCommands.exe` with `/listen` argument
+2. Create a shortcut to `NaturalCommands.exe` (no extra args required)
 3. The application will start automatically when Windows boots
 
 ### Using with Games
 
-1. Start NaturalCommands in listen mode
+1. Start NaturalCommands (resident/tray mode)
 2. Launch your game
 3. Use voice command to enable auto-click: **"auto click"**
 4. The auto-click will work across all applications

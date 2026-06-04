@@ -7,7 +7,7 @@
     publishes a self-contained single-file build for win-x64 to the standard repo publish path:
       ./bin/Release/net10.0-windows/win-x64/publish
 
-    After publishing it will create a Startup shortcut that runs the exe with the `-- listen` argument, so the app starts when the user logs in.
+    After publishing it will create a Startup shortcut that runs the exe (no extra args required), so the app starts when the user logs in.
 
 .EXAMPLE
     # Publish self-contained single-file and create startup shortcut
@@ -79,7 +79,7 @@ if ($CreateStartupShortcut) {
         $WshShell = New-Object -ComObject WScript.Shell
         $shortcut = $WshShell.CreateShortcut($shortcutPath)
         $shortcut.TargetPath = $exePath
-        $shortcut.Arguments = "listen"
+        $shortcut.Arguments = ""
         $shortcut.WorkingDirectory = Split-Path $exePath -Parent
         $shortcut.Save()
 
@@ -91,4 +91,4 @@ if ($CreateStartupShortcut) {
     }
 }
 
-Write-Info "Done. To test: `"$exePath`" -- listen"
+Write-Info "Done. To test: `"$exePath`""

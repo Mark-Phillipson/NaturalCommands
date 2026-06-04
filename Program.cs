@@ -141,11 +141,13 @@ namespace ExecuteCommands_NET
                     return t;
                 }
 
-                var knownModes = new[] { "listen", "natural", "ticker", "ticker-file", "ticker-test", "export-vs-commands" };
+                var knownModes = new[] { "natural", "ticker", "ticker-file", "ticker-test", "export-vs-commands" };
                 var cleanedArgs = (args ?? Array.Empty<string>())
                     .Select(a => (a ?? string.Empty).Trim())
                     .Where(a => !string.IsNullOrWhiteSpace(a))
                     .ToArray();
+
+                // No special handling for the legacy 'listen' token — it is removed.
 
                 var firstArg = cleanedArgs.Length > 0 ? cleanedArgs[0] : string.Empty;
                 var firstModeToken = NormalizeModeToken(firstArg);

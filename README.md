@@ -157,13 +157,14 @@ dotnet build NaturalCommands.csproj
 dotnet build NaturalCommands.csproj  -c Release
 ```
 
-## Listen mode (resident hotkey)
+-## Listen mode (resident hotkey)
 
-Run the app in resident mode to open the voice dictation UI from anywhere via a global hotkey.
+The application now starts the resident system tray/menu by default (when `Settings -> Notifications -> ShowTrayOnStartup` is enabled). You no longer need to pass a `listen` command-line argument to get the tray icon and hotkey.
 
-- Start resident mode:
-	- `dotnet run --framework net10.0-windows -- listen`
-	- or run the built exe: `NaturalCommands.exe listen`
+- Start resident mode (default):
+    - `dotnet run --framework net10.0-windows` (or run the built exe with no arguments)
+
+Note: The legacy `listen` argument has been removed; start the app with no arguments to run resident/tray mode.
 - Hotkey: **Win+Ctrl+H**
 - Fallback: use the system tray menu item **Open Voice Dictation (Win+Ctrl+H)**
 
