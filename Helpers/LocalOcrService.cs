@@ -39,7 +39,7 @@ namespace NaturalCommands.Helpers
 
                 OcrResult? ocrResult = null;
                 Rectangle virtualBounds = Rectangle.Empty;
-                
+
                 try
                 {
                     // Use provided capture bounds, falling back to foreground window if missing
@@ -62,11 +62,11 @@ namespace NaturalCommands.Helpers
                         double scaleX = 2560.0 / screenshot.Width;
                         double scaleY = 1440.0 / screenshot.Height;
                         double scale = Math.Min(scaleX, scaleY);
-                        
+
                         int newWidth = (int)(screenshot.Width * scale);
                         int newHeight = (int)(screenshot.Height * scale);
                         Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: downscaling to {newWidth}x{newHeight} (scale={scale:0.00}).");
-                        
+
                         var resized = new Bitmap(newWidth, newHeight);
                         using (var g = Graphics.FromImage(resized))
                         {
@@ -94,7 +94,7 @@ namespace NaturalCommands.Helpers
                         }
                         throw;
                     }
-                    
+
                     if (ocrResult == null)
                     {
                         Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR returned null for phrase '{phrase}'.");
@@ -209,34 +209,34 @@ namespace NaturalCommands.Helpers
                 }
             }
         }
-public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string phrase)
-    {
-        Bitmap? screenshot = null;
-        try
+        public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string phrase)
         {
-            var normalized = (phrase ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(normalized))
+            Bitmap? screenshot = null;
+            try
             {
-                return new List<VisualTargetCandidate>();
-            }
+                var normalized = (phrase ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(normalized))
+                {
+                    return new List<VisualTargetCandidate>();
+                }
 
-            var tokens = BuildTokenListForPhrase(normalized);
+                var tokens = BuildTokenListForPhrase(normalized);
 
-            if (tokens.Length == 0)
-            {
-                return new List<VisualTargetCandidate>();
-            }
+                if (tokens.Length == 0)
+                {
+                    return new List<VisualTargetCandidate>();
+                }
 
-            Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: searching for '{phrase}' with tokens: {string.Join(", ", tokens)}.");
+                Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: searching for '{phrase}' with tokens: {string.Join(", ", tokens)}.");
 
                 OcrResult? ocrResult = null;
                 Rectangle virtualBounds = Rectangle.Empty;
-                
+
                 try
                 {
                     // Get only the foreground window bounds instead of all screens
                     virtualBounds = WindowUtils.GetForegroundWindowBounds();
-                    
+
                     // Fallback to primary screen if we can't get foreground window
                     if (virtualBounds == Rectangle.Empty)
                     {
@@ -254,18 +254,18 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                             virtualBounds = new Rectangle(0, 0, 1920, 1080); // Fallback default
                         }
                     }
-                    
+
                     Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: virtualBounds={virtualBounds.Left},{virtualBounds.Top},{virtualBounds.Width}x{virtualBounds.Height}.");
-                    
+
                     screenshot = new Bitmap(virtualBounds.Width, virtualBounds.Height);
                     Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: screenshot bitmap created, size={screenshot.Width}x{screenshot.Height}.");
-                    
+
                     using (var graphics = Graphics.FromImage(screenshot))
                     {
                         graphics.CopyFromScreen(virtualBounds.Left, virtualBounds.Top, 0, 0, virtualBounds.Size, CopyPixelOperation.SourceCopy);
                     }
                     Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: screenshot captured successfully.");
-                
+
                     // Downscale screenshot if it's too large (OCR can hang on very large images)
                     if (screenshot.Width > 2560 || screenshot.Height > 1440)
                     {
@@ -273,11 +273,11 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                         double scaleX = 2560.0 / screenshot.Width;
                         double scaleY = 1440.0 / screenshot.Height;
                         double scale = Math.Min(scaleX, scaleY);
-                        
+
                         int newWidth = (int)(screenshot.Width * scale);
                         int newHeight = (int)(screenshot.Height * scale);
                         Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: downscaling to {newWidth}x{newHeight} (scale={scale:0.00}).");
-                        
+
                         var resized = new Bitmap(newWidth, newHeight);
                         using (var g = Graphics.FromImage(resized))
                         {
@@ -305,7 +305,7 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                         }
                         throw;
                     }
-                    
+
                     if (ocrResult == null)
                     {
                         Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR returned null for phrase '{phrase}'.");
@@ -350,23 +350,23 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
                         }
 
                         int matchedTokenCount = tokens.Count(token => loweredLine.Contains(token) || (!string.IsNullOrEmpty(token) && lineText.Contains(token)));
-                    if (matchedTokenCount == 0)
-                    {
-                        // Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line '{lineText}' - no tokens matched.");
-                        continue;
-                    }
+                        if (matchedTokenCount == 0)
+                        {
+                            // Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line '{lineText}' - no tokens matched.");
+                            continue;
+                        }
 
-                    Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line '{lineText}' matched {matchedTokenCount}/{tokens.Length} tokens.");
-                    var tokenCoverage = matchedTokenCount / (double)tokens.Length;
-                    double confidence = 0.45 + (0.5 * tokenCoverage);
-                    if (string.Equals(loweredLine, normalized.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
-                    {
-                        confidence = 0.97;
-                    }
-                    else if (loweredLine.Contains(normalized, StringComparison.OrdinalIgnoreCase))
-                    {
-                        confidence = Math.Max(confidence, 0.85);
-                    }
+                        Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: OCR line '{lineText}' matched {matchedTokenCount}/{tokens.Length} tokens.");
+                        var tokenCoverage = matchedTokenCount / (double)tokens.Length;
+                        double confidence = 0.45 + (0.5 * tokenCoverage);
+                        if (string.Equals(loweredLine, normalized.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            confidence = 0.97;
+                        }
+                        else if (loweredLine.Contains(normalized, StringComparison.OrdinalIgnoreCase))
+                        {
+                            confidence = Math.Max(confidence, 0.85);
+                        }
 
                         Logger.LogDebug($"LocalOcrService.FindCandidatesAsync: computing bounding rect from {line.Words?.Count ?? 0} words...");
                         var lineRect = BuildBoundingRectFromWords(line);
@@ -481,7 +481,7 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
             try
             {
                 Logger.LogDebug($"RunOcrAsync: starting, bitmap size={bitmap.Width}x{bitmap.Height}.");
-                
+
                 Logger.LogDebug($"RunOcrAsync: converting to SoftwareBitmap...");
                 using var softwareBitmap = await ConvertToSoftwareBitmapAsync(bitmap);
                 Logger.LogDebug($"RunOcrAsync: SoftwareBitmap conversion complete.");
@@ -502,7 +502,7 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
 
                 Logger.LogDebug($"RunOcrAsync: OCR engine ready, starting recognition...");
                 Logger.LogDebug($"RunOcrAsync: about to call engine.Recognize Async directly...");
-                
+
                 try
                 {
                     Logger.LogDebug($"RunOcrAsync: calling RecognizeAsync directly on main thread...");
@@ -541,10 +541,10 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
             try
             {
                 Logger.LogDebug($"ConvertToSoftwareBitmapAsync: starting, source size={source.Width}x{source.Height}.");
-                
+
                 using var argb = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
                 Logger.LogDebug($"ConvertToSoftwareBitmapAsync: ARGB bitmap created.");
-                
+
                 using (var graphics = Graphics.FromImage(argb))
                 {
                     graphics.DrawImage(source, new Rectangle(0, 0, argb.Width, argb.Height));
@@ -905,6 +905,55 @@ public static async Task<List<VisualTargetCandidate>> FindCandidatesAsync(string
         public static List<VisualTargetCandidate> FindCandidates(string phrase)
         {
             return FindCandidatesAsync(phrase).GetAwaiter().GetResult();
+        }
+        public static string GetCurrentScreenShotOcrText()
+        {
+            // get bitmap of current screen
+            Bitmap screenshot;
+            try
+            {
+                screenshot = new Bitmap(1920, 1080);
+                using (var graphics = Graphics.FromImage(screenshot))
+                {
+                    graphics.CopyFromScreen(0, 0, 0, 0, new System.Drawing.Size(1920, 1080), CopyPixelOperation.SourceCopy);
+                }
+
+                var ocrResult = RunOcrAsync(screenshot).GetAwaiter().GetResult();
+                if (ocrResult != null)
+                {
+                    var allText = string.Join("\n", ocrResult.Lines.Select(l => l.Text));
+                    return allText;
+                }
+                else
+                {
+                    return string.Empty;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"GetCurrentScreenShotOcrText failed: {ex}");
+                return string.Empty;
+            }
+        }
+        public static void GetOcrIntoClipboard()
+        {
+            try
+            {
+                var text = GetCurrentScreenShotOcrText();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    System.Windows.Forms.Clipboard.SetText(text);
+                    Logger.LogInfo("GetOcrIntoClipboard: OCR text copied to clipboard successfully.");
+                }
+                else
+                {
+                    Logger.LogWarning("GetOcrIntoClipboard: OCR returned empty text, clipboard not updated.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"GetOcrIntoClipboard failed: {ex}");
+            }
         }
     }
 }

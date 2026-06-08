@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\publish-and-register-startup.
 ## Example Natural Language Actions
 ```pwsh
 # Run with a specific action (replace with your desired command)
-dotnet run --framework net10.0-windows -- natural "open calculator"
+dotnet run --framework net10.0-windows -- natural "optical"
 dotnet run --framework net10.0-windows -- natural "type hello world"
 dotnet run --framework net10.0-windows -- natural "open notepad"
 dotnet run --framework net10.0-windows -- natural "move this window to the other screen"

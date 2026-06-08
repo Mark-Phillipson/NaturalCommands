@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using WindowsInput;
 using WindowsInput.Native;
+using NaturalCommands.Helpers;
 
 
 using OpenAI;
@@ -152,7 +153,7 @@ namespace NaturalCommands
                                     return new SendKeysAction(root.GetProperty("KeysText").GetString() ?? "");
                                 case "OpenFolderAction":
                                     return new OpenFolderAction(root.GetProperty("KnownFolder").GetString() ?? "");
-                                // "SetWindowAlwaysOnTopAction" intentionally not supported: feature disabled.
+                                    // "SetWindowAlwaysOnTopAction" intentionally not supported: feature disabled.
                             }
                         }
                     }
@@ -1061,7 +1062,7 @@ namespace NaturalCommands
 
             // Show letters navigation feature
             var showLettersPatterns = new[] {
-                "show letters", "natural show letters", "display letters", "label elements", 
+                "show letters", "natural show letters", "display letters", "label elements",
                 "show labels", "click by letter", "letter navigation"
             };
             if (showLettersPatterns.Any(p => text.Contains(p)))
@@ -1140,14 +1141,14 @@ namespace NaturalCommands
                 // "mouse left" -> "left"
                 direction = text.Substring(6).Trim();
             }
-            
+
             if (direction != null)
             {
                 var action = new StartMouseMoveAction(direction);
                 AppendLog($"[DEBUG] InterpretAsync matched: {action.GetType().Name} (move mouse {direction})\n");
                 return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
             }
-            
+
             if (text == "stop mouse" || text == "mouse stop")
             {
                 var action = new StopMouseMoveAction(PerformClick: false);
@@ -1235,8 +1236,8 @@ namespace NaturalCommands
                     string jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "vs_commands.json");
                     if (!File.Exists(jsonPath))
                     {
-                         // Try looking up three levels (project root during dev)
-                         jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "vs_commands.json");
+                        // Try looking up three levels (project root during dev)
+                        jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "vs_commands.json");
                     }
                     NaturalCommands.Helpers.VisualStudioCommandLoader.LoadCommands(jsonPath);
                 }
@@ -1244,9 +1245,9 @@ namespace NaturalCommands
                 var vsCommand = NaturalCommands.Helpers.VisualStudioCommandLoader.FindCommand(text);
                 if (vsCommand != null)
                 {
-                     var action = new ExecuteVSCommandAction(vsCommand.Name);
-                     NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched VS Command: {vsCommand.Name}");
-                     return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
+                    var action = new ExecuteVSCommandAction(vsCommand.Name);
+                    NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched VS Command: {vsCommand.Name}");
+                    return System.Threading.Tasks.Task.FromResult<ActionBase?>(action);
                 }
             }
 
@@ -1257,13 +1258,13 @@ namespace NaturalCommands
         }
         private static readonly string[] SupportedCloseTabApps = new[] { "chrome", "msedge", "firefox", "brave", "opera", "code", "devenv" };
 
-                    public string ExecuteActionAsync(ActionBase action)
-                    {
-                        AppendLog($"[DEBUG] ExecuteActionAsync: Action type: {(action == null ? "null" : action.GetType().Name)}\n");
-                        AppendLog($"[DEBUG] ExecuteActionAsync: action.GetType().FullName: {(action == null ? "null" : action.GetType().FullName)}\n");
-                        AppendLog($"[DEBUG] ExecuteActionAsync: Checking if action is MoveWindowAction\n");
-                        AppendLog($"[DEBUG] ExecuteActionAsync: action.GetType().AssemblyQualifiedName: {(action == null ? "null" : action.GetType().AssemblyQualifiedName)}\n");
-                        NaturalCommands.Helpers.Logger.EnsureLogDirExists();
+        public string ExecuteActionAsync(ActionBase action)
+        {
+            AppendLog($"[DEBUG] ExecuteActionAsync: Action type: {(action == null ? "null" : action.GetType().Name)}\n");
+            AppendLog($"[DEBUG] ExecuteActionAsync: action.GetType().FullName: {(action == null ? "null" : action.GetType().FullName)}\n");
+            AppendLog($"[DEBUG] ExecuteActionAsync: Checking if action is MoveWindowAction\n");
+            AppendLog($"[DEBUG] ExecuteActionAsync: action.GetType().AssemblyQualifiedName: {(action == null ? "null" : action.GetType().AssemblyQualifiedName)}\n");
+            NaturalCommands.Helpers.Logger.EnsureLogDirExists();
             if (action is MoveWindowAction move)
             {
                 // Delegate to WindowManager
@@ -1413,16 +1414,16 @@ namespace NaturalCommands
             {
                 AppendLog($"[DEBUG] ExecuteActionAsync: Executing WindowsExplorerShortcutAction ('{explorerAction.CommandText}' -> '{explorerAction.Shortcut}')\n");
                 NaturalCommands.Helpers.Logger.LogDebug($"ExecuteActionAsync: Windows Explorer shortcut: '{explorerAction.CommandText}' -> '{explorerAction.Shortcut}'");
-                
+
                 // Small delay to ensure Explorer window has focus before sending shortcut
                 System.Threading.Thread.Sleep(100);
-                
+
                 // Check if this is a UI Automation command (prefix "uia:")
                 if (explorerAction.Shortcut.StartsWith("uia:", StringComparison.OrdinalIgnoreCase))
                 {
                     var uiaCommand = explorerAction.Shortcut.Substring(4).ToLowerInvariant();
                     bool success = false;
-                    
+
                     switch (uiaCommand)
                     {
                         case "view":
@@ -1438,7 +1439,7 @@ namespace NaturalCommands
                             NaturalCommands.Helpers.Logger.LogError($"Unknown UI Automation command: {uiaCommand}");
                             break;
                     }
-                    
+
                     if (success)
                     {
                         return $"Windows Explorer: Opened {uiaCommand} menu";
@@ -1913,7 +1914,7 @@ namespace NaturalCommands
                     AppendLog("Opened folder: Downloads\n");
                 }
                 return $"Opened folder: {folder.KnownFolder} ({path})";
-            // No closing brace here; keep method open for further action handlers
+                // No closing brace here; keep method open for further action handlers
             }
             else if (action is ShowHelpAction)
             {
@@ -2129,7 +2130,11 @@ namespace NaturalCommands
                         WindowsInput.Native.VirtualKeyCode.TAB);
                     return "[Natural mode] Sent Ctrl+Alt+Tab for app switcher (focus fallback)";
                 }
-                
+                if (lowerText.Contains("optical"))
+                {
+                     NaturalCommands.Helpers.LocalOcrService.GetOcrIntoClipboard();
+                }
+
                 // First, try Talon fallback with AI semantic assistance (if enabled)
                 AppendLog($"[DEBUG] HandleNaturalAsync: Checking Talon fallback first. EnableFallback={AppSettings.Instance.Talon.EnableFallback}\n");
                 if (AppSettings.Instance.Talon.EnableFallback)
@@ -2323,7 +2328,7 @@ namespace NaturalCommands
                         var nextAction = new MoveWindowAction(Target: "active", Monitor: "next", Position: "", WidthPercent: 0, HeightPercent: 0);
                         NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {nextAction.GetType().Name} (next monitor)");
                         return System.Threading.Tasks.Task.FromResult<ActionBase?>(nextAction);
-                    
+
                     case "open downloads":
                         var downloadsAction = new OpenFolderAction("Downloads");
                         NaturalCommands.Helpers.Logger.LogDebug($"InterpretAsync matched: {downloadsAction.GetType().Name} (downloads)");
@@ -2399,57 +2404,57 @@ namespace NaturalCommands
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
         private delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
-                [System.Runtime.InteropServices.DllImport("user32.dll")]
-                private static extern bool SetForegroundWindow(IntPtr hWnd);
-            // Helper: Focus existing Explorer window for a given path
-            private static bool FocusExistingExplorerWindow(string folderPath)
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+        // Helper: Focus existing Explorer window for a given path
+        private static bool FocusExistingExplorerWindow(string folderPath)
+        {
+            try
             {
-                try
+                // Use COM to enumerate Explorer windows
+                Type? shellWindowsType = Type.GetTypeFromProgID("Shell.Application");
+                if (shellWindowsType == null)
+                    return false;
+                dynamic? shellWindows = Activator.CreateInstance(shellWindowsType);
+                if (shellWindows == null)
+                    return false;
+                foreach (var window in shellWindows.Windows())
                 {
-                    // Use COM to enumerate Explorer windows
-                    Type? shellWindowsType = Type.GetTypeFromProgID("Shell.Application");
-                    if (shellWindowsType == null)
-                        return false;
-                    dynamic? shellWindows = Activator.CreateInstance(shellWindowsType);
-                    if (shellWindows == null)
-                        return false;
-                    foreach (var window in shellWindows.Windows())
+                    string url = "";
+                    try { url = window.LocationURL as string ?? ""; } catch { }
+                    string hwndStr = "";
+                    try { hwndStr = window.HWND.ToString(); } catch { }
+                    // Convert file:///C:/Users/.../Downloads to local path
+                    if (url.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
                     {
-                        string url = "";
-                        try { url = window.LocationURL as string ?? ""; } catch { }
-                        string hwndStr = "";
-                        try { hwndStr = window.HWND.ToString(); } catch { }
-                        // Convert file:///C:/Users/.../Downloads to local path
-                        if (url.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
+                        string winPath = Uri.UnescapeDataString(url.Substring(8).Replace('/', '\\'));
+                        // Compare normalized paths
+                        if (string.Equals(System.IO.Path.GetFullPath(winPath), System.IO.Path.GetFullPath(folderPath), StringComparison.OrdinalIgnoreCase))
                         {
-                            string winPath = Uri.UnescapeDataString(url.Substring(8).Replace('/', '\\'));
-                            // Compare normalized paths
-                            if (string.Equals(System.IO.Path.GetFullPath(winPath), System.IO.Path.GetFullPath(folderPath), StringComparison.OrdinalIgnoreCase))
+                            // Focus window
+                            IntPtr hWnd = IntPtr.Zero;
+                            if (IntPtr.TryParse(hwndStr, out hWnd) && hWnd != IntPtr.Zero)
                             {
-                                // Focus window
-                                IntPtr hWnd = IntPtr.Zero;
-                                if (IntPtr.TryParse(hwndStr, out hWnd) && hWnd != IntPtr.Zero)
+                                SetForegroundWindow(hWnd);
+                                return true;
+                            }
+                            // Fallback: try window.HWND as int
+                            try
+                            {
+                                hWnd = (IntPtr)window.HWND;
+                                if (hWnd != IntPtr.Zero)
                                 {
                                     SetForegroundWindow(hWnd);
                                     return true;
                                 }
-                                // Fallback: try window.HWND as int
-                                try
-                                {
-                                    hWnd = (IntPtr)window.HWND;
-                                    if (hWnd != IntPtr.Zero)
-                                    {
-                                        SetForegroundWindow(hWnd);
-                                        return true;
-                                    }
-                                }
-                                catch { }
                             }
+                            catch { }
                         }
                     }
                 }
-                catch { }
-                return false;
             }
+            catch { }
+            return false;
+        }
     }
 }
