@@ -252,7 +252,9 @@ namespace NaturalCommands
             ("auto click speedup", "Increase auto-click speed (shorten delay)"),
             ("auto click slower", "Decrease auto-click speed (lengthen delay)"),
             ("auto click slow down", "Decrease auto-click speed (lengthen delay)"),
-            ("auto click slowdown", "Decrease auto-click speed (lengthen delay)")
+            ("auto click slowdown", "Decrease auto-click speed (lengthen delay)"),
+            ("optical", "Perform OCR on the screen and copy results to clipboard")
+
         };
 
         // Optional emoji mapping for commands. Map a command phrase to a small emoji

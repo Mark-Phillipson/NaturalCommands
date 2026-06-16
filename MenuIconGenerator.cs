@@ -8,15 +8,19 @@ namespace NaturalCommands
     /// </summary>
     public static class MenuIconGenerator
     {
-        public static Image CreateMicrophoneImage(int size = 16)
+        public static Image CreateMicrophoneImage(int size = 16, Color? primaryColor = null)
         {
             var bmp = new Bitmap(size, size);
             using (var g = Graphics.FromImage(bmp))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.Clear(Color.Transparent);
-
                 var primary = Color.FromArgb(0, 120, 215);
+                if (primaryColor != null)
+                {
+                    primary = primaryColor.Value;
+                }
+
                 using (var brush = new SolidBrush(primary))
                 using (var pen = new Pen(primary, 1.5f))
                 {
