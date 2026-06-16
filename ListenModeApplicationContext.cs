@@ -102,11 +102,11 @@ namespace NaturalCommands
                 {
                     try { Helpers.Logger.LogInfo("ListenMode: Notification listener disabled in settings; not starting."); } catch { }
                     _listenerStatusText = "Listener: disabled";
-                    try { _trayMenu?.BeginInvoke((Action)(() => { _listenerStatusText = "Listener: disabled"; })); } catch { }
+                    // try { _trayMenu?.BeginInvoke((Action)(() => { _listenerStatusText = "Listener: disabled"; })); } catch { }
                     return;
                 }
 
-                StartResidentNotificationListener();
+                // StartResidentNotificationListener();
             }
             catch (Exception ex)
             {
