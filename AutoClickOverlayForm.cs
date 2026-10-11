@@ -69,30 +69,45 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
                      ControlStyles.OptimizedDoubleBuffer, true);
         }
 
+
         protected override void OnPaint(PaintEventArgs e)
         {
-            Logger.LogInfo(
-    $"[Overlay THREAD] OnPaint: " +
-    $"ThreadId={Environment.CurrentManagedThreadId}, " +
-    $"Visible={Visible}, " +
-    $"HandleCreated={IsHandleCreated}");
-
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            // Keep the background colour consistent with TransparencyKey.
             g.Clear(Color.Magenta);
 
             int centerX = ClientSize.Width / 2;
             int centerY = ClientSize.Height / 2;
             int radius = Math.Min(ClientSize.Width, ClientSize.Height) / 2 - 5;
 
-            using var pen = new Pen(Color.White, 3);
-            g.DrawEllipse(
-                pen,
-                centerX - radius,
-                centerY - radius,
-                radius * 2,
-                radius * 2);
+            // Define the circle's drawing area.
+            int diameter = radius * 2;
+            int x = centerX - radius;
+            int y = centerY - radius;
+
+            // Draw the full circle as the countdown background.
+            using var backgroundPen = new Pen(Color.DimGray, 3);
+            g.DrawEllipse(backgroundPen, x, y, diameter, diameter);
+
+            // Draw the progress arc clockwise from the top.
+            float progress = Math.Clamp(_percentage, 0f, 100f);
+            float sweepAngle = progress / 100f * 360f;
+
+            if (sweepAngle > 0)
+            {
+                using var progressPen = new Pen(_currentProgressColor, 4);
+                progressPen.StartCap = LineCap.Round;
+                progressPen.EndCap = LineCap.Round;
+
+                g.DrawArc(
+                    progressPen,
+                    x, y, diameter, diameter,
+                    -90, sweepAngle);
+            }
         }
+
 
         /// <summary>
         /// Initialize the UI context - must be called from the UI thread before using the overlay.
