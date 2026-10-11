@@ -142,6 +142,12 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
     $"[Overlay THREAD] UpdateOverlay: " +
     $"ThreadId={Environment.CurrentManagedThreadId}, " +
     $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? "null"}");
+
+            Logger.LogInfo(
+            $"[COUNTDOWN TEST] Cursor={cursorPos.X},{cursorPos.Y}, " +
+            $"RemainingMs={remainingMs}, " +
+            $"Percentage={percentage:F1}");
+
             // Check if we need to invoke on UI thread
             if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
             {
@@ -193,7 +199,11 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
                     // Update position and values - overlay is anchored at the specified point
                     _instance.Location = new Point(cursorPos.X - _instance.Width / 2, cursorPos.Y - _instance.Height / 2);
                     _instance._remainingMs = remainingMs;
-
+                    Logger.LogInfo(
+                        $"[OVERLAY UPDATE TEST] Incoming={percentage:F1}, " +
+                        $"Old={_instance._percentage:F1}, " +
+                        $"IncomingPosition={cursorPos}, " +
+                        $"Thread={Environment.CurrentManagedThreadId}");
                     // Detect start of a new countdown cycle (percentage has moved from 0 to >0)
                     bool startingCycle = _instance._percentage <= 0 && percentage > 0;
                     _instance._percentage = percentage;
