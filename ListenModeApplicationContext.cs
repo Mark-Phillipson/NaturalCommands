@@ -163,8 +163,7 @@ namespace NaturalCommands
             var menu = new ContextMenuStrip();
             _trayMenu = menu;
             menu.ShowImageMargin = true;
-            menu.ImageScalingSize = new Size(48, 48);
-            menu.Padding = new Padding(0, 8, 0, 8);
+            menu.ImageScalingSize = new Size(16, 16);
 
             var openItem = new ToolStripMenuItem($"Open Voice Dictation ({HotkeyText})");
             openItem.Click += (_, __) => OpenVoiceDictation();
@@ -189,19 +188,19 @@ namespace NaturalCommands
             Image? stopIcon = null;
             Image? settingsIcon = null;
             Image? exitIcon = null;
-            try
-            {
-                openIcon = MenuIconGenerator.CreateMicrophoneImage(48);
-                stopIcon = MenuIconGenerator.CreateStopImage(48);
-                settingsIcon = MenuIconGenerator.CreateSettingsImage(48);
-                exitIcon = MenuIconGenerator.CreateExitImage(48);
+            // try
+            // {
+            //     openIcon = MenuIconGenerator.CreateMicrophoneImage(48);
+            //     stopIcon = MenuIconGenerator.CreateStopImage(48);
+            //     settingsIcon = MenuIconGenerator.CreateSettingsImage(48);
+            //     exitIcon = MenuIconGenerator.CreateExitImage(48);
 
-                openItem.Image = openIcon;
-                stopAutoClickItem.Image = stopIcon;
-                settingsItem.Image = settingsIcon;
-                exitItem.Image = exitIcon;
-            }
-            catch { }
+            //     openItem.Image = openIcon;
+            //     stopAutoClickItem.Image = stopIcon;
+            //     settingsItem.Image = settingsIcon;
+            //     exitItem.Image = exitIcon;
+            // }
+            // catch { }
 
             menu.Items.Add(openItem);
             menu.Items.Add(stopAutoClickItem);
@@ -329,10 +328,10 @@ namespace NaturalCommands
 
         private void ConfigureMenuItemForEyeTracker(ToolStripMenuItem item)
         {
-            item.Font = new Font("Segoe UI", 14f, FontStyle.Regular);
+            item.Font = new Font("Segoe UI", 14, FontStyle.Bold);
             item.Padding = new Padding(12, 12, 12, 12);
-            item.Margin = new Padding(0, 8, 0, 8);
-            item.TextImageRelation = TextImageRelation.ImageBeforeText;
+            item.Margin = new Padding(0, 0, 0, 8);
+            // item.TextImageRelation = TextImageRelation.Overlay;
         }
 
         private void OpenVoiceDictation()
