@@ -73,7 +73,8 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
         protected override void OnPaint(PaintEventArgs e)
         {
             Logger.LogInfo(
-                $"[Percentage in OnPaint method={_percentage}]");
+    $"[Overlay PAINT] Percentage={_percentage:F1}, " +
+    $"Location={Location}, Visible={Visible}");
 
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -227,6 +228,7 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
                     _instance.Invalidate();
                     _instance._lastPaintedPercentage = _instance._percentage;
                     _instance._lastLocation = _instance.Location;
+                    _instance.Update();
                 }
                 catch (Exception ex)
                 {
