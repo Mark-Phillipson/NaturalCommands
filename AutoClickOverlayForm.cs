@@ -16,6 +16,7 @@ namespace NaturalCommands
         private static readonly object _lock = new object();
         private static System.Threading.SynchronizationContext? _uiContext;
         private static int _updatePending;
+        private static int _uiThreadId;
         private float _percentage = 0;
         private int _remainingMs = 0;
 
@@ -126,10 +127,11 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
             }
 
             _uiContext = SynchronizationContext.Current;
+            _uiThreadId = Environment.CurrentManagedThreadId;
 
-            NaturalCommands.Helpers.Logger.LogInfo(
+            Logger.LogInfo(
                 $"[Overlay THREAD] UI context initialized: " +
-                $"ThreadId={Environment.CurrentManagedThreadId}, " +
+                $"ThreadId={_uiThreadId}, " +
                 $"Context={_uiContext?.GetType().FullName ?? "null"}");
         }
 
@@ -149,22 +151,13 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
             $"Percentage={percentage:F1}");
 
             // Check if we need to invoke on UI thread
-            if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
+            if (_uiContext != null &&
+    Environment.CurrentManagedThreadId != _uiThreadId)
             {
-                if (Interlocked.Exchange(ref _updatePending, 1) != 0)
-                    return;
-
                 _uiContext.Post(_ =>
-{
-    try
-    {
-        UpdateOverlay(cursorPos, remainingMs, percentage);
-    }
-    finally
-    {
-        Interlocked.Exchange(ref _updatePending, 0);
-    }
-}, null);
+                {
+                    UpdateOverlay(cursorPos, remainingMs, percentage);
+                }, null);
 
                 return;
             }
