@@ -19,7 +19,7 @@ namespace ExecuteCommands_NET
             return Process.GetProcessesByName("NaturalCommands").Any(process => process.Id != currentProcessId);
         }
 
-        
+
 
         [STAThread]
         static void Main(string[] args)
@@ -85,9 +85,19 @@ namespace ExecuteCommands_NET
                     try
                     {
                         // Initialize UI context for overlays
+                        NaturalCommands.Helpers.Logger.LogInfo(
+                            $"[Overlay TRACE] Before initialization: " +
+                            $"Thread={Environment.CurrentManagedThreadId}, " +
+                            $"Context={SynchronizationContext.Current?.GetType().FullName ?? "null"}");
+
                         AutoClickOverlayForm.InitializeUIContext();
+
+                        NaturalCommands.Helpers.Logger.LogInfo(
+                            $"[Overlay TRACE] After initialization: " +
+                            $"Thread={Environment.CurrentManagedThreadId}, " +
+                            $"Context={SynchronizationContext.Current?.GetType().FullName ?? "null"}");
+
                         VisualCandidateOverlayForm.InitializeUIContext();
-                        
                         // Talon may invoke as either:
                         // 1) NaturalCommands.exe natural identify telegram
                         // 2) NaturalCommands.exe identify telegram
@@ -101,11 +111,11 @@ namespace ExecuteCommands_NET
                             NaturalCommands.Helpers.Logger.LogInfo($"Program.Main natural command text: '{commandText}' (explicitNaturalMode={explicitNaturalMode}, implicitNaturalMode={implicitNaturalMode}, firstModeToken='{firstModeToken}')");
                         }
                         catch { }
-                        
+
                         // Create interpreter and execute
                         var interpreter = new NaturalLanguageInterpreter();
                         var result = interpreter.HandleNaturalAsync(commandText);
-                        
+
                         // Keep a message pump alive for 15 seconds so UI overlays (candidates, debug)
                         // can display and auto-close. The overlay forms have their own timeouts (9s).
                         var exitTimer = new System.Timers.Timer(15000);

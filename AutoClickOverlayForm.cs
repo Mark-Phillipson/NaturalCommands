@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using NaturalCommands.Helpers;
 
 namespace NaturalCommands
 {
@@ -14,7 +15,7 @@ namespace NaturalCommands
         private static AutoClickOverlayForm? _instance;
         private static readonly object _lock = new object();
         private static System.Threading.SynchronizationContext? _uiContext;
-        
+        private static int _updatePending;
         private float _percentage = 0;
         private int _remainingMs = 0;
 
@@ -44,18 +45,23 @@ namespace NaturalCommands
 
         private AutoClickOverlayForm()
         {
+            Logger.LogInfo(
+$"[Overlay THREAD] Constructor: " +
+$"ThreadId={Environment.CurrentManagedThreadId}, " +
+$"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? "null"}");
+
             // Form properties for transparent, topmost overlay
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
-            BackColor = Color.Lime; // Transparency key color
-            TransparencyKey = Color.Lime;
+            BackColor = Color.Magenta;
+            TransparencyKey = Color.Empty;
             StartPosition = FormStartPosition.Manual;
-            
+
             // Small circular overlay sized to replace the system cursor while counting down
             Width = 48;
             Height = 48;
-            
+
             // Double buffering for smooth rendering
             DoubleBuffered = true;
             SetStyle(ControlStyles.AllPaintingInWmPaint |
@@ -64,54 +70,48 @@ namespace NaturalCommands
         }
 
         protected override void OnPaint(PaintEventArgs e)
-{
-    // No manual BufferedGraphics allocation.
-    // WinForms already has double buffering enabled.
+        {
+            Logger.LogInfo(
+    $"[Overlay THREAD] OnPaint: " +
+    $"ThreadId={Environment.CurrentManagedThreadId}, " +
+    $"Visible={Visible}, " +
+    $"HandleCreated={IsHandleCreated}");
 
-    Graphics g = e.Graphics;
-    g.SmoothingMode = SmoothingMode.AntiAlias;
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Color.Magenta);
 
-    // Restore the transparency-key colour in the background.
-    g.Clear(TransparencyKey);
+            int centerX = ClientSize.Width / 2;
+            int centerY = ClientSize.Height / 2;
+            int radius = Math.Min(ClientSize.Width, ClientSize.Height) / 2 - 5;
 
-    int centerX = ClientSize.Width / 2;
-    int centerY = ClientSize.Height / 2;
-    int radius = Math.Min(ClientSize.Width, ClientSize.Height) / 2 - 5;
-
-    using var ringPen = new Pen(Color.DimGray, 3);
-    g.DrawEllipse(
-        ringPen,
-        centerX - radius + 3,
-        centerY - radius + 3,
-        (radius - 3) * 2,
-        (radius - 3) * 2);
-
-    if (_percentage > 0)
-    {
-        using var progressPen = new Pen(
-            _currentProgressColor,
-            4);
-
-        float sweepAngle = Math.Clamp(_percentage, 0, 100)
-                           / 100f * 360f;
-
-        g.DrawArc(
-            progressPen,
-            centerX - radius + 3,
-            centerY - radius + 3,
-            (radius - 3) * 2,
-            (radius - 3) * 2,
-            -90,
-            sweepAngle);
-    }
-}
+            using var pen = new Pen(Color.White, 3);
+            g.DrawEllipse(
+                pen,
+                centerX - radius,
+                centerY - radius,
+                radius * 2,
+                radius * 2);
+        }
 
         /// <summary>
         /// Initialize the UI context - must be called from the UI thread before using the overlay.
         /// </summary>
         public static void InitializeUIContext()
         {
-            _uiContext = System.Threading.SynchronizationContext.Current;
+            if (SynchronizationContext.Current
+                is not WindowsFormsSynchronizationContext)
+            {
+                SynchronizationContext.SetSynchronizationContext(
+                    new WindowsFormsSynchronizationContext());
+            }
+
+            _uiContext = SynchronizationContext.Current;
+
+            NaturalCommands.Helpers.Logger.LogInfo(
+                $"[Overlay THREAD] UI context initialized: " +
+                $"ThreadId={Environment.CurrentManagedThreadId}, " +
+                $"Context={_uiContext?.GetType().FullName ?? "null"}");
         }
 
         /// <summary>
@@ -119,10 +119,28 @@ namespace NaturalCommands
         /// </summary>
         public static void UpdateOverlay(Point cursorPos, int remainingMs, float percentage)
         {
+            Logger.LogInfo(
+    $"[Overlay THREAD] UpdateOverlay: " +
+    $"ThreadId={Environment.CurrentManagedThreadId}, " +
+    $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? "null"}");
             // Check if we need to invoke on UI thread
             if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
             {
-                _uiContext.Post(_ => UpdateOverlay(cursorPos, remainingMs, percentage), null);
+                if (Interlocked.Exchange(ref _updatePending, 1) != 0)
+                    return;
+
+                _uiContext.Post(_ =>
+                {
+                    try
+                    {
+                        // Apply the latest position and progress here.
+                        _uiContext.Post(_ => UpdateOverlay(cursorPos, remainingMs, percentage), null);
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _updatePending, 0);
+                    }
+                }, null);
                 return;
             }
 
@@ -130,11 +148,28 @@ namespace NaturalCommands
             {
                 try
                 {
+                    Logger.LogInfo("[Overlay DEBUG] UpdateOverlay entered.");
+
                     if (_instance == null || _instance.IsDisposed)
                     {
+                        Logger.LogInfo("[Overlay DEBUG] Creating overlay form.");
                         _instance = new AutoClickOverlayForm();
-                        _instance.Show();
+                        Logger.LogInfo("[Overlay DEBUG] Overlay form created.");
                     }
+
+                    Logger.LogInfo(
+                        $"[Overlay DEBUG] Before Show: " +
+                        $"Visible={_instance.Visible}, " +
+                        $"HandleCreated={_instance.IsHandleCreated}, " +
+                        $"Bounds={_instance.Bounds}");
+
+                    _instance.Show();
+
+                    Logger.LogInfo(
+                        $"[Overlay DEBUG] After Show: " +
+                        $"Visible={_instance.Visible}, " +
+                        $"HandleCreated={_instance.IsHandleCreated}, " +
+                        $"Bounds={_instance.Bounds}");
 
                     // Update position and values - overlay is anchored at the specified point
                     _instance.Location = new Point(cursorPos.X - _instance.Width / 2, cursorPos.Y - _instance.Height / 2);
@@ -150,17 +185,17 @@ namespace NaturalCommands
                     }
 
                     // Keep system cursor visible so it can move independently of the overlay
-                    
+
                     if (!_instance.Visible)
                     {
                         _instance.Show();
                     }
-                    
+
                     if (!_instance.TopMost)
                     {
                         _instance.TopMost = true;
                     }
-                    
+
                     // Only invalidate if percentage or location changed enough to avoid excess repaints (reduces flicker)
                     if (Math.Abs(_instance._percentage - _instance._lastPaintedPercentage) < _minUpdateDelta && _instance.Location == _instance._lastLocation)
                     {
@@ -270,7 +305,8 @@ namespace NaturalCommands
             get
             {
                 CreateParams cp = base.CreateParams;
-                cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW;
+                // cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW;
+                cp.ExStyle |= WS_EX_TOOLWINDOW;
                 return cp;
             }
         }

@@ -80,7 +80,7 @@ namespace NaturalCommands.Helpers
             // Update settings
             AppSettings.Instance.AutoClick.DelayMs = delayMs;
             AppSettings.Instance.AutoClick.Enabled = true;
-            
+
             try
             {
                 AppSettings.Instance.Save();
@@ -120,7 +120,7 @@ namespace NaturalCommands.Helpers
             {
                 return "Auto-click mode is not active";
             }
-            
+
             // Stop timer
             if (_monitorTimer != null)
             {
@@ -172,7 +172,8 @@ namespace NaturalCommands.Helpers
                     Logger.LogError("Failed to get cursor position in auto-click monitor");
                     return;
                 }
-
+                Logger.LogInfo(
+                    $"[AutoClick TEST] Cursor={currentPos.X},{currentPos.Y}");
                 // Check if mouse is over taskbar - if so, stop auto-click
                 if (IsMouseOverTaskbar(currentPos))
                 {
@@ -205,7 +206,7 @@ namespace NaturalCommands.Helpers
                     _lastPosition = currentPos;
                     _idleTimeMs = 0;
                     _anchorSet = false;
-                    
+
                     // Hide overlay when mouse moves outside the anchor
                     AutoClickOverlayForm.HideOverlay();
                 }
@@ -215,7 +216,7 @@ namespace NaturalCommands.Helpers
                     _idleTimeMs += _pollIntervalMs;
 
                     int delayMs = AppSettings.Instance.AutoClick.DelayMs;
-                    
+
                     // Establish anchor at the start of the countdown so the overlay stays fixed
                     if (!_anchorSet && _idleTimeMs > 0)
                     {
@@ -258,11 +259,11 @@ namespace NaturalCommands.Helpers
                         Logger.LogInfo($"[AutoClick] Idle threshold reached ({_idleTimeMs}ms >= {delayMs}ms), performing click");
                         // Perform the click
                         PerformClick(currentPos);
-                        
+
                         // Reset idle timer to wait for next click
                         _idleTimeMs = 0;
                         _anchorSet = false;
-                        
+
                         // Hide overlay after click
                         AutoClickOverlayForm.HideOverlay();
                     }
@@ -360,7 +361,7 @@ namespace NaturalCommands.Helpers
             }
 
             AppSettings.Instance.AutoClick.DelayMs = delayMs;
-            
+
             try
             {
                 AppSettings.Instance.Save();

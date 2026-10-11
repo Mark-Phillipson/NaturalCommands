@@ -100,5 +100,6 @@ namespace NaturalCommands.Helpers
             }
             AppendLog($"{errorMsg}{Environment.NewLine}");
         }
+
     }
 }
