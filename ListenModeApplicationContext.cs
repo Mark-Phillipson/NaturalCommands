@@ -159,6 +159,7 @@ namespace NaturalCommands
         {
             _commands = new Commands(new HandleProcesses());
             Instance = this;
+            AutoClickOverlayForm.InitializeUIContext();
 
             var menu = new ContextMenuStrip();
             _trayMenu = menu;

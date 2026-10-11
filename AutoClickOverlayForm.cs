@@ -1,7 +1,6 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace NaturalCommands
@@ -39,16 +38,9 @@ namespace NaturalCommands
             Color.FromArgb(120, 0, 120, 215)   // semi-transparent blue
         };
 
-        // Win32 API to make form click-through
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-        [DllImport("user32.dll")]
-        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-        private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_LAYERED = 0x80000;
         private const int WS_EX_TRANSPARENT = 0x20;
+        private const int WS_EX_TOOLWINDOW = 0x80;
+        private const int WS_EX_LAYERED = 0x80000;
 
         private AutoClickOverlayForm()
         {
@@ -69,71 +61,50 @@ namespace NaturalCommands
             SetStyle(ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.UserPaint |
                      ControlStyles.OptimizedDoubleBuffer, true);
-
-            // Make form click-through (mouse events pass through)
-            Load += (s, e) =>
-            {
-                int exStyle = GetWindowLong(Handle, GWL_EXSTYLE);
-                SetWindowLong(Handle, GWL_EXSTYLE, exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT);
-            };
         }
 
         protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
+{
+    // No manual BufferedGraphics allocation.
+    // WinForms already has double buffering enabled.
 
-            // Use BufferedGraphics to reduce flicker
-            var context = BufferedGraphicsManager.Current;
-            using (var buffer = context.Allocate(e.Graphics, this.ClientRectangle))
-            {
-                var bg = buffer.Graphics;
-                bg.SmoothingMode = SmoothingMode.AntiAlias;
-                bg.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+    Graphics g = e.Graphics;
+    g.SmoothingMode = SmoothingMode.AntiAlias;
 
-                // Clear buffer with the form BackColor (the transparency key) to ensure per-pixel transparency
-                // This avoids leftover black pixels when using BufferedGraphics + TransparencyKey.
-                bg.Clear(this.BackColor);
-                bg.CompositingMode = CompositingMode.SourceOver;
+    // Restore the transparency-key colour in the background.
+    g.Clear(TransparencyKey);
 
-                // Calculate center and radius
-                int centerX = Width / 2;
-                int centerY = Height / 2;
-                int radius = Math.Min(Width, Height) / 2 - 5;
+    int centerX = ClientSize.Width / 2;
+    int centerY = ClientSize.Height / 2;
+    int radius = Math.Min(ClientSize.Width, ClientSize.Height) / 2 - 5;
 
-                // Draw outer ring (transparent center) with a neutral dim color so progress stands out
-                using (var ringPen = new Pen(Color.FromArgb(140, 40, 40, 40), 3))
-                {
-                    bg.DrawEllipse(ringPen, centerX - radius + 3, centerY - radius + 3, (radius - 3) * 2, (radius - 3) * 2);
-                }
+    using var ringPen = new Pen(Color.DimGray, 3);
+    g.DrawEllipse(
+        ringPen,
+        centerX - radius + 3,
+        centerY - radius + 3,
+        (radius - 3) * 2,
+        (radius - 3) * 2);
 
-                // If the cycle has completed (full) draw a subtle filled background to indicate completion
-                if (_percentage >= 100 && _currentBackgroundFill.A > 0)
-                {
-                    using (var fillBrush = new SolidBrush(_currentBackgroundFill))
-                    {
-                        bg.FillEllipse(fillBrush, centerX - radius + 6, centerY - radius + 6, (radius - 6) * 2, (radius - 6) * 2);
-                    }
-                }
+    if (_percentage > 0)
+    {
+        using var progressPen = new Pen(
+            _currentProgressColor,
+            4);
 
-                // Draw progress arc (bright accent) to clearly highlight progress
-                if (_percentage > 0)
-                {
-                    using (var progressPen = new Pen(_currentProgressColor, 4))
-                    {
-                        float sweepAngle = (_percentage / 100f) * 360f;
-                        bg.DrawArc(progressPen,
-                            centerX - radius + 3,
-                            centerY - radius + 3,
-                            (radius - 3) * 2,
-                            (radius - 3) * 2,
-                            -90,
-                            sweepAngle);
-                    }
-                }
+        float sweepAngle = Math.Clamp(_percentage, 0, 100)
+                           / 100f * 360f;
 
-                buffer.Render(e.Graphics);
-            }
-        }
+        g.DrawArc(
+            progressPen,
+            centerX - radius + 3,
+            centerY - radius + 3,
+            (radius - 3) * 2,
+            (radius - 3) * 2,
+            -90,
+            sweepAngle);
+    }
+}
 
         /// <summary>
         /// Initialize the UI context - must be called from the UI thread before using the overlay.
@@ -299,7 +270,7 @@ namespace NaturalCommands
             get
             {
                 CreateParams cp = base.CreateParams;
-                cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT;
+                cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW;
                 return cp;
             }
         }

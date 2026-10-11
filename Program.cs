@@ -85,6 +85,7 @@ namespace ExecuteCommands_NET
                     try
                     {
                         // Initialize UI context for overlays
+                        AutoClickOverlayForm.InitializeUIContext();
                         VisualCandidateOverlayForm.InitializeUIContext();
                         
                         // Talon may invoke as either:
