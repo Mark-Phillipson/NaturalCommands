@@ -130,11 +130,12 @@ namespace ExecuteCommands_NET
 
                         // UI message pump to allow overlays to render
                         // this might be problematic
-                        while (exitTimer.Enabled)
-                        {
-                            Application.DoEvents();
-                            System.Threading.Thread.Sleep(50);
-                        }
+                        // Start the timer that keeps the natural command alive.
+                        exitTimer.Start();
+
+                        // Let WinForms process messages continuously rather than
+                        // manually pumping messages and sleeping for 50 ms.
+                        Application.Run();
                     }
                     catch (Exception ex)
                     {

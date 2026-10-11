@@ -63,8 +63,8 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
             StartPosition = FormStartPosition.Manual;
 
             // Small circular overlay sized to replace the system cursor while counting down
-            Width = 48;
-            Height = 48;
+            Width = 64;
+            Height = 64;
 
             // Double buffering for smooth rendering
             DoubleBuffered = true;
@@ -81,7 +81,11 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
     $"Location={Location}, Visible={Visible}");
 
             Graphics g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.SmoothingMode = SmoothingMode.HighQuality;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.CompositingQuality = CompositingQuality.HighQuality;
+            g.TextRenderingHint =
+                System.Drawing.Text.TextRenderingHint.AntiAlias;
 
             // Keep the background colour consistent with TransparencyKey.
             g.Clear(Color.Magenta);
@@ -96,7 +100,7 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
             int y = centerY - radius;
 
             // Draw the full circle as the countdown background.
-            using var backgroundPen = new Pen(Color.DimGray, 3);
+            using var backgroundPen = new Pen(Color.Orange, 5);
             g.DrawEllipse(backgroundPen, x, y, diameter, diameter);
 
             // Draw the progress arc clockwise from the top.
@@ -142,99 +146,99 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
         /// Shows or updates the overlay with current countdown information.
         /// </summary>
         private static void ProcessPendingOverlayUpdate()
-{
-    Point cursorPos;
-    int remainingMs;
-    float percentage;
-
-    // Take the latest update and allow another one to be queued.
-    lock (_lock)
-    {
-        cursorPos = _pendingCursorPos;
-        remainingMs = _pendingRemainingMs;
-        percentage = _pendingPercentage;
-        _updatePending = 0;
-    }
-
-    // An update may have been queued just before Stop().
-    if (!AutoClickManager.IsActive())
-        return;
-
-    lock (_lock)
-    {
-        if (!AutoClickManager.IsActive())
-            return;
-
-        try
         {
-            if (_instance == null || _instance.IsDisposed)
-                _instance = new AutoClickOverlayForm();
+            Point cursorPos;
+            int remainingMs;
+            float percentage;
 
-            // Update position and values BEFORE showing the form.
-            _instance.Location = new Point(
-                cursorPos.X - _instance.Width / 2,
-                cursorPos.Y - _instance.Height / 2);
+            // Take the latest update and allow another one to be queued.
+            lock (_lock)
+            {
+                cursorPos = _pendingCursorPos;
+                remainingMs = _pendingRemainingMs;
+                percentage = _pendingPercentage;
+                _updatePending = 0;
+            }
 
-            _instance._remainingMs = remainingMs;
+            // An update may have been queued just before Stop().
+            if (!AutoClickManager.IsActive())
+                return;
 
-            bool startingCycle =
-                _instance._percentage <= 0 && percentage > 0;
+            lock (_lock)
+            {
+                if (!AutoClickManager.IsActive())
+                    return;
 
-            _instance._percentage = percentage;
+                try
+                {
+                    if (_instance == null || _instance.IsDisposed)
+                        _instance = new AutoClickOverlayForm();
 
-            if (startingCycle)
-                _instance.StartNewCycle();
+                    // Update position and values BEFORE showing the form.
+                    _instance.Location = new Point(
+                        cursorPos.X - _instance.Width / 2,
+                        cursorPos.Y - _instance.Height / 2);
 
-            if (!_instance.Visible)
-                _instance.Show();
+                    _instance._remainingMs = remainingMs;
 
-            _instance.Invalidate();
+                    bool startingCycle =
+                        _instance._percentage <= 0 && percentage > 0;
+
+                    _instance._percentage = percentage;
+
+                    if (startingCycle)
+                        _instance.StartNewCycle();
+
+                    if (!_instance.Visible)
+                        _instance.Show();
+
+                    _instance.Invalidate();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(
+                        $"Error updating overlay: {ex.Message}");
+                }
+            }
         }
-        catch (Exception ex)
+
+        public static void UpdateOverlay(
+            Point cursorPos,
+            int remainingMs,
+            float percentage)
         {
-            Logger.LogError(
-                $"Error updating overlay: {ex.Message}");
+            if (!AutoClickManager.IsActive())
+                return;
+
+            bool postUpdate = false;
+
+            // Always retain the newest requested position and progress.
+            lock (_lock)
+            {
+                _pendingCursorPos = cursorPos;
+                _pendingRemainingMs = remainingMs;
+                _pendingPercentage = percentage;
+
+                if (Environment.CurrentManagedThreadId != _uiThreadId
+                    && _uiContext != null
+                    && _updatePending == 0)
+                {
+                    _updatePending = 1;
+                    postUpdate = true;
+                }
+            }
+
+            if (Environment.CurrentManagedThreadId == _uiThreadId)
+            {
+                ProcessPendingOverlayUpdate();
+            }
+            else if (postUpdate)
+            {
+                _uiContext!.Post(
+                    _ => ProcessPendingOverlayUpdate(),
+                    null);
+            }
         }
-    }
-}
-
-public static void UpdateOverlay(
-    Point cursorPos,
-    int remainingMs,
-    float percentage)
-{
-    if (!AutoClickManager.IsActive())
-        return;
-
-    bool postUpdate = false;
-
-    // Always retain the newest requested position and progress.
-    lock (_lock)
-    {
-        _pendingCursorPos = cursorPos;
-        _pendingRemainingMs = remainingMs;
-        _pendingPercentage = percentage;
-
-        if (Environment.CurrentManagedThreadId != _uiThreadId
-            && _uiContext != null
-            && _updatePending == 0)
-        {
-            _updatePending = 1;
-            postUpdate = true;
-        }
-    }
-
-    if (Environment.CurrentManagedThreadId == _uiThreadId)
-    {
-        ProcessPendingOverlayUpdate();
-    }
-    else if (postUpdate)
-    {
-        _uiContext!.Post(
-            _ => ProcessPendingOverlayUpdate(),
-            null);
-    }
-}
 
 
         /// <summary>
