@@ -129,6 +129,7 @@ namespace ExecuteCommands_NET
                         exitTimer.Start();
 
                         // UI message pump to allow overlays to render
+                        // this might be problematic
                         while (exitTimer.Enabled)
                         {
                             Application.DoEvents();

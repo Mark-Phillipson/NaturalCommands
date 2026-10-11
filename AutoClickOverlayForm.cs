@@ -16,6 +16,9 @@ namespace NaturalCommands
         private static readonly object _lock = new object();
         private static System.Threading.SynchronizationContext? _uiContext;
         private static int _updatePending;
+        private static Point _pendingCursorPos;
+        private static int _pendingRemainingMs;
+        private static float _pendingPercentage;
         private static int _uiThreadId;
         private float _percentage = 0;
         private int _remainingMs = 0;
@@ -138,111 +141,101 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
         /// <summary>
         /// Shows or updates the overlay with current countdown information.
         /// </summary>
-        public static void UpdateOverlay(Point cursorPos, int remainingMs, float percentage)
+        private static void ProcessPendingOverlayUpdate()
+{
+    Point cursorPos;
+    int remainingMs;
+    float percentage;
+
+    // Take the latest update and allow another one to be queued.
+    lock (_lock)
+    {
+        cursorPos = _pendingCursorPos;
+        remainingMs = _pendingRemainingMs;
+        percentage = _pendingPercentage;
+        _updatePending = 0;
+    }
+
+    // An update may have been queued just before Stop().
+    if (!AutoClickManager.IsActive())
+        return;
+
+    lock (_lock)
+    {
+        if (!AutoClickManager.IsActive())
+            return;
+
+        try
         {
-            Logger.LogInfo(
-    $"[Overlay THREAD] UpdateOverlay: " +
-    $"ThreadId={Environment.CurrentManagedThreadId}, " +
-    $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? "null"}");
+            if (_instance == null || _instance.IsDisposed)
+                _instance = new AutoClickOverlayForm();
 
-            Logger.LogInfo(
-            $"[COUNTDOWN TEST] Cursor={cursorPos.X},{cursorPos.Y}, " +
-            $"RemainingMs={remainingMs}, " +
-            $"Percentage={percentage:F1}");
-            if (!AutoClickManager.IsActive())
-            {
-                return;
-            }
+            // Update position and values BEFORE showing the form.
+            _instance.Location = new Point(
+                cursorPos.X - _instance.Width / 2,
+                cursorPos.Y - _instance.Height / 2);
 
-            // Check if we need to invoke on UI thread
-            if (_uiContext != null &&
-    Environment.CurrentManagedThreadId != _uiThreadId)
-            {
-                _uiContext.Post(_ =>
-                {
-                    UpdateOverlay(cursorPos, remainingMs, percentage);
-                }, null);
+            _instance._remainingMs = remainingMs;
 
-                return;
-            }
+            bool startingCycle =
+                _instance._percentage <= 0 && percentage > 0;
 
-            lock (_lock)
-            {
-                try
-                {
-                    Logger.LogInfo("[Overlay DEBUG] UpdateOverlay entered.");
+            _instance._percentage = percentage;
 
-                    if (_instance == null || _instance.IsDisposed)
-                    {
-                        Logger.LogInfo("[Overlay DEBUG] Creating overlay form.");
-                        _instance = new AutoClickOverlayForm();
-                        Logger.LogInfo("[Overlay DEBUG] Overlay form created.");
-                    }
+            if (startingCycle)
+                _instance.StartNewCycle();
 
-                    Logger.LogInfo(
-                        $"[Overlay DEBUG] Before Show: " +
-                        $"Visible={_instance.Visible}, " +
-                        $"HandleCreated={_instance.IsHandleCreated}, " +
-                        $"Bounds={_instance.Bounds}");
+            if (!_instance.Visible)
+                _instance.Show();
 
-                    _instance.Show();
-
-                    Logger.LogInfo(
-                        $"[Overlay DEBUG] After Show: " +
-                        $"Visible={_instance.Visible}, " +
-                        $"HandleCreated={_instance.IsHandleCreated}, " +
-                        $"Bounds={_instance.Bounds}");
-
-                    // Update position and values - overlay is anchored at the specified point
-                    _instance.Location = new Point(cursorPos.X - _instance.Width / 2, cursorPos.Y - _instance.Height / 2);
-                    _instance._remainingMs = remainingMs;
-                    Logger.LogInfo(
-                        $"[OVERLAY UPDATE TEST] Incoming={percentage:F1}, " +
-                        $"Old={_instance._percentage:F1}, " +
-                        $"IncomingPosition={cursorPos}, " +
-                        $"Thread={Environment.CurrentManagedThreadId}");
-                    // Detect start of a new countdown cycle (percentage has moved from 0 to >0)
-                    bool startingCycle = _instance._percentage <= 0 && percentage > 0;
-                    _instance._percentage = percentage;
-
-                    if (startingCycle)
-                    {
-                        _instance.StartNewCycle();
-                    }
-
-                    // Keep system cursor visible so it can move independently of the overlay
-
-                    if (!_instance.Visible)
-                    {
-                        _instance.Show();
-                    }
-
-                    if (!_instance.TopMost)
-                    {
-                        _instance.TopMost = true;
-                    }
-
-                    // Only invalidate if percentage or location changed enough to avoid excess repaints (reduces flicker)
-                    // if (Math.Abs(_instance._percentage - _instance._lastPaintedPercentage) < _minUpdateDelta && _instance.Location == _instance._lastLocation)
-                    // {
-                    // }
-                    // else
-                    // {
-                    //     _instance.Invalidate();
-                    //     _instance._lastPaintedPercentage = _instance._percentage;
-                    //     _instance._lastLocation = _instance.Location;
-                    // }
-                    _instance.Invalidate();
-                    _instance._lastPaintedPercentage = _instance._percentage;
-                    _instance._lastLocation = _instance.Location;
-                    _instance.Update();
-                }
-                catch (Exception ex)
-                {
-                    NaturalCommands.Helpers.Logger.LogError($"[Overlay] ERROR updating overlay: {ex.Message}\n{ex.StackTrace}");
-                }
-            }
+            _instance.Invalidate();
         }
+        catch (Exception ex)
+        {
+            Logger.LogError(
+                $"Error updating overlay: {ex.Message}");
+        }
+    }
+}
+
+public static void UpdateOverlay(
+    Point cursorPos,
+    int remainingMs,
+    float percentage)
+{
+    if (!AutoClickManager.IsActive())
+        return;
+
+    bool postUpdate = false;
+
+    // Always retain the newest requested position and progress.
+    lock (_lock)
+    {
+        _pendingCursorPos = cursorPos;
+        _pendingRemainingMs = remainingMs;
+        _pendingPercentage = percentage;
+
+        if (Environment.CurrentManagedThreadId != _uiThreadId
+            && _uiContext != null
+            && _updatePending == 0)
+        {
+            _updatePending = 1;
+            postUpdate = true;
+        }
+    }
+
+    if (Environment.CurrentManagedThreadId == _uiThreadId)
+    {
+        ProcessPendingOverlayUpdate();
+    }
+    else if (postUpdate)
+    {
+        _uiContext!.Post(
+            _ => ProcessPendingOverlayUpdate(),
+            null);
+    }
+}
+
 
         /// <summary>
         /// Called when a new countdown cycle starts so the overlay can change colors between cycles.
@@ -268,7 +261,8 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
         public static void HideOverlay()
         {
             // Check if we need to invoke on UI thread
-            if (_uiContext != null && System.Threading.SynchronizationContext.Current != _uiContext)
+            if (_uiContext != null &&
+    Environment.CurrentManagedThreadId != _uiThreadId)
             {
                 _uiContext.Post(_ => HideOverlay(), null);
                 return;
