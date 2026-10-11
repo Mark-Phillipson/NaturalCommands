@@ -72,6 +72,9 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
 
         protected override void OnPaint(PaintEventArgs e)
         {
+            Logger.LogInfo(
+                $"[Percentage in OnPaint method={_percentage}]");
+
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -212,15 +215,18 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
                     }
 
                     // Only invalidate if percentage or location changed enough to avoid excess repaints (reduces flicker)
-                    if (Math.Abs(_instance._percentage - _instance._lastPaintedPercentage) < _minUpdateDelta && _instance.Location == _instance._lastLocation)
-                    {
-                    }
-                    else
-                    {
-                        _instance.Invalidate();
-                        _instance._lastPaintedPercentage = _instance._percentage;
-                        _instance._lastLocation = _instance.Location;
-                    }
+                    // if (Math.Abs(_instance._percentage - _instance._lastPaintedPercentage) < _minUpdateDelta && _instance.Location == _instance._lastLocation)
+                    // {
+                    // }
+                    // else
+                    // {
+                    //     _instance.Invalidate();
+                    //     _instance._lastPaintedPercentage = _instance._percentage;
+                    //     _instance._lastLocation = _instance.Location;
+                    // }
+                    _instance.Invalidate();
+                    _instance._lastPaintedPercentage = _instance._percentage;
+                    _instance._lastLocation = _instance.Location;
                 }
                 catch (Exception ex)
                 {

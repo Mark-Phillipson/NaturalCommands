@@ -248,7 +248,11 @@ namespace NaturalCommands.Helpers
                             _lastReportedPercentage = percentage;
                             _lastReportMs = Environment.TickCount;
                             // Keep the visual indicator moving with the live cursor position.
-                            var point = new System.Drawing.Point(currentPos.X, currentPos.Y);
+                            // Keep the overlay fixed at the position where the countdown started.
+                            var point = new System.Drawing.Point(
+    _anchorPosition.X,
+    _anchorPosition.Y);
+
                             AutoClickOverlayForm.UpdateOverlay(point, remainingMs, percentage);
                         }
                     }
