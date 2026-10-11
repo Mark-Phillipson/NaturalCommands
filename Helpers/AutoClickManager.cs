@@ -120,7 +120,7 @@ namespace NaturalCommands.Helpers
             {
                 return "Auto-click mode is not active";
             }
-
+            _isActive = false;
             // Stop timer
             if (_monitorTimer != null)
             {
@@ -146,7 +146,6 @@ namespace NaturalCommands.Helpers
                 Logger.LogError($"Failed to save auto-click settings: {ex.Message}");
             }
 
-            _isActive = false;
             _idleTimeMs = 0;
             _anchorSet = false;
 
@@ -227,35 +226,20 @@ namespace NaturalCommands.Helpers
                     // Show overlay if enabled and we're counting down
                     if (AppSettings.Instance.AutoClick.ShowOverlay && _idleTimeMs > 0)
                     {
-                        int remainingMs = Math.Max(0, delayMs - _idleTimeMs);
-                        float percentage = Math.Min(100, (_idleTimeMs / (float)delayMs) * 100);
-
-                        // Throttle overlay updates to avoid excessive UI work on each timer tick
-                        bool shouldUpdate = false;
-                        if (_lastReportedPercentage < 0 || Math.Abs(percentage - _lastReportedPercentage) >= 1f)
+                        if (AppSettings.Instance.AutoClick.ShowOverlay && _idleTimeMs > 0)
                         {
-                            shouldUpdate = true;
-                        }
-                        else
-                        {
-                            // Also force an update at least every 200ms to keep visuals responsive
-                            if (Environment.TickCount - _lastReportMs > 200)
-                                shouldUpdate = true;
-                        }
+                            int remainingMs = Math.Max(0, delayMs - _idleTimeMs);
+                            float percentage = Math.Min(
+                                100,
+                                (_idleTimeMs / (float)delayMs) * 100);
 
-                        if (shouldUpdate)
-                        {
-                            _lastReportedPercentage = percentage;
-                            _lastReportMs = Environment.TickCount;
-                            // Keep the visual indicator moving with the live cursor position.
-                            // Keep the overlay fixed at the position where the countdown started.
-                            var point = new System.Drawing.Point(
-    _anchorPosition.X,
-    _anchorPosition.Y);
-
-                            AutoClickOverlayForm.UpdateOverlay(point, remainingMs, percentage);
+                            AutoClickOverlayForm.UpdateOverlay(
+                                new System.Drawing.Point(currentPos.X, currentPos.Y),
+                                remainingMs,
+                                percentage);
                         }
                     }
+
 
                     // Check if idle time has reached the threshold
                     if (_idleTimeMs >= delayMs)

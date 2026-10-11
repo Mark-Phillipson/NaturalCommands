@@ -149,6 +149,10 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
             $"[COUNTDOWN TEST] Cursor={cursorPos.X},{cursorPos.Y}, " +
             $"RemainingMs={remainingMs}, " +
             $"Percentage={percentage:F1}");
+            if (!AutoClickManager.IsActive())
+            {
+                return;
+            }
 
             // Check if we need to invoke on UI thread
             if (_uiContext != null &&
