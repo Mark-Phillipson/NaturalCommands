@@ -55,7 +55,7 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
             ShowInTaskbar = false;
             TopMost = true;
             BackColor = Color.Magenta;
-            TransparencyKey = Color.Empty;
+            TransparencyKey = Color.Magenta;
             StartPosition = FormStartPosition.Manual;
 
             // Small circular overlay sized to replace the system cursor while counting down
@@ -130,17 +130,17 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
                     return;
 
                 _uiContext.Post(_ =>
-                {
-                    try
-                    {
-                        // Apply the latest position and progress here.
-                        _uiContext.Post(_ => UpdateOverlay(cursorPos, remainingMs, percentage), null);
-                    }
-                    finally
-                    {
-                        Interlocked.Exchange(ref _updatePending, 0);
-                    }
-                }, null);
+{
+    try
+    {
+        UpdateOverlay(cursorPos, remainingMs, percentage);
+    }
+    finally
+    {
+        Interlocked.Exchange(ref _updatePending, 0);
+    }
+}, null);
+
                 return;
             }
 
@@ -305,8 +305,7 @@ $"SynchronizationContext={SynchronizationContext.Current?.GetType().FullName ?? 
             get
             {
                 CreateParams cp = base.CreateParams;
-                // cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW;
-                cp.ExStyle |= WS_EX_TOOLWINDOW;
+                cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW;
                 return cp;
             }
         }
